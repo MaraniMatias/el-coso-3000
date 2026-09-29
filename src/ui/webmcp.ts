@@ -14,6 +14,7 @@
  * app sigue funcionando igual. Por eso todo va detrás de feature detection y
  * no hay ningún error en el camino normal.
  */
+import { palette } from '../core/color';
 
 /** Subconjunto de la API que usamos. Todavía no está en los tipos del DOM. */
 interface ModelContext {
@@ -88,8 +89,8 @@ const SCHEMA = {
 const DESCRIPTION = [
   'Genera un placeholder de imagen o video con el color del texto derivado automáticamente',
   'para garantizar contraste WCAG. El texto del placeholder son las dimensiones.',
-  'Paletas pastel disponibles: rosa, coral, albaricoque, ámbar, lima, salvia, verde azulado,',
-  'cielo, azul, índigo, violeta y orquídea.',
+  // La lista sale de la paleta real, para que no pueda quedar desactualizada.
+  `Paletas pastel disponibles: ${palette().map((p) => p.label.toLowerCase()).join(', ')}.`,
 ].join(' ');
 
 /**

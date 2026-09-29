@@ -1,4 +1,4 @@
-import { checkContrast, cssColor, deriveForeground, normalizeHex, palette, randomPalette } from '../core/color';
+import { checkContrast, cssColor, deriveForeground, hexToRgb, normalizeHex, palette, randomPalette, rgbToHsl } from '../core/color';
 import { drawFrame } from '../core/draw-frame';
 import { downloadBlob } from '../core/download';
 import { evenDimensions, filenameForSpec } from '../core/filename';
@@ -122,16 +122,37 @@ function refreshContrast(): void {
 
 function applyColors(bg: string, entry: PaletteEntry | null): void {
   const clean = normalizeHex(bg);
+  const fg = deriveForeground(clean);
   ($<HTMLInputElement>('#bg')).value = `#${clean}`;
   // El texto nunca se elige a mano: sale del fondo. Esa es toda la garantía
   // de legibilidad de la app, y por eso el input es readonly.
-  ($<HTMLInputElement>('#fg')).value = `#${deriveForeground(clean)}`;
+  ($<HTMLInputElement>('#fg')).value = `#${fg}`;
+  applyPageTheme(clean);
   selectedPalette = entry;
   for (const btn of document.querySelectorAll<HTMLButtonElement>('.swatch')) {
     btn.setAttribute('aria-pressed', String(entry?.name === btn.dataset.name));
   }
   refreshContrast();
   renderPreview();
+}
+
+/**
+ * Vuelca el color elegido en el tema de la página, para que la interfaz tome
+ * su tono.
+ *
+ * Se pasan sólo tono y saturación: la luminosidad de cada superficie la fija
+ * el CSS según el esquema activo. Así la página se tiñe completa sin que la
+ * legibilidad de la interfaz dependa del color que se haya elegido.
+ */
+function applyPageTheme(bg: string): void {
+  const { r, g, b } = hexToRgb(bg);
+  const { h, s } = rgbToHsl(r, g, b);
+  const root = document.documentElement.style;
+  root.setProperty('--tint-h', String(Math.round(h)));
+  root.setProperty('--tint-s', `${Math.round(s * 100)}%`);
+  // El color de la barra del navegador en móvil, que si no queda en el
+  // color con el que arrancó la página.
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', cssColor(bg));
 }
 
 // ── Vista previa ─────────────────────────────────────────────────────
@@ -498,10 +519,10 @@ async function main(): Promise<void> {
   await ensureFontLoaded();
   renderSwatches();
 
-  const first = palette()[0];
-  if (first) {
-    applyColors(first.bg, first);
-  }
+  // Arranca con una paleta al azar, no con la primera de la lista: cada
+  // visita abre con un color distinto.
+  const start = randomPalette();
+  applyColors(start.bg, start);
 
   wireEvents();
   refreshDependentUi();

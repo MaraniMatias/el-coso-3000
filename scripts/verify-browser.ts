@@ -163,6 +163,29 @@ try {
   check('el fondo es el pastel de la paleta, no negro', render.bg[0] > 200 && render.bg[1] > 200, `rgb(${render.bg})`);
   check('se dibuja el texto de las dimensiones', render.nonBg > 1000, `${render.nonBg} px distintos del fondo`);
 
+  // ── La página toma el tono de la paleta ────────────────────────────
+  console.log('\ntema de la página:');
+  const theme = await evaluate<Record<string, string>>(`(() => {
+    const cs = getComputedStyle(document.documentElement);
+    const read = () => ({
+      tint: cs.getPropertyValue('--tint-h').trim(),
+      body: getComputedStyle(document.body).backgroundColor,
+      panel: getComputedStyle(document.querySelector('.panel')).backgroundColor,
+      accent: getComputedStyle(document.querySelector('button.primary')).backgroundColor,
+      bg: document.querySelector('#bg').value.toUpperCase(),
+    });
+    const before = read();
+    const swatches = [...document.querySelectorAll('.swatch')];
+    const last = swatches[swatches.length - 1];
+    last.click();
+    return { ...read(), before: JSON.stringify(before), count: String(swatches.length), name: last.dataset.name };
+  })()`);
+  const themeBefore = JSON.parse(theme.before ?? '{}') as Record<string, string>;
+  check('la grilla muestra toda la paleta', Number(theme.count) >= 12, `${theme.count} colores`);
+  check('al elegir otra paleta cambia el color del placeholder', theme.bg !== themeBefore.bg, `${themeBefore.bg} → ${theme.bg} (${theme.name})`);
+  check('la página se re-tiñe con la paleta', theme.tint !== themeBefore.tint && theme.body !== themeBefore.body, `tono ${themeBefore.tint} → ${theme.tint}°`);
+  check('el panel y el acento siguen a la paleta', theme.panel !== themeBefore.panel && theme.accent !== themeBefore.accent, theme.accent);
+
   // ── El auto-ajuste escala ──────────────────────────────────────────
   console.log('\nauto-ajuste en el navegador real:');
   const fit = await evaluate<Array<{ w: number; h: number; ink: number; ratio: number }>>(`(() => {

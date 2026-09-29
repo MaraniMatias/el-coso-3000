@@ -3,14 +3,21 @@
    compartan la misma estructura. */
 
 :root {
-  --bg: #f6f4f2;
-  --surface: #ffffff;
-  --surface-2: #f1eeeb;
+  /* Tono y saturación de la paleta elegida. La app los pisa sobre el `:root`
+     en vivo al cambiar de color; la luminosidad y la fuerza del tinte las
+     fija el CSS, así la interfaz se tiñe sin que su legibilidad dependa del
+     color elegido. Los valores por defecto son los de la paleta rosa. */
+  --tint-h: 350;
+  --tint-s: 42%;
+
+  --bg: hsl(var(--tint-h) calc(var(--tint-s) * 0.7) 96%);
+  --surface: hsl(var(--tint-h) var(--tint-s) 99%);
+  --surface-2: hsl(var(--tint-h) calc(var(--tint-s) * 0.8) 95%);
   --ink: #1c1a19;
   --ink-soft: #5d5754;
   --ink-faint: #8a8280;
-  --line: #e2dcd8;
-  --accent: #962c41;
+  --line: hsl(var(--tint-h) calc(var(--tint-s) * 0.6) 87%);
+  --accent: hsl(var(--tint-h) var(--tint-s) 30%);
   --accent-ink: #ffffff;
   --ok: #2f6f4e;
   --warn: #8a5a16;
@@ -22,15 +29,15 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #171514;
-    --surface: #211e1d;
-    --surface-2: #2a2625;
+    --bg: hsl(var(--tint-h) calc(var(--tint-s) * 0.3) 9%);
+    --surface: hsl(var(--tint-h) calc(var(--tint-s) * 0.25) 13%);
+    --surface-2: hsl(var(--tint-h) calc(var(--tint-s) * 0.25) 16%);
     --ink: #f2eeec;
     --ink-soft: #b8b0ad;
     --ink-faint: #8a8280;
-    --line: #38312f;
-    --accent: #e39aa8;
-    --accent-ink: #1c1a19;
+    --line: hsl(var(--tint-h) calc(var(--tint-s) * 0.3) 23%);
+    --accent: hsl(var(--tint-h) var(--tint-s) 70%);
+    --accent-ink: #171514;
     --ok: #7fc9a3;
     --warn: #e0b872;
     --bad: #f09a9a;

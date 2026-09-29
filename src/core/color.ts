@@ -124,20 +124,29 @@ const FG_SATURATION = 0.55;
 const FG_DARK_RANGE: [number, number] = [0.05, 0.38];
 const FG_LIGHT_RANGE: [number, number] = [0.62, 0.97];
 
-/** Tonos usados para nombrar la paleta, en español. */
+/**
+ * Un color por cada tramo de la rueda, en español y ordenados por tono: la
+ * grilla de la interfaz los muestra como van en la rueda.
+ */
 const PALETTE_NAMES: Array<{ name: string; label: string; hue: number }> = [
   { name: 'rose', label: 'Rosa', hue: 350 },
   { name: 'coral', label: 'Coral', hue: 12 },
   { name: 'apricot', label: 'Albaricoque', hue: 28 },
   { name: 'amber', label: 'Ámbar', hue: 45 },
   { name: 'lime', label: 'Lima', hue: 78 },
+  { name: 'olive', label: 'Oliva', hue: 110 },
   { name: 'sage', label: 'Salvia', hue: 140 },
+  { name: 'mint', label: 'Menta', hue: 158 },
   { name: 'teal', label: 'Verde azulado', hue: 172 },
+  { name: 'turquoise', label: 'Turquesa', hue: 188 },
   { name: 'sky', label: 'Cielo', hue: 200 },
   { name: 'azure', label: 'Azul', hue: 218 },
+  { name: 'steel', label: 'Acero', hue: 234 },
   { name: 'indigo', label: 'Índigo', hue: 250 },
   { name: 'violet', label: 'Violeta', hue: 278 },
+  { name: 'plum', label: 'Ciruela', hue: 294 },
   { name: 'orchid', label: 'Orquídea', hue: 310 },
+  { name: 'fuchsia', label: 'Fucsia', hue: 330 },
 ];
 
 /**

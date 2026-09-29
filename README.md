@@ -56,9 +56,9 @@ azar, así que cada visita abre con un color distinto.
 
 ### La paleta
 
-`rosa` · `coral` · `albaricoque` · `ámbar` · `mostaza` · `lima` · `oliva` ·
-`salvia` · `menta` · `verde azulado` · `turquesa` · `cielo` · `azul` · `acero` ·
-`índigo` · `violeta` · `ciruela` · `orquídea` · `fucsia`
+`rosa` · `coral` · `albaricoque` · `ámbar` · `lima` · `oliva` · `salvia` ·
+`menta` · `verde azulado` · `turquesa` · `cielo` · `azul` · `acero` · `índigo` ·
+`violeta` · `ciruela` · `orquídea` · `fucsia`
 
 ## Metadata dentro de los archivos
 
