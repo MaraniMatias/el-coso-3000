@@ -1,14 +1,29 @@
-import { checkContrast, cssColor, deriveForeground, hexToRgb, normalizeHex, palette, randomPalette, rgbToHsl } from '../core/color';
-import { drawFrame } from '../core/draw-frame';
-import { downloadBlob } from '../core/download';
-import { evenDimensions, filenameForSpec } from '../core/filename';
-import { ensureFontLoaded } from '../core/font';
-import { exportGif } from '../encoders/gif';
-import { exportImage, type StillImageFormat } from '../encoders/image';
-import { exportJpegZip, exportMjpegAvi } from '../encoders/mjpeg';
-import { availableVideoFormats, exportVideo } from '../encoders/video';
-import type { ImageFormat, PaletteEntry, ProgressInfo, Spec, TimelineFormat, VideoFormat } from '../core/types';
-import { setupWebMcp, webmcpStatusText } from './webmcp';
+import {
+  checkContrast,
+  cssColor,
+  deriveForeground,
+  hexToRgb,
+  normalizeHex,
+  palette,
+  rgbToHsl,
+} from "../core/color";
+import { drawFrame } from "../core/draw-frame";
+import { downloadBlob } from "../core/download";
+import { evenDimensions } from "../core/filename";
+import { ensureFontLoaded } from "../core/font";
+import { exportGif } from "../encoders/gif";
+import { exportImage, type StillImageFormat } from "../encoders/image";
+import { exportJpegZip, exportMjpegAvi } from "../encoders/mjpeg";
+import { availableVideoFormats, exportVideo } from "../encoders/video";
+import type {
+  ImageFormat,
+  PaletteEntry,
+  ProgressInfo,
+  Spec,
+  TimelineFormat,
+  VideoFormat,
+} from "../core/types";
+import { setupWebMcp, webmcpStatusText } from "./webmcp";
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string): T => {
   const el = document.querySelector<T>(sel);
@@ -16,13 +31,13 @@ const $ = <T extends HTMLElement = HTMLElement>(sel: string): T => {
   return el;
 };
 
-const form = $<HTMLFormElement>('#panel');
-const canvas = $<HTMLCanvasElement>('#canvas');
+const form = $<HTMLFormElement>("#panel");
+const canvas = $<HTMLCanvasElement>("#canvas");
 // The context is resolved once and asserted non-null. Narrowing with `throw`
 // does not survive the closures, so it is resolved here.
 const ctx2d: CanvasRenderingContext2D = (() => {
-  const c = canvas.getContext('2d', { alpha: false });
-  if (!c) throw new Error('the browser does not support canvas 2D');
+  const c = canvas.getContext("2d", { alpha: false });
+  if (!c) throw new Error("the browser does not support canvas 2D");
   return c;
 })();
 
@@ -31,15 +46,15 @@ let abortController: AbortController | null = null;
 let previewAnimation = 0;
 
 /** Image formats that carry a timeline of their own, now offered in the video tab. */
-const ANIMATED_IMAGE_FORMATS: ReadonlySet<ImageFormat> = new Set<ImageFormat>(['gif', 'mjpeg-avi', 'jpeg-zip']);
-/** Formats that accept the quality slider. */
-const LOSSY: ReadonlySet<ImageFormat | VideoFormat> = new Set<ImageFormat | VideoFormat>([
-  'jpeg',
-  'webp',
-  'gif',
-  'mjpeg-avi',
-  'jpeg-zip',
+const ANIMATED_IMAGE_FORMATS: ReadonlySet<ImageFormat> = new Set<ImageFormat>([
+  "gif",
+  "mjpeg-avi",
+  "jpeg-zip",
 ]);
+/** Formats that accept the quality slider. */
+const LOSSY: ReadonlySet<ImageFormat | VideoFormat> = new Set<
+  ImageFormat | VideoFormat
+>(["jpeg", "webp", "gif", "mjpeg-avi", "jpeg-zip"]);
 
 // ── Reading the form ───────────────────────────────────────────────────
 
@@ -77,33 +92,33 @@ function checked(name: string): boolean {
   return el instanceof HTMLInputElement && el.checked;
 }
 
-function currentKind(): 'image' | 'video' {
-  return str('kind', 'image') === 'video' ? 'video' : 'image';
+function currentKind(): "image" | "video" {
+  return str("kind", "image") === "video" ? "video" : "image";
 }
 
 /** The format the current tab is going to produce. */
 function currentFormat(): ImageFormat | TimelineFormat {
-  return currentKind() === 'video'
-    ? (str('videoFormat', 'mp4') as TimelineFormat)
-    : (str('imageFormat', 'png') as ImageFormat);
+  return currentKind() === "video"
+    ? (str("videoFormat", "mp4") as TimelineFormat)
+    : (str("imageFormat", "png") as ImageFormat);
 }
 
 function readSpec(): Spec {
-  const quality = num('quality', 90) / 100;
+  const quality = num("quality", 90) / 100;
   // Only the video tab has a timeline now, so that is the only thing that
   // decides whether the output has more than one frame.
-  const timed = currentKind() === 'video';
+  const timed = currentKind() === "video";
   return {
-    width: Math.max(1, num('width', 300)),
-    height: Math.max(1, num('height', 200)),
-    bg: normalizeHex(str('bg', 'E0E0E0')),
-    fg: normalizeHex(str('fg', '2B2B2B')),
-    paletteName: selectedPalette?.name ?? 'custom',
-    duration: timed ? num('duration', 5) : 0,
-    fps: num('fps', 15),
+    width: Math.max(1, num("width", 300)),
+    height: Math.max(1, num("height", 200)),
+    bg: normalizeHex(str("bg", "E0E0E0")),
+    fg: normalizeHex(str("fg", "2B2B2B")),
+    paletteName: selectedPalette?.name ?? "custom",
+    duration: timed ? num("duration", 5) : 0,
+    fps: num("fps", 15),
     // The bar and the clock only make sense with a real timeline.
-    showProgressBar: timed && checked('showProgressBar'),
-    showTime: timed && checked('showTime'),
+    showProgressBar: timed && checked("showProgressBar"),
+    showTime: timed && checked("showTime"),
     quality,
   };
 }
@@ -119,15 +134,15 @@ export function effectiveGifFps(fps: number): number {
 function refreshContrast(): void {
   const spec = readSpec();
   const result = checkContrast(spec.fg, spec.bg);
-  $('#ratio').textContent = result.label;
-  const level = $('#level');
+  $("#ratio").textContent = result.label;
+  const level = $("#level");
   level.textContent = result.level;
   level.dataset.level = result.level;
-  $('#levelNote').textContent = {
-    AAA: 'beats the WCAG maximum',
-    AA: 'meets WCAG AA',
-    'AA-large': 'only fits large text',
-    fail: 'not enough',
+  $("#levelNote").textContent = {
+    AAA: "beats the WCAG maximum",
+    AA: "meets WCAG AA",
+    "AA-large": "only fits large text",
+    fail: "not enough",
   }[result.level];
 }
 
@@ -138,15 +153,15 @@ function applyColors(bg: string, entry: PaletteEntry | null): void {
   // text is derived. Deriving it always would silently replace the measured
   // pairs with different colors and different ratios.
   const fg = entry ? entry.fg : deriveForeground(clean);
-  ($<HTMLInputElement>('#bg')).value = `#${clean}`;
+  $<HTMLInputElement>("#bg").value = `#${clean}`;
   // The text is never picked by hand: it comes from the background or from the
   // pair of the swatch. That is the whole legibility guarantee of the app,
   // which is why the input is readonly.
-  ($<HTMLInputElement>('#fg')).value = `#${fg}`;
+  $<HTMLInputElement>("#fg").value = `#${fg}`;
   applyPageTheme(clean);
   selectedPalette = entry;
-  for (const btn of document.querySelectorAll<HTMLButtonElement>('.swatch')) {
-    btn.setAttribute('aria-pressed', String(entry?.name === btn.dataset.name));
+  for (const btn of document.querySelectorAll<HTMLButtonElement>(".swatch")) {
+    btn.setAttribute("aria-pressed", String(entry?.name === btn.dataset.name));
   }
   refreshContrast();
   renderPreview();
@@ -164,11 +179,13 @@ function applyPageTheme(bg: string): void {
   const { r, g, b } = hexToRgb(bg);
   const { h, s } = rgbToHsl(r, g, b);
   const root = document.documentElement.style;
-  root.setProperty('--tint-h', String(Math.round(h)));
-  root.setProperty('--tint-s', `${Math.round(s * 100)}%`);
+  root.setProperty("--tint-h", String(Math.round(h)));
+  root.setProperty("--tint-s", `${Math.round(s * 100)}%`);
   // The color of the mobile browser bar, which would otherwise stay on the
   // color the page started with.
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', cssColor(bg));
+  document
+    .querySelector('meta[name="theme-color"]')
+    ?.setAttribute("content", cssColor(bg));
 }
 
 // ── Preview ───────────────────────────────────────────────────────────
@@ -183,7 +200,7 @@ function renderPreview(progress?: number): void {
   canvas.width = spec.width;
   canvas.height = spec.height;
   drawFrame(ctx2d, spec, progress);
-  $('#dimsLabel').textContent = `${spec.width} × ${spec.height}`;
+  $("#dimsLabel").textContent = `${spec.width} × ${spec.height}`;
   updateMetaLine(spec);
 }
 
@@ -194,7 +211,7 @@ function updateMetaLine(spec: Spec): void {
     `contrast ${checkContrast(spec.fg, spec.bg).label}`,
   ];
   if (spec.duration > 0) parts.push(`${spec.duration}s at ${spec.fps} fps`);
-  $('#metaLine').textContent = parts.join(' · ');
+  $("#metaLine").textContent = parts.join(" · ");
 }
 
 /**
@@ -221,18 +238,21 @@ function animatePreview(): void {
 // ── Palette ───────────────────────────────────────────────────────────
 
 function renderSwatches(): void {
-  const host = $('#swatches');
+  const host = $("#swatches");
   host.replaceChildren();
   for (const entry of palette()) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'swatch';
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "swatch";
     btn.dataset.name = entry.name;
     btn.title = `${entry.label} · ${entry.bg} / ${entry.fg} · ${entry.contrast.label}`;
-    btn.setAttribute('aria-label', `Palette ${entry.label}, contrast ${entry.contrast.label}`);
-    btn.setAttribute('aria-pressed', 'false');
+    btn.setAttribute(
+      "aria-label",
+      `Palette ${entry.label}, contrast ${entry.contrast.label}`,
+    );
+    btn.setAttribute("aria-pressed", "false");
     btn.style.background = `linear-gradient(135deg, ${cssColor(entry.bg)} 0 58%, ${cssColor(entry.fg)} 58% 100%)`;
-    btn.addEventListener('click', () => applyColors(entry.bg, entry));
+    btn.addEventListener("click", () => applyColors(entry.bg, entry));
     host.append(btn);
   }
 }
@@ -245,36 +265,36 @@ function renderSwatches(): void {
  * Custom, not as the fallback size.
  */
 function syncPresetSelect(): void {
-  const select = $<HTMLSelectElement>('#presetSize');
-  const key = `${str('width', '')}x${str('height', '')}`;
+  const select = $<HTMLSelectElement>("#presetSize");
+  const key = `${str("width", "")}x${str("height", "")}`;
   const match = [...select.options].some((option) => option.value === key);
-  select.value = match ? key : '';
+  select.value = match ? key : "";
 }
 
 function refreshDependentUi(): void {
   const kind = currentKind();
-  for (const section of document.querySelectorAll<HTMLElement>('[data-kind]')) {
+  for (const section of document.querySelectorAll<HTMLElement>("[data-kind]")) {
     section.hidden = section.dataset.kind !== kind;
   }
-  if (kind === 'image') stopPreviewAnimation();
+  if (kind === "image") stopPreviewAnimation();
 
   // The quality slider follows the format of the active tab: JPEG and WebP
   // take it in the image tab, and the animated formats in the video one.
   const format = currentFormat();
-  const qualityField = form.querySelector<HTMLElement>('.quality');
+  const qualityField = form.querySelector<HTMLElement>(".quality");
   if (qualityField) qualityField.hidden = !LOSSY.has(format);
 
   // Every format with a timeline lives in the video tab, so the section shows
   // up exactly there.
-  const timeline = $('#timeline');
-  const timed = kind === 'video';
+  const timeline = $("#timeline");
+  const timed = kind === "video";
   timeline.hidden = !timed;
 
   const spec = readSpec();
   syncPresetSelect();
   const even = evenDimensions(spec.width, spec.height);
-  const evenWarning = $('#evenWarning');
-  const rounds = kind === 'video' && even.changed;
+  const evenWarning = $("#evenWarning");
+  const rounds = kind === "video" && even.changed;
   evenWarning.hidden = !rounds;
   if (rounds) {
     evenWarning.textContent = `H.264 needs even dimensions: the video will be ${even.width}×${even.height}.`;
@@ -282,8 +302,8 @@ function refreshDependentUi(): void {
 
   // The GIF only takes hundredth delays, so the real FPS is almost never the
   // requested one. It is reported with the number, not with a "may differ".
-  const fpsEffective = $('#fpsEffective');
-  if (format === 'gif') {
+  const fpsEffective = $("#fpsEffective");
+  if (format === "gif") {
     const eff = effectiveGifFps(spec.fps);
     fpsEffective.hidden = false;
     fpsEffective.textContent = `The GIF only takes hundredth delays: ${spec.fps} fps come out as ${eff.toFixed(1)} fps.`;
@@ -293,7 +313,7 @@ function refreshDependentUi(): void {
 
   // With a single frame there is no bar to show.
   const singleFrame = Math.round(spec.duration * spec.fps) <= 1;
-  for (const name of ['showProgressBar', 'showTime'] as const) {
+  for (const name of ["showProgressBar", "showTime"] as const) {
     const el = form.elements.namedItem(name);
     if (el instanceof HTMLInputElement) el.disabled = singleFrame;
   }
@@ -310,36 +330,36 @@ function refreshDependentUi(): void {
 
 // ── Generating ────────────────────────────────────────────────────────
 
-function showMessage(text: string, tone: 'error' | 'info' = 'error'): void {
-  const el = $('#message');
+function showMessage(text: string, tone: "error" | "info" = "error"): void {
+  const el = $("#message");
   el.textContent = text;
   el.dataset.tone = tone;
   el.hidden = false;
 }
 
 function clearMessage(): void {
-  const el = $('#message');
+  const el = $("#message");
   el.hidden = true;
-  el.textContent = '';
+  el.textContent = "";
 }
 
 function setBusy(busy: boolean): void {
-  $<HTMLButtonElement>('#generate').disabled = busy;
-  $('#cancel').hidden = !busy;
-  $('#progress').hidden = !busy;
+  $<HTMLButtonElement>("#generate").disabled = busy;
+  $("#cancel").hidden = !busy;
+  $("#progress").hidden = !busy;
   if (!busy) {
-    $('#progressFill').style.width = '0%';
+    $("#progressFill").style.width = "0%";
   }
 }
 
 function onProgress(info: ProgressInfo): void {
   const pct = Math.max(0, Math.min(1, info.progress)) * 100;
-  $('#progressFill').style.width = `${pct}%`;
+  $("#progressFill").style.width = `${pct}%`;
   const text =
     info.frame !== undefined && info.totalFrames !== undefined
-      ? `${info.message ?? 'Processing'} (${info.frame}/${info.totalFrames})`
+      ? `${info.message ?? "Processing"} (${info.frame}/${info.totalFrames})`
       : (info.message ?? `${pct.toFixed(0)}%`);
-  $('#progressText').textContent = text;
+  $("#progressText").textContent = text;
 }
 
 async function generate(): Promise<void> {
@@ -348,24 +368,34 @@ async function generate(): Promise<void> {
   const spec = readSpec();
   abortController = new AbortController();
   setBusy(true);
-  onProgress({ progress: 0, message: 'Preparing…' });
+  onProgress({ progress: 0, message: "Preparing…" });
 
   try {
     const signal = abortController.signal;
     const result =
-      kind === 'video'
-        ? await exportTimeline(spec, str('videoFormat', 'mp4') as TimelineFormat, onProgress, signal)
-        : await exportImage(spec, str('imageFormat', 'png') as StillImageFormat, onProgress, signal);
+      kind === "video"
+        ? await exportTimeline(
+            spec,
+            str("videoFormat", "mp4") as TimelineFormat,
+            onProgress,
+            signal,
+          )
+        : await exportImage(
+            spec,
+            str("imageFormat", "png") as StillImageFormat,
+            onProgress,
+            signal,
+          );
 
-    onProgress({ progress: 1, message: 'Done' });
+    onProgress({ progress: 1, message: "Done" });
     downloadBlob(result.blob, result.filename);
     showMessage(
       `${result.filename} · ${(result.size / 1024).toFixed(1)} KB · generated by El Coso 3000`,
-      'info',
+      "info",
     );
   } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') {
-      showMessage('Cancelled.', 'info');
+    if (err instanceof DOMException && err.name === "AbortError") {
+      showMessage("Cancelled.", "info");
     } else {
       showMessage(err instanceof Error ? err.message : String(err));
     }
@@ -386,61 +416,76 @@ async function exportTimeline(
   onProgress_: (i: ProgressInfo) => void,
   signal: AbortSignal,
 ) {
-  if (format === 'gif') return exportGif(spec, onProgress_, signal);
-  if (format === 'mjpeg-avi') return exportMjpegAvi(spec, onProgress_, signal);
-  if (format === 'jpeg-zip') return exportJpegZip(spec, onProgress_, signal);
+  if (format === "gif") return exportGif(spec, onProgress_, signal);
+  if (format === "mjpeg-avi") return exportMjpegAvi(spec, onProgress_, signal);
+  if (format === "jpeg-zip") return exportJpegZip(spec, onProgress_, signal);
   return exportVideo(spec, format, onProgress_, signal);
 }
 
 // ── WebMCP: what an agent can drive ───────────────────────────────────
 
-function applySettings(input: Record<string, unknown>): { ok: true } | { ok: false; error: string } {
+function applySettings(
+  input: Record<string, unknown>,
+): { ok: true } | { ok: false; error: string } {
   try {
-    if (input.width !== undefined) setNum('width', Number(input.width));
-    if (input.height !== undefined) setNum('height', Number(input.height));
-    if (input.duration !== undefined) setNum('duration', Number(input.duration));
-    if (input.fps !== undefined) setNum('fps', Number(input.fps));
+    if (input.width !== undefined) setNum("width", Number(input.width));
+    if (input.height !== undefined) setNum("height", Number(input.height));
+    if (input.duration !== undefined)
+      setNum("duration", Number(input.duration));
+    if (input.fps !== undefined) setNum("fps", Number(input.fps));
 
-    if (typeof input.kind === 'string') {
-      setRadio('kind', input.kind);
+    if (typeof input.kind === "string") {
+      setRadio("kind", input.kind);
     }
-    if (typeof input.imageFormat === 'string') {
-      setRadio('imageFormat', input.imageFormat);
+    if (typeof input.imageFormat === "string") {
+      setRadio("imageFormat", input.imageFormat);
     }
-    if (typeof input.videoFormat === 'string') {
-      setRadio('videoFormat', input.videoFormat);
+    if (typeof input.videoFormat === "string") {
+      setRadio("videoFormat", input.videoFormat);
     }
-    if (typeof input.showProgressBar === 'boolean') {
-      setCheckbox('showProgressBar', input.showProgressBar);
+    if (typeof input.showProgressBar === "boolean") {
+      setCheckbox("showProgressBar", input.showProgressBar);
     }
-    if (typeof input.showTime === 'boolean') {
-      setCheckbox('showTime', input.showTime);
+    if (typeof input.showTime === "boolean") {
+      setCheckbox("showTime", input.showTime);
     }
 
     // The color is resolved last, so a `background` without a palette takes
     // precedence over the palette and not the other way around.
-    if (typeof input.palette === 'string') {
-      const found = palette().find((p) => p.name === input.palette || p.label === input.palette);
-      if (!found) return { ok: false, error: `unknown palette "${String(input.palette)}"` };
+    if (typeof input.palette === "string") {
+      const found = palette().find(
+        (p) => p.name === input.palette || p.label === input.palette,
+      );
+      if (!found)
+        return {
+          ok: false,
+          error: `unknown palette "${String(input.palette)}"`,
+        };
       applyColors(found.bg, found);
     }
-    if (typeof input.background === 'string') {
+    if (typeof input.background === "string") {
       applyColors(input.background, null);
     }
 
     refreshDependentUi();
     return { ok: true };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
 function setNum(name: string, value: number): void {
   const el = form.elements.namedItem(name);
-  if (el instanceof HTMLInputElement && Number.isFinite(value)) el.value = String(Math.round(value));
+  if (el instanceof HTMLInputElement && Number.isFinite(value))
+    el.value = String(Math.round(value));
 }
 function setRadio(name: string, value: string): void {
-  const el = form.querySelector<HTMLInputElement>(`input[name="${name}"][value="${value}"]`);
+  const el = form.querySelector<HTMLInputElement>(
+    `input[name="${name}"][value="${value}"]`,
+  );
   if (el) el.checked = true;
 }
 function setCheckbox(name: string, value: boolean): void {
@@ -468,47 +513,51 @@ function describe(): Record<string, unknown> {
 async function syncVideoAvailability(): Promise<void> {
   const spec = readSpec();
   const supported = await availableVideoFormats(spec.width, spec.height);
-  for (const input of form.querySelectorAll<HTMLInputElement>('input[name="videoFormat"]')) {
+  for (const input of form.querySelectorAll<HTMLInputElement>(
+    'input[name="videoFormat"]',
+  )) {
     // The animated image formats are not encoders of this browser, they are
     // always available.
     const animated = ANIMATED_IMAGE_FORMATS.has(input.value as ImageFormat);
-    const available = animated || supported.includes(input.value as VideoFormat);
+    const available =
+      animated || supported.includes(input.value as VideoFormat);
     input.disabled = !available;
     const span = input.nextElementSibling as HTMLElement | null;
-    if (span) span.title = available ? '' : 'This browser cannot encode this format';
+    if (span)
+      span.title = available ? "" : "This browser cannot encode this format";
   }
-  const warn = $('#videoUnsupported');
+  const warn = $("#videoUnsupported");
   if (supported.length === 0) {
     warn.hidden = false;
     warn.textContent =
-      'This browser has no WebCodecs support, so video cannot be generated. Images and the GIF still work. There is no support in Firefox for Android.';
+      "This browser has no WebCodecs support, so video cannot be generated. Images and the GIF still work. There is no support in Firefox for Android.";
   } else {
     warn.hidden = true;
   }
 }
 
 function wireEvents(): void {
-  form.addEventListener('input', (ev) => {
+  form.addEventListener("input", (ev) => {
     const target = ev.target;
     if (!(target instanceof HTMLInputElement)) return;
 
-    if (target.id === 'bg') {
+    if (target.id === "bg") {
       // Changing the background by hand drops the palette: the user is
       // intervening.
       applyColors(target.value, null);
       return;
     }
     switch (target.name) {
-      case 'quality':
-        $('#qualityOut').textContent = `${target.value}%`;
+      case "quality":
+        $("#qualityOut").textContent = `${target.value}%`;
         break;
-      case 'duration':
-        $('#durationOut').textContent = `${target.value}s`;
+      case "duration":
+        $("#durationOut").textContent = `${target.value}s`;
         break;
-      case 'fps':
-        $('#fpsOut').textContent = target.value;
+      case "fps":
+        $("#fpsOut").textContent = target.value;
         break;
-      case 'kind':
+      case "kind":
         // `refreshDependentUi` already decides whether the preview animates.
         refreshDependentUi();
         void syncVideoAvailability();
@@ -517,39 +566,33 @@ function wireEvents(): void {
     refreshDependentUi();
   });
 
-  form.addEventListener('change', () => {
+  form.addEventListener("change", () => {
     refreshContrast();
     refreshDependentUi();
   });
 
-  form.addEventListener('submit', (ev) => {
+  form.addEventListener("submit", (ev) => {
     ev.preventDefault();
     void generate();
   });
 
-  $('#cancel').addEventListener('click', () => {
+  $("#cancel").addEventListener("click", () => {
     abortController?.abort();
   });
 
-  $('#random').addEventListener('click', () => {
-    const entry = randomPalette();
-    applyColors(entry.bg, entry);
+  $("#swap").addEventListener("click", () => {
+    const w = num("width", 300);
+    setNum("width", num("height", 200));
+    setNum("height", w);
     refreshDependentUi();
   });
 
-  $('#swap').addEventListener('click', () => {
-    const w = num('width', 300);
-    setNum('width', num('height', 200));
-    setNum('height', w);
-    refreshDependentUi();
-  });
-
-  $('#presetSize').addEventListener('change', (ev) => {
+  $("#presetSize").addEventListener("change", (ev) => {
     const key = (ev.target as HTMLSelectElement).value;
     if (!key) return;
-    const [w, h] = key.split('x');
-    setNum('width', Number(w));
-    setNum('height', Number(h));
+    const [w, h] = key.split("x");
+    setNum("width", Number(w));
+    setNum("height", Number(h));
     refreshDependentUi();
   });
 }
@@ -558,9 +601,8 @@ async function main(): Promise<void> {
   await ensureFontLoaded();
   renderSwatches();
 
-  // It starts on a random palette, not on the first one of the list: every
-  // visit opens with a different color.
-  const start = randomPalette();
+  const start = palette().at(0);
+  if (!start) throw new Error("No palette found");
   applyColors(start.bg, start);
 
   wireEvents();
@@ -571,13 +613,13 @@ async function main(): Promise<void> {
     applySettings,
     generate: async () => {
       await generate();
-      const el = $('#message');
-      return el.hidden ? 'Generated.' : (el.textContent ?? 'Generated.');
+      const el = $("#message");
+      return el.hidden ? "Generated." : (el.textContent ?? "Generated.");
     },
     describe,
   });
 
-  const status = $('#webmcpStatus');
+  const status = $("#webmcpStatus");
   if (registered) {
     status.textContent = webmcpStatusText(true);
     status.hidden = false;
