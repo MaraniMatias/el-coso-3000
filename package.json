@@ -1,0 +1,29 @@
+{
+  "name": "elcoso3000",
+  "module": "src/main.ts",
+  "type": "module",
+  "description": "Generador de placeholders de imagen y video, offline y sin servidor.",
+  "license": "MPL-2.0",
+  "scripts": {
+    "build": "bun run scripts/build.ts",
+    "test": "bun test",
+    "check": "bun run check:core && bun test",
+    "check:core": "bun run scripts/check-palette.ts && bun run scripts/check-fit-text.ts && bun run scripts/check-filename.ts && bun run scripts/check-image.ts",
+    "check:palette": "bun run scripts/check-palette.ts",
+    "check:fit": "bun run scripts/check-fit-text.ts",
+    "check:filename": "bun run scripts/check-filename.ts",
+    "check:image": "bun run scripts/check-image.ts",
+    "types": "tsc --noEmit",
+    "verify:browser": "bun run scripts/verify-browser.ts",
+    "fetch:font": "bun run scripts/fetch-font.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
+  },
+  "dependencies": {
+    "mediabunny": "^1.61.0"
+  }
+}
