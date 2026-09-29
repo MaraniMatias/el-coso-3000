@@ -75,7 +75,7 @@ const SCHEMA = {
     },
     background: {
       type: 'string',
-      description: 'Background color as 6 hex digits, for example "F2DEE2", without #. The text is derived from it.',
+      description: 'Background color as 6 hex digits, for example "E0E0E0", without #. The text is derived from it.',
     },
     duration: { type: 'number', minimum: 1, maximum: 30, description: 'Seconds. Video only.' },
     fps: { type: 'integer', minimum: 1, maximum: 60, description: 'Frames per second. Video only.' },

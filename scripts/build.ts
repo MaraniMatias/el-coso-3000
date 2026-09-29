@@ -88,12 +88,12 @@ function guardInlineScript(js: string): string {
 const LOADING_LINK_RELS = ['stylesheet', 'preload', 'prefetch', 'modulepreload', 'icon', 'apple-touch-icon', 'manifest'];
 
 const REMOTE_LOADERS: Array<{ pattern: RegExp; what: string }> = [
-  { pattern: /<script[^>]+\bsrc\s*=\s*["']https?:/i, what: 'un <script> con src remoto' },
-  { pattern: /@import\s+(?:url\()?["']?https?:/i, what: 'un @import remoto' },
-  { pattern: /url\(\s*["']?https?:/i, what: 'un url() remoto en el CSS' },
-  { pattern: /\bfetch\(\s*["'`]https?:/i, what: 'un fetch() a un origen remoto' },
-  { pattern: /\bimportScripts\(\s*["'`]https?:/i, what: 'un importScripts() remoto' },
-  { pattern: /<img[^>]+\bsrc\s*=\s*["']https?:/i, what: 'una <img> remota' },
+  { pattern: /<script[^>]+\bsrc\s*=\s*["']https?:/i, what: 'a <script> with a remote src' },
+  { pattern: /@import\s+(?:url\()?["']?https?:/i, what: 'a remote @import' },
+  { pattern: /url\(\s*["']?https?:/i, what: 'a remote url() in CSS' },
+  { pattern: /\bfetch\(\s*["'`]https?:/i, what: 'a fetch() to a remote origin' },
+  { pattern: /\bimportScripts\(\s*["'`]https?:/i, what: 'a remote importScripts()' },
+  { pattern: /<img[^>]+\bsrc\s*=\s*["']https?:/i, what: 'a remote <img>' },
 ];
 
 /** `<meta>` and `<link rel="canonical">` are metadata, not loads. */
@@ -112,7 +112,7 @@ function auditOffline(html: string): void {
     const match = pattern.exec(html);
     if (match) {
       const at = html.indexOf(match[0]);
-      problems.push(`${what} — cerca de: …${html.slice(Math.max(0, at - 60), at + 60).replace(/\s+/g, ' ')}…`);
+      problems.push(`${what} — near: …${html.slice(Math.max(0, at - 60), at + 60).replace(/\s+/g, ' ')}…`);
     }
   }
 

@@ -443,7 +443,7 @@ const badDocs: Array<[string, string]> = [
   ['<a>&nope;</a>', 'unknown entity'],
   ['<a>texto & suelto</a>', 'bare ampersand in text'],
   ['<a x="<"/>', 'unescaped less-than sign in attribute'],
-  ['<a><!-- sin cerrar', 'unclosed comment'],
+  ['<a><!-- unclosed', 'unclosed comment'],
 ];
 for (const [doc, why] of badDocs) {
   check(xmlProblem(doc) !== null, `detects: ${why}`, `not detected → ${String(xmlProblem(doc))}`);

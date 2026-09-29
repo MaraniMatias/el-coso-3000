@@ -12,12 +12,16 @@ export interface FrameGeometry {
   stripHeight: number;
 }
 
+/**
+ * The bar and the clock are sized as a fraction of the video, so they keep the
+ * same proportion at 320×240 and at 4K. `MIN` are floors, not ceilings: they
+ * only stop the strip from disappearing on a tiny canvas, they never flatten it
+ * on a big one.
+ */
 const BAR_RATIO = 0.012;
-const BAR_MIN = 2;
-const BAR_MAX = 12;
+const BAR_MIN = 1;
 const TIME_RATIO = 0.035;
-const TIME_MIN = 9;
-const TIME_MAX = 22;
+const TIME_MIN = 6;
 /** Opacity of the bar track, so it reads without competing. */
 const TRACK_ALPHA = 0.16;
 
@@ -31,9 +35,9 @@ export function frameGeometry(spec: Spec): FrameGeometry {
   if (!showBar && !showTime) {
     return { barHeight: 0, timeFontSize: 0, stripHeight: 0 };
   }
-  const barHeight = Math.round(Math.max(BAR_MIN, Math.min(BAR_MAX, spec.height * BAR_RATIO)));
+  const barHeight = Math.max(BAR_MIN, Math.round(spec.height * BAR_RATIO));
   const timeFontSize = showTime
-    ? Math.round(Math.max(TIME_MIN, Math.min(TIME_MAX, Math.min(spec.width, spec.height) * TIME_RATIO)))
+    ? Math.max(TIME_MIN, Math.round(Math.min(spec.width, spec.height) * TIME_RATIO))
     : 0;
   // The clock needs its line height plus a small breather over the bar.
   const timeBlock = timeFontSize > 0 ? timeFontSize * 1.5 : 0;

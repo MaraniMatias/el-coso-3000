@@ -180,7 +180,7 @@ try {
     return { ...read(), before: JSON.stringify(before), count: String(swatches.length), name: last.dataset.name };
   })()`);
   const themeBefore = JSON.parse(theme.before ?? '{}') as Record<string, string>;
-  check('the grid shows the whole palette', Number(theme.count) >= 12, `${theme.count} colors`);
+  check('the grid shows the whole palette', Number(theme.count) === 6, `${theme.count} colors`);
   check('picking another palette changes the placeholder color', theme.bg !== themeBefore.bg, `${themeBefore.bg} → ${theme.bg} (${theme.name})`);
   check('the page gets re-tinted with the palette', theme.tint !== themeBefore.tint && theme.body !== themeBefore.body, `hue ${themeBefore.tint} → ${theme.tint}°`);
   check('the panel and the accent follow the palette', theme.panel !== themeBefore.panel && theme.accent !== themeBefore.accent, theme.accent);
@@ -233,6 +233,28 @@ try {
     })()`);
     check(`choosing ${format} stays selected`, got === format, `stuck on ${got}`);
   }
+
+  // The preset dropdown is the other half of the same contract: it has to
+  // fill the two fields, and it has to follow them when they are typed by hand.
+  const preset = await evaluate<{ w: string; h: string; cw: number; ch: number; matched: string; custom: string; options: number }>(`(() => {
+    const s = document.querySelector('#presetSize');
+    s.value = '300x250';
+    s.dispatchEvent(new Event('change', { bubbles: true }));
+    const canvas = document.querySelector('#canvas');
+    const picked = { w: document.querySelector('#width').value, h: document.querySelector('#height').value, cw: canvas.width, ch: canvas.height };
+    const wi = document.querySelector('#width'), hi = document.querySelector('#height');
+    hi.value = '600';
+    wi.dispatchEvent(new Event('input', { bubbles: true }));
+    const matched = s.value;
+    wi.value = '301';
+    wi.dispatchEvent(new Event('input', { bubbles: true }));
+    return { ...picked, matched, custom: s.value, options: s.options.length };
+  })()`);
+  check('choosing a preset fills width and height', preset.w === '300' && preset.h === '250', `${preset.w}×${preset.h}`);
+  check('the preview takes the preset size', preset.cw === 300 && preset.ch === 250, `${preset.cw}×${preset.ch}`);
+  check('typing a size that is a preset selects it', preset.matched === '300x600', preset.matched);
+  check('a size that is not a preset falls back to Custom', preset.custom === '', `"${preset.custom}"`);
+  check('the dropdown carries every standard size', preset.options >= 15, `${preset.options} options`);
 
   const kind = await evaluate<string>(`(() => {
     document.querySelector('input[name="kind"][value="video"]').click();

@@ -14,7 +14,7 @@
     <meta name="generator" content="El Coso 3000" />
     <meta name="author" content="Matias Ezequiel Marani" />
     <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="#F2DEE2" />
+    <meta name="theme-color" content="#E0E0E0" />
     <link rel="canonical" href="https://maranimatias.github.io/el-coso-3000/" />
 
     <meta property="og:type" content="website" />
@@ -309,6 +309,36 @@
             >
               ⇅
             </button>
+            <div class="field preset">
+              <label for="presetSize">Preset</label>
+              <select
+                id="presetSize"
+                toolparamtitle="Preset size"
+                toolparamdescription="Fills width and height with a standard ad size, for example 300x250. Any other size is Custom. Width and height are the real parameters."
+              >
+                <option value="">Custom</option>
+                <optgroup label="Standard display">
+                  <option value="300x250">Medium Rectangle — 300 × 250</option>
+                  <option value="728x90">Leaderboard — 728 × 90</option>
+                  <option value="160x600">Wide Skyscraper — 160 × 600</option>
+                  <option value="336x280">Large Rectangle — 336 × 280</option>
+                  <option value="300x600">Half Page / Filmstrip — 300 × 600</option>
+                  <option value="120x600">Skyscraper — 120 × 600 (legacy)</option>
+                  <option value="468x60">Main Banner / Full Banner — 468 × 60 (legacy)</option>
+                </optgroup>
+                <optgroup label="Mobile">
+                  <option value="320x50">Mobile Leaderboard — 320 × 50</option>
+                  <option value="320x100">Large Mobile Banner — 320 × 100</option>
+                  <option value="320x480">Mobile Fullscreen / Interstitial — 320 × 480</option>
+                  <option value="480x320">Mobile Fullscreen / Interstitial — 480 × 320</option>
+                </optgroup>
+                <optgroup label="High impact">
+                  <option value="970x250">Billboard — 970 × 250</option>
+                  <option value="970x90">Super Leaderboard / Pushdown — 970 × 90</option>
+                  <option value="300x1050">Portrait — 300 × 1050</option>
+                </optgroup>
+              </select>
+            </div>
           </div>
           <p class="note warning" id="evenWarning" hidden></p>
         </section>
@@ -323,7 +353,7 @@
                 type="color"
                 id="bg"
                 name="bg"
-                value="#F2DEE2"
+                value="#E0E0E0"
                 toolparamtitle="Background color"
                 toolparamdescription="Background color, in hex. The text is computed from it to guarantee contrast."
               />
@@ -335,7 +365,7 @@
                 type="color"
                 id="fg"
                 name="fg"
-                value="#962C41"
+                value="#2B2B2B"
                 readonly
                 title="Derived from the background to guarantee the contrast"
                 toolparamtitle="Text color"

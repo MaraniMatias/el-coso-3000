@@ -96,8 +96,8 @@ function readSpec(): Spec {
   return {
     width: Math.max(1, num('width', 300)),
     height: Math.max(1, num('height', 200)),
-    bg: normalizeHex(str('bg', 'F2DEE2')),
-    fg: normalizeHex(str('fg', '962C41')),
+    bg: normalizeHex(str('bg', 'E0E0E0')),
+    fg: normalizeHex(str('fg', '2B2B2B')),
     paletteName: selectedPalette?.name ?? 'custom',
     duration: timed ? num('duration', 5) : 0,
     fps: num('fps', 15),
@@ -235,6 +235,18 @@ function renderSwatches(): void {
 
 // ── State derived from the controls ───────────────────────────────────
 
+/**
+ * Shows the preset that matches the dimensions, or `Custom` when there is
+ * none. The raw field values are used on purpose: an empty input must read as
+ * Custom, not as the fallback size.
+ */
+function syncPresetSelect(): void {
+  const select = $<HTMLSelectElement>('#presetSize');
+  const key = `${str('width', '')}x${str('height', '')}`;
+  const match = [...select.options].some((option) => option.value === key);
+  select.value = match ? key : '';
+}
+
 function refreshDependentUi(): void {
   const kind = currentKind();
   for (const section of document.querySelectorAll<HTMLElement>('[data-kind]')) {
@@ -255,6 +267,7 @@ function refreshDependentUi(): void {
   timeline.hidden = !timed;
 
   const spec = readSpec();
+  syncPresetSelect();
   const even = evenDimensions(spec.width, spec.height);
   const evenWarning = $('#evenWarning');
   const rounds = kind === 'video' && even.changed;
@@ -524,6 +537,15 @@ function wireEvents(): void {
     const w = num('width', 300);
     setNum('width', num('height', 200));
     setNum('height', w);
+    refreshDependentUi();
+  });
+
+  $('#presetSize').addEventListener('change', (ev) => {
+    const key = (ev.target as HTMLSelectElement).value;
+    if (!key) return;
+    const [w, h] = key.split('x');
+    setNum('width', Number(w));
+    setNum('height', Number(h));
     refreshDependentUi();
   });
 }

@@ -8,6 +8,7 @@
  * grows with the size and is proportional to the number of characters.
  */
 import { layoutDimensions, layoutLine, clampMaxFont, paddingFor, MAX_SIDE_RATIO } from '../src/core/fit-text';
+import { frameGeometry } from '../src/core/draw-frame';
 import type { Spec } from '../src/core/types';
 
 const ADVANCE = 0.58; // average width per character, in em
@@ -143,6 +144,64 @@ check('the clock fits', clock !== null);
 const tooSmall = layoutLine(ctx, '0:03 / 0:10', 8, 4, { minFontSize: 7, maxFontSize: 22 });
 check('the clock returns null when it does not fit', tooSmall === null);
 console.log(`clock at ${clock?.fontSize.toFixed(1)}px`);
+
+// ── The bottom strip scales with the video ─────────────────────────────
+// The bar is 1.2% of the height and the clock 3.5% of the shortest side, with
+// a floor so that they are still there on a tiny canvas. The two ratios are the
+// contract: the strip has to keep the same proportion at every size.
+console.log('\nbottom strip: bar and clock');
+const BAR_RATIO = 0.012;
+const BAR_MIN = 1;
+const TIME_RATIO = 0.035;
+const TIME_MIN = 6;
+const videoLadder: Array<[number, number]> = [
+  [32, 32], [64, 64], [320, 240], [640, 360], [1280, 720], [1920, 1080], [3840, 2160],
+];
+for (const [w, h] of videoLadder) {
+  const geo = frameGeometry({ ...spec(w, h), showProgressBar: true, showTime: true });
+  const barWanted = Math.max(BAR_MIN, h * BAR_RATIO);
+  const timeWanted = Math.max(TIME_MIN, Math.min(w, h) * TIME_RATIO);
+  check(
+    `${w}x${h} bar is 1.2% of the height`,
+    Math.abs(geo.barHeight - barWanted) <= 0.5,
+    `(${geo.barHeight}px, wanted ${barWanted.toFixed(2)})`,
+  );
+  check(
+    `${w}x${h} clock is 3.5% of the shortest side`,
+    Math.abs(geo.timeFontSize - timeWanted) <= 0.5,
+    `(${geo.timeFontSize}px, wanted ${timeWanted.toFixed(2)})`,
+  );
+  check(`${w}x${h} strip is never invisible`, geo.barHeight >= BAR_MIN && geo.timeFontSize >= TIME_MIN);
+  // A 32x32 video cannot hold a bar and a readable clock in proportion, so the
+  // floors win there. The only hard rule is that the dimensions keep their
+  // room; the proportional share is only expected once the floors let go.
+  check(
+    `${w}x${h} strip leaves room for the dimensions`,
+    geo.stripHeight < h / 3,
+    `strip ${geo.stripHeight}px of ${h}`,
+  );
+  if (h * BAR_RATIO >= BAR_MIN && Math.min(w, h) * TIME_RATIO >= TIME_MIN) {
+    check(
+      `${w}x${h} strip holds its proportional share`,
+      geo.stripHeight <= h * 0.07,
+      `strip ${geo.stripHeight}px (${(geo.stripHeight / h * 100).toFixed(2)}% of ${h})`,
+    );
+  }
+  console.log(
+    `  ${`${w}x${h}`.padEnd(11)} bar ${String(geo.barHeight).padStart(3)}px ` +
+      `(${(geo.barHeight / h * 100).toFixed(2)}%)  clock ${String(geo.timeFontSize).padStart(3)}px ` +
+      `(${(geo.timeFontSize / Math.min(w, h) * 100).toFixed(2)}%)  strip ${geo.stripHeight}px`,
+  );
+}
+
+// And it grows with the video, which is the whole point of using ratios.
+const strips = videoLadder.map(([w, h]) => frameGeometry({ ...spec(w, h), showProgressBar: true, showTime: true }));
+let stripGrows = true;
+for (let i = 1; i < strips.length; i++) {
+  if ((strips[i]?.barHeight ?? 0) < (strips[i - 1]?.barHeight ?? 0)) stripGrows = false;
+  if ((strips[i]?.timeFontSize ?? 0) < (strips[i - 1]?.timeFontSize ?? 0)) stripGrows = false;
+}
+check('the strip grows with the video', stripGrows, `→ ${strips.map((g) => g?.barHeight + '/' + g?.timeFontSize).join(' ')}`);
 
 console.log(fails === 0 ? '\n✔ auto-fit OK' : `\n✘ ${fails} failure(s)`);
 process.exit(fails === 0 ? 0 : 1);
