@@ -131,20 +131,80 @@ body {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 18px;
   display: flex;
   flex-direction: column;
-  gap: 22px;
   position: sticky;
   top: 16px;
   max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  overflow: hidden;
+}
+.panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 18px;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
+/* The action bar stays in view while the controls scroll, so the button that
+   matters is never below the fold. Progress and messages live inside it, next
+   to the thing that caused them. */
+.dock {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 18px 18px;
+  padding-bottom: max(18px, env(safe-area-inset-bottom));
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+
+/* On a phone the page scrolls, not the panel. The preview is pinned to the top
+   so every change is visible while the controls move under it, and the dock is
+   pinned to the bottom. Sticky needs a flex parent here: inside a grid, an item
+   cannot stick beyond its own grid area. */
 @media (max-width: 860px) {
+  .layout {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
   .panel {
     position: static;
     max-height: none;
+    overflow: visible;
+  }
+  .panel-body {
+    overflow: visible;
+  }
+  .dock {
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
+    border-radius: 0 0 var(--radius) var(--radius);
+  }
+  .preview {
+    order: -1;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    gap: 6px;
+    padding: 8px 0;
+    background: var(--bg);
+  }
+  .stage {
+    min-height: 0;
+    padding: 12px;
+  }
+  #canvas {
+    max-height: 30vh;
+    max-height: 30dvh;
+  }
+  .meta-line {
+    display: none;
   }
 }
 
@@ -160,11 +220,9 @@ body {
 }
 .group h2 {
   margin: 0;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
+  color: var(--ink-soft);
 }
 
 /* ── Tabs ───────────────────────────────────────────────────────── */
@@ -179,6 +237,7 @@ body {
 }
 .tab {
   flex: 1;
+  position: relative;
 }
 .tab input {
   position: absolute;
@@ -188,7 +247,7 @@ body {
 .tab span {
   display: block;
   text-align: center;
-  padding: 8px;
+  padding: 10px 8px;
   border-radius: 7px;
   font-size: 14px;
   font-weight: 500;
@@ -221,8 +280,10 @@ body {
   pointer-events: none;
 }
 .choices span {
-  display: block;
-  padding: 6px 11px;
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 6px 13px;
   border: 1px solid var(--line);
   border-radius: 999px;
   font-size: 13px;
@@ -290,7 +351,7 @@ input[type="color"] {
   border-radius: 7px;
   cursor: pointer;
 }
-input[readonly] {
+input:disabled[type="color"] {
   cursor: not-allowed;
   opacity: 0.85;
 }
@@ -327,6 +388,12 @@ button:focus-visible {
   grid-column: 1 / -1;
 }
 
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
 .checkboxes {
   display: flex;
   flex-direction: column;
@@ -346,8 +413,8 @@ button:focus-visible {
 
 .swatches {
   display: grid;
-  grid-template-columns: repeat(9, 1fr);
-  gap: 5px;
+  grid-template-columns: repeat(auto-fill, minmax(32px, 1fr));
+  gap: 6px;
 }
 .swatch {
   position: relative;
@@ -358,9 +425,12 @@ button:focus-visible {
   padding: 0;
   overflow: hidden;
 }
+.swatch:hover {
+  border-color: var(--ink-faint);
+}
 .swatch[aria-pressed="true"] {
   outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline-offset: 2px;
 }
 
 .colors {
@@ -422,6 +492,7 @@ button.primary {
   flex: 1;
   font: inherit;
   font-weight: 600;
+  min-height: 44px;
   padding: 11px 16px;
   color: var(--accent-ink);
   background: var(--accent);
@@ -440,6 +511,7 @@ button.primary:disabled {
 button.ghost {
   font: inherit;
   font-size: 13px;
+  min-height: 40px;
   padding: 9px 12px;
   color: var(--ink-soft);
   background: var(--surface-2);
@@ -494,6 +566,12 @@ button.ghost:hover {
   border-color: var(--line);
 }
 
+.message[data-tone="success"] {
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 30%, transparent);
+}
+
 .note {
   margin: 0;
   font-size: 12px;
@@ -519,7 +597,7 @@ button.ghost:hover {
   display: grid;
   place-items: center;
   padding: 20px;
-  background: repeating-conic-gradient(var(--surface-2) 0% 25%, var(--surface) 0% 50%) 50% / 20px 20px;
+  background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: var(--radius);
 }
@@ -527,6 +605,7 @@ button.ghost:hover {
 #canvas {
   max-width: 100%;
   max-height: 62vh;
+  max-height: 62dvh;
   display: block;
   box-shadow: 0 6px 24px rgb(0 0 0 / 0.12);
   border-radius: 2px;

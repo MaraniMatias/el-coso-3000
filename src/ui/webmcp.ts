@@ -77,7 +77,7 @@ const SCHEMA = {
       type: 'string',
       description: 'Background color as 6 hex digits, for example "E0E0E0", without #. The text is derived from it.',
     },
-    duration: { type: 'number', minimum: 1, maximum: 30, description: 'Seconds. Video only.' },
+    duration: { type: 'number', minimum: 1, maximum: 120, description: 'Seconds. Video only.' },
     fps: { type: 'integer', minimum: 1, maximum: 60, description: 'Frames per second. Video only.' },
     showProgressBar: { type: 'boolean', description: 'Draw a progress bar at the bottom. Video only.' },
     showTime: { type: 'boolean', description: 'Draw the 0:03 / 0:10 clock. Video only.' },
