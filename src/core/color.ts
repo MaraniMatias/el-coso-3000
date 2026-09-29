@@ -132,12 +132,12 @@ const FG_LIGHT_RANGE: [number, number] = [0.62, 0.97];
  * what the UI shows.
  */
 const PALETTE: Array<{ name: string; label: string; bg: string; fg: string }> = [
-  { name: 'gray', label: 'Gray', bg: 'F0EDEB', fg: '5B544D' },
-  { name: 'blue', label: 'Blue', bg: 'E2E9F4', fg: '2C5596' },
-  { name: 'green', label: 'Green', bg: 'DEEDE6', fg: '1D6242' },
-  { name: 'yellow', label: 'Yellow', bg: 'F4EDD7', fg: '69571F' },
-  { name: 'red', label: 'Red', bg: 'F4E4E1', fg: '903A2A' },
-  { name: 'orange', label: 'Orange', bg: 'F5E6DB', fg: '7C4A24' },
+  { name: 'gray', label: 'Gray', bg: 'E5E7EB', fg: '374151' },
+  { name: 'blue', label: 'Blue', bg: 'DBEAFE', fg: '1E40AF' },
+  { name: 'green', label: 'Green', bg: 'D1FAE5', fg: '065F46' },
+  { name: 'yellow', label: 'Yellow', bg: 'FEF3C7', fg: '92400E' },
+  { name: 'rose', label: 'Rose', bg: 'FCE7F3', fg: '9D174D' },
+  { name: 'violet', label: 'Violet', bg: 'EDE9FE', fg: '5B21B6' },
 ];
 
 /**

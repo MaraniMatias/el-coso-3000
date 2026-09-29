@@ -65,12 +65,12 @@ what ends up in the file name and in the metadata of the image.
 
 | Swatch | Name | Background | Text |
 | --- | --- | --- | --- |
-| Gray | `gray` | `#F0EDEB` | `#5B544D` |
-| Blue | `blue` | `#E2E9F4` | `#2C5596` |
-| Green | `green` | `#DEEDE6` | `#1D6242` |
-| Yellow | `yellow` | `#F4EDD7` | `#69571F` |
-| Red | `red` | `#F4E4E1` | `#903A2A` |
-| Orange | `orange` | `#F5E6DB` | `#7C4A24` |
+| Gray | `gray` | `#E5E7EB` | `#374151` |
+| Blue | `blue` | `#DBEAFE` | `#1E40AF` |
+| Green | `green` | `#D1FAE5` | `#065F46` |
+| Yellow | `yellow` | `#FEF3C7` | `#92400E` |
+| Rose | `rose` | `#FCE7F3` | `#9D174D` |
+| Violet | `violet` | `#EDE9FE` | `#5B21B6` |
 
 ## Metadata inside the files
 
