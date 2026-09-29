@@ -12,7 +12,7 @@ export const APP_NAME = 'el-coso-3000';
  * URL del repo. Cambiala acá y se propaga a la metadata de los archivos
  * generados y al pie de la UI.
  */
-export const REPO_URL = 'https://github.com/elcoso3000/el-coso-3000';
+export const REPO_URL = 'https://github.com/MaraniMatias/el-coso-3000';
 
 /** Tipografía embebida. Montserrat SemiBold (ver `fonts/`). */
 export const FONT_FAMILY = 'Montserrat';

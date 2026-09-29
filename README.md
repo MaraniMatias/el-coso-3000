@@ -9,6 +9,9 @@ dist/index.html         ← esto es todo. Abrilo y usalo.
 dist/placeholder.html   ← el mismo archivo, con nombre de archivo suelto.
 ```
 
+[Abrir la demo online](https://maranimatias.github.io/el-coso-3000/). Se publica
+automáticamente desde `main`; WebMCP funciona en esa versión si el navegador lo soporta.
+
 ## Qué genera
 
 | Tipo | Formatos | Notas |
@@ -47,10 +50,15 @@ Si tocás el color de fondo a mano, el texto se recalcula solo. El campo es
 accidente. Hay un botón de "aleatorio" que elige entre combinaciones ya
 verificadas, nunca colores sueltos.
 
+La página entera toma el tono del color elegido: al cambiar de paleta, la
+interfaz se re-tiñe con ella, en claro y en oscuro. Arranca con una paleta al
+azar, así que cada visita abre con un color distinto.
+
 ### La paleta
 
-`rosa` · `coral` · `albaricoque` · `ámbar` · `lima` · `salvia` · `verde azulado` ·
-`cielo` · `azul` · `índigo` · `violeta` · `orquídea`
+`rosa` · `coral` · `albaricoque` · `ámbar` · `mostaza` · `lima` · `oliva` ·
+`salvia` · `menta` · `verde azulado` · `turquesa` · `cielo` · `azul` · `acero` ·
+`índigo` · `violeta` · `ciruela` · `orquídea` · `fucsia`
 
 ## Metadata dentro de los archivos
 
@@ -119,31 +127,15 @@ Para GIF, si el FPS real difiere del pedido va el real, no el teórico.
 
 ## Publicar en GitHub Pages
 
-`dist/` tiene dos archivos idénticos: `index.html` (la entrada que GitHub Pages
-sirve por defecto) y `placeholder.html` (el mismo contenido, con nombre de
-archivo para mandarlo o abrirlo local).
+`dist/` contiene `index.html` (la entrada del sitio) y `placeholder.html` (el
+mismo archivo, con nombre para compartir o abrir local). El workflow
+`.github/workflows/pages.yml` construye el HTML y publica `dist/` en GitHub Pages
+cada vez que hay un push a `main`. Para habilitarlo, en **Settings → Pages → Build
+and deployment → Source** elegí **GitHub Actions**. La demo queda en
+`https://maranimatias.github.io/el-coso-3000/`.
 
-**Opción 1 — rama `gh-pages` (recomendada).** Mantiene el HTML fuera de la rama
-principal:
-
-```bash
-bun run build
-cd dist
-git init -b gh-pages
-git add -A
-git commit -m "build: placeholder"
-git push -f https://github.com/<usuario>/<repo>.git gh-pages
-```
-
-Después en **Settings → Pages**, elegí *Deploy from a branch*, rama
-`gh-pages`, carpeta `/ (root)`. Tu URL queda en
-`https://<usuario>.github.io/<repo>/`.
-
-**Opción 2 — desde la rama principal.** Subí `dist/` al repo y en
-**Settings → Pages** elegí *Deploy from a branch*, rama `main`, carpeta `/dist`.
-
-Por eso `dist` **no** está en el `.gitignore` a propósito: GitHub Pages sirve
-el contenido de esa carpeta, así que tiene que estar versionada.
+Por eso `dist` **no** está en el `.gitignore`: contiene el HTML autocontenido que
+se puede abrir directamente y que el workflow publica.
 
 > Cuando se sirve por HTTP, la parte de WebMCP **sí se activa** si el navegador
 > cumple los requisitos, porque hay aislamiento de origen. Con doble click

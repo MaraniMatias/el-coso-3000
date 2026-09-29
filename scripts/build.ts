@@ -154,5 +154,4 @@ console.log(`\n✔ ${OUT}`);
 console.log(`✔ ${join(OUT_DIR, 'index.html')}   ← para GitHub Pages`);
 console.log(`  ${kb(outBytes)} cada uno, autocontenido.`);
 console.log('  Doble click en cualquiera de los dos. No necesita servidor ni conexión.');
-console.log('\n  GitHub Pages: subí el contenido de dist/ a la rama gh-pages, o');
-console.log('  publicá dist/ desde Settings → Pages. El repo tiene que versionar dist/.');
+console.log('\n  GitHub Pages publica dist/ automáticamente al hacer push a main.');
