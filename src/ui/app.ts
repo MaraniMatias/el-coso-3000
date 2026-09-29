@@ -33,6 +33,7 @@ const $ = <T extends HTMLElement = HTMLElement>(sel: string): T => {
 
 const form = $<HTMLFormElement>("#panel");
 const canvas = $<HTMLCanvasElement>("#canvas");
+const stageEl = $<HTMLElement>("#stage");
 // The context is resolved once and asserted non-null. Narrowing with `throw`
 // does not survive the closures, so it is resolved here.
 const ctx2d: CanvasRenderingContext2D = (() => {
@@ -189,6 +190,34 @@ function applyPageTheme(bg: string): void {
 }
 
 // ── Preview ───────────────────────────────────────────────────────────
+
+/**
+ * Keeps the canvas inside the stage, whatever the window does.
+ *
+ * A percentage cannot do this job. The canvas is a replaced element, so its
+ * height follows its width, and `max-height: 100%` would need the stage to have
+ * a definite height. It does not: the stage is a grid item stretched by a
+ * `1fr` track, and percentages do not resolve against that. Measured, it does
+ * not resolve either, and the canvas spills over the labels. So the app
+ * measures the box and hands the number to the stylesheet through `--fit`.
+ *
+ * It is called on resize and on every refresh, not from a ResizeObserver: the
+ * box is read and written in the same frame, which is what makes the observer
+ * report a loop.
+ */
+function fitCanvas(): void {
+  const cs = getComputedStyle(stageEl);
+  // `clientHeight` leaves out the border and rounds down, so the number handed
+  // over can never be bigger than the box the canvas has to live in.
+  const inner =
+    stageEl.clientHeight -
+    parseFloat(cs.paddingTop) -
+    parseFloat(cs.paddingBottom);
+  const px = `${Math.max(0, inner)}px`;
+  if (stageEl.style.getPropertyValue("--fit") !== px) {
+    stageEl.style.setProperty("--fit", px);
+  }
+}
 
 function stopPreviewAnimation(): void {
   if (previewAnimation) cancelAnimationFrame(previewAnimation);
@@ -356,6 +385,10 @@ function refreshDependentUi(): void {
     stopPreviewAnimation();
     renderPreview(0);
   }
+
+  // The labels under the stage just changed, and with them the height the
+  // canvas has to fit in.
+  fitCanvas();
 }
 
 // ── Generating ────────────────────────────────────────────────────────
@@ -610,6 +643,9 @@ function wireEvents(): void {
   $("#cancel").addEventListener("click", () => {
     abortController?.abort();
   });
+
+  // The window resizing is the other thing that moves the stage.
+  window.addEventListener("resize", fitCanvas);
 
   $("#swap").addEventListener("click", () => {
     const w = num("width", 300);

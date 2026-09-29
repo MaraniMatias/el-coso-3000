@@ -56,8 +56,17 @@
   display: none !important;
 }
 
+/* On a desktop the app is a shell that fills the window: the page itself does
+   not scroll, so the panel is always on screen. What scrolls are the controls
+   inside the panel. The phone layout at the bottom gives the page its scroll
+   back. */
 body {
   margin: 0;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--bg);
   color: var(--ink);
   font:
@@ -96,6 +105,7 @@ body {
 /* ── Encabezado ─────────────────────────────────────────────────── */
 
 .topbar {
+  flex: none;
   padding: 28px clamp(16px, 4vw, 40px) 8px;
 }
 .topbar h1 {
@@ -111,20 +121,19 @@ body {
 
 /* ── Distribución ───────────────────────────────────────────────── */
 
+/* The one row of the shell: it takes the height the header and the footer
+   leave, and `min-height: 0` is what lets the panel scroll instead of pushing
+   the page. */
 .layout {
   display: grid;
   grid-template-columns: minmax(300px, 380px) 1fr;
   gap: clamp(16px, 3vw, 32px);
-  align-items: start;
+  align-items: stretch;
   padding: 16px clamp(16px, 4vw, 40px) 40px;
   max-width: 1400px;
   margin: 0 auto;
-}
-
-@media (max-width: 860px) {
-  .layout {
-    grid-template-columns: 1fr;
-  }
+  flex: 1;
+  min-height: 0;
 }
 
 .panel {
@@ -133,10 +142,7 @@ body {
   border-radius: var(--radius);
   display: flex;
   flex-direction: column;
-  position: sticky;
-  top: 16px;
-  max-height: calc(100vh - 32px);
-  max-height: calc(100dvh - 32px);
+  min-height: 0;
   overflow: hidden;
 }
 .panel-body {
@@ -162,49 +168,31 @@ body {
   border-top: 1px solid var(--line);
 }
 
-/* On a phone the page scrolls, not the panel. The preview is pinned to the top
-   so every change is visible while the controls move under it, and the dock is
-   pinned to the bottom. Sticky needs a flex parent here: inside a grid, an item
-   cannot stick beyond its own grid area. */
+/* On a phone there is no shell: the document scrolls like any other page and
+   the blocks keep their reading order, the controls first and the preview
+   after them. Nothing floats, so the thumb does not fight a pinned element. */
 @media (max-width: 860px) {
+  body {
+    display: block;
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow: visible;
+  }
   .layout {
     display: flex;
     flex-direction: column;
     align-items: stretch;
   }
   .panel {
-    position: static;
-    max-height: none;
     overflow: visible;
   }
   .panel-body {
     overflow: visible;
   }
+  /* The panel no longer clips its dock, so the dock rounds its own corners. */
   .dock {
-    position: sticky;
-    bottom: 0;
-    z-index: 4;
     border-radius: 0 0 var(--radius) var(--radius);
-  }
-  .preview {
-    order: -1;
-    position: sticky;
-    top: 0;
-    z-index: 5;
-    gap: 6px;
-    padding: 8px 0;
-    background: var(--bg);
-  }
-  .stage {
-    min-height: 0;
-    padding: 12px;
-  }
-  #canvas {
-    max-height: 30vh;
-    max-height: 30dvh;
-  }
-  .meta-line {
-    display: none;
   }
 }
 
@@ -583,17 +571,24 @@ button.ghost:hover {
 
 /* ── Vista previa ───────────────────────────────────────────────── */
 
+/* The stage takes whatever height the two labels leave. The `minmax(0, 1fr)`
+   track is what lets it be shorter than the canvas it holds, so a short window
+   scales the canvas down instead of growing a page scrollbar. The column is
+   declared too: left implicit, the canvas would size the column and the stage
+   would grow and shrink with the preview instead of holding the window. */
 .preview {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto auto;
   gap: 10px;
-  align-items: center;
+  justify-items: center;
   min-width: 0;
+  min-height: 0;
 }
 
 .stage {
   width: 100%;
-  min-height: 240px;
+  min-height: 0;
   display: grid;
   place-items: center;
   padding: 20px;
@@ -605,7 +600,11 @@ button.ghost:hover {
 #canvas {
   max-width: 100%;
   max-height: 62vh;
-  max-height: 62dvh;
+  /* The height the stage really has comes from the app in `--fit`: a percentage
+     does not resolve against a grid item stretched by a `1fr` track, so
+     `max-height: 100%` here would be ignored. The viewport cap is the
+     fallback while `--fit` is not set yet. */
+  max-height: min(62dvh, var(--fit, 62dvh));
   display: block;
   box-shadow: 0 6px 24px rgb(0 0 0 / 0.12);
   border-radius: 2px;
@@ -628,7 +627,8 @@ button.ghost:hover {
 /* ── Pie ────────────────────────────────────────────────────────── */
 
 .footer {
-  padding: 20px clamp(16px, 4vw, 40px) 32px;
+  flex: none;
+  padding: 6px;
   border-top: 1px solid var(--line);
   color: var(--ink-soft);
   font-size: 13px;
@@ -644,6 +644,20 @@ button.ghost:hover {
 }
 .footer a {
   color: var(--accent);
+}
+
+/* A window with little height: the panel is what has to stay useful, so the
+   header gives up its padding and the footer keeps only the link. */
+@media (min-width: 861px) and (max-height: 700px) {
+  .topbar {
+    padding: 12px clamp(16px, 4vw, 40px) 4px;
+  }
+  .tagline {
+    display: none;
+  }
+  .footer {
+    padding: 8px clamp(16px, 4vw, 40px) 12px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
