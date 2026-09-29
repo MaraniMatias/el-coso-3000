@@ -146,12 +146,16 @@ body {
 
 /* The one row of the shell: it takes the height the header and the footer
    leave, and `min-height: 0` is what lets the panel scroll instead of pushing
-   the page. */
+   the page. The width is explicit because the auto margins that center it also
+   cancel the stretch a flex item gets, and without it the box falls back to
+   its content: swapping width and height changed the intrinsic width of the
+   canvas and the whole grid jumped with it. */
 .layout {
   display: grid;
   grid-template-columns: minmax(300px, 380px) 1fr;
   gap: clamp(16px, 3vw, 32px);
   align-items: stretch;
+  width: 100%;
   padding: 16px clamp(16px, 4vw, 40px) 40px;
   max-width: 1400px;
   margin: 0 auto;
@@ -651,7 +655,7 @@ button.ghost:hover {
 
 .footer {
   flex: none;
-  padding: 20px clamp(16px, 4vw, 40px) 32px;
+  padding: 6px;
   border-top: 1px solid var(--line);
   color: var(--ink-soft);
   font-size: 13px;
