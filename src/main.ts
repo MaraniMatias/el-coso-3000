@@ -1,7 +1,7 @@
 /**
- * Punto de entrada. Lo único que hay que hacer es importar la UI.
+ * Entry point. The only thing to do is import the UI.
  *
- * El bundler de Bun produce un IIFE y lo pega dentro del HTML, así que en el
- * navegador no hay módulos, ni imports, ni nada que resolver en runtime.
+ * Bun's bundler produces an IIFE and pastes it inside the HTML, so in the
+ * browser there are no modules, no imports, and nothing to resolve at runtime.
  */
 import './ui/app';

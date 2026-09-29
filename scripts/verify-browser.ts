@@ -1,17 +1,16 @@
 /**
- * Verificación en navegador real, vía Chrome DevTools Protocol.
+ * Verification in a real browser, through the Chrome DevTools Protocol.
  *
- * Corre: `bun run verify:browser`
+ * Runs: `bun run verify:browser`
  *
- * Esto existe porque los tests de Bun no tienen DOM ni canvas: verifican la
- * lógica de bytes con entradas sintéticas, pero no que el render y los
- * exportadores funcionen de verdad. Acá se abre el HTML construido en un
- * Chrome headless, se exercise la interfaz y se descargan archivos reales
- * para inspeccionarlos.
+ * This exists because Bun's tests have no DOM and no canvas: they verify the
+ * byte-level logic with synthetic inputs, but not that the render and the
+ * exporters really work. Here the built HTML is opened in headless Chrome, the
+ * interface is exercised and real files are downloaded to inspect them.
  *
- * Cubre: errores de consola, el render del canvas, el auto-ajuste en varias
- * dimensiones, y que cada exportador produzca un archivo con la firma y el
- * tamaño esperados.
+ * Covers: console errors, the canvas render, the auto-fit at several
+ * dimensions, and that every exporter produces a file with the expected
+ * signature and size.
  */
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,7 +28,7 @@ const check = (name: string, ok: boolean, detail = ''): void => {
     console.log(`  ok    ${name}${detail ? `  ${detail}` : ''}`);
   } else {
     failures++;
-    console.log(`  FALLA ${name}${detail ? `  ${detail}` : ''}`);
+    console.log(`  FAIL  ${name}${detail ? `  ${detail}` : ''}`);
   }
 };
 
@@ -38,12 +37,12 @@ async function waitFor<T>(fn: () => T | undefined, ms = 15000): Promise<T> {
   for (;;) {
     const v = fn();
     if (v !== undefined) return v;
-    if (Date.now() > deadline) throw new Error('timeout esperando en el navegador');
+    if (Date.now() > deadline) throw new Error('timeout waiting in the browser');
     await Bun.sleep(80);
   }
 }
 
-// ── Arranque de Chrome y del servidor ────────────────────────────────
+// ── Chrome and server start-up ─────────────────────────────────────────
 
 const downloads = await mkdtemp(join(tmpdir(), 'elcoso-dl-'));
 const server = Bun.serve({ port: 0, fetch: () => new Response(Bun.file(DIST)) });
@@ -60,7 +59,7 @@ const chrome = Bun.spawn(
 
 let ws: WebSocket | undefined;
 try {
-  // El endpoint de DevTools publica la lista de targets cuando está listo.
+  // The DevTools endpoint publishes the list of targets once it is ready.
   const listUrl = `http://localhost:${PORT}/json/list`;
   let wsUrl = '';
   for (let i = 0; i < 200 && !wsUrl; i++) {
@@ -69,20 +68,20 @@ try {
       const page = list.find((t) => t.type === 'page');
       if (page?.webSocketDebuggerUrl) wsUrl = page.webSocketDebuggerUrl;
     } catch {
-      /* todavía no levanta */
+      /* not up yet */
     }
     if (!wsUrl) await Bun.sleep(100);
   }
-  if (!wsUrl) throw new Error('Chrome no expuso el endpoint de DevTools');
+  if (!wsUrl) throw new Error('Chrome did not expose the DevTools endpoint');
 
   const socket = new WebSocket(wsUrl);
   ws = socket;
   await new Promise<void>((res, rej) => {
     socket.onopen = () => res();
-    socket.onerror = () => rej(new Error('no se pudo abrir el websocket de DevTools'));
+    socket.onerror = () => rej(new Error('could not open the DevTools websocket'));
   });
 
-  // ── Cliente CDP mínimo ────────────────────────────────────────────
+  // ── Minimal CDP client ─────────────────────────────────────────────
   let nextId = 1;
   const pending = new Map<number, (v: unknown) => void>();
   const consoleErrors: string[] = [];
@@ -133,17 +132,17 @@ try {
   await send('Runtime.enable');
   await send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: downloads });
 
-  // ── Carga ─────────────────────────────────────────────────────────
-  console.log(`\nabriendo ${origin} (${(await stat(DIST)).size} bytes)\n`);
+  // ── Load ───────────────────────────────────────────────────────────
+  console.log(`\nopening ${origin} (${(await stat(DIST)).size} bytes)\n`);
   await send('Page.navigate', { url: origin });
   await Bun.sleep(2500);
 
-  // ── Consola limpia ────────────────────────────────────────────────
-  console.log('consola:');
-  check('sin excepciones sin capturar', exceptions.length === 0, exceptions[0]?.slice(0, 160) ?? '');
-  check('sin errores de consola', consoleErrors.length === 0, consoleErrors[0]?.slice(0, 160) ?? '');
+  // ── Clean console ──────────────────────────────────────────────────
+  console.log('console:');
+  check('no uncaught exceptions', exceptions.length === 0, exceptions[0]?.slice(0, 160) ?? '');
+  check('no console errors', consoleErrors.length === 0, consoleErrors[0]?.slice(0, 160) ?? '');
 
-  // ── El render del canvas ──────────────────────────────────────────
+  // ── The canvas render ──────────────────────────────────────────────
   console.log('\nrender:');
   const render = await evaluate<{
     bg: [number, number, number]; fg: [number, number, number];
@@ -159,12 +158,12 @@ try {
     }
     return { bg: first, width: c.width, height: c.height, nonBg, total: px.length / 4 };
   })()`);
-  check('el canvas tiene el tamaño pedido', render.width === 1920 && render.height === 1080, `${render.width}x${render.height}`);
-  check('el fondo es el pastel de la paleta, no negro', render.bg[0] > 200 && render.bg[1] > 200, `rgb(${render.bg})`);
-  check('se dibuja el texto de las dimensiones', render.nonBg > 1000, `${render.nonBg} px distintos del fondo`);
+  check('the canvas has the requested size', render.width === 1920 && render.height === 1080, `${render.width}x${render.height}`);
+  check('the background is the pastel of the palette, not black', render.bg[0] > 200 && render.bg[1] > 200, `rgb(${render.bg})`);
+  check('the dimensions are drawn', render.nonBg > 1000, `${render.nonBg} px different from the background`);
 
-  // ── La página toma el tono de la paleta ────────────────────────────
-  console.log('\ntema de la página:');
+  // ── The page takes the hue of the palette ──────────────────────────
+  console.log('\npage theme:');
   const theme = await evaluate<Record<string, string>>(`(() => {
     const cs = getComputedStyle(document.documentElement);
     const read = () => ({
@@ -181,13 +180,13 @@ try {
     return { ...read(), before: JSON.stringify(before), count: String(swatches.length), name: last.dataset.name };
   })()`);
   const themeBefore = JSON.parse(theme.before ?? '{}') as Record<string, string>;
-  check('la grilla muestra toda la paleta', Number(theme.count) >= 12, `${theme.count} colores`);
-  check('al elegir otra paleta cambia el color del placeholder', theme.bg !== themeBefore.bg, `${themeBefore.bg} → ${theme.bg} (${theme.name})`);
-  check('la página se re-tiñe con la paleta', theme.tint !== themeBefore.tint && theme.body !== themeBefore.body, `tono ${themeBefore.tint} → ${theme.tint}°`);
-  check('el panel y el acento siguen a la paleta', theme.panel !== themeBefore.panel && theme.accent !== themeBefore.accent, theme.accent);
+  check('the grid shows the whole palette', Number(theme.count) >= 12, `${theme.count} colors`);
+  check('picking another palette changes the placeholder color', theme.bg !== themeBefore.bg, `${themeBefore.bg} → ${theme.bg} (${theme.name})`);
+  check('the page gets re-tinted with the palette', theme.tint !== themeBefore.tint && theme.body !== themeBefore.body, `hue ${themeBefore.tint} → ${theme.tint}°`);
+  check('the panel and the accent follow the palette', theme.panel !== themeBefore.panel && theme.accent !== themeBefore.accent, theme.accent);
 
-  // ── El auto-ajuste escala ──────────────────────────────────────────
-  console.log('\nauto-ajuste en el navegador real:');
+  // ── The auto-fit scales ────────────────────────────────────────────
+  console.log('\nauto-fit in the real browser:');
   const fit = await evaluate<Array<{ w: number; h: number; ink: number; ratio: number }>>(`(() => {
     const out = [];
     for (const [w, h] of [[1920,1080],[640,480],[128,128],[64,64],[32,32]]) {
@@ -207,97 +206,110 @@ try {
     return out;
   })()`);
   for (const f of fit) {
-    console.log(`  ${String(f.w+'x'+f.h).padEnd(11)} ${(f.ratio*100).toFixed(2)}% de la superficie con texto`);
+    console.log(`  ${String(f.w+'x'+f.h).padEnd(11)} ${(f.ratio*100).toFixed(2)}% of the surface with text`);
   }
-  check('el texto aparece en todas las dimensiones probadas', fit.every((f) => f.ink > 0));
-  // El texto crece en cantidad ABSOLUTA de píxeles con la imagen. La
-  // cobertura porcentual hace lo contrario (a 32x32 el padding es
-  // proporcionalmente enorme y el texto llena todo el cuadro), así que
-  // comparar proporciones daría una lectura equivocada.
+  check('text appears at every size tested', fit.every((f) => f.ink > 0));
+  // The text grows in ABSOLUTE pixels with the image. Percentage coverage does
+  // the opposite (at 32x32 the padding is proportionally huge and the text
+  // fills the whole box), so comparing proportions would give a wrong reading.
   check(
-    'más superficie, más texto en píxeles absolutos',
+    'more surface, more text in absolute pixels',
     (fit[0]?.ink ?? 0) > (fit[1]?.ink ?? 0) && (fit[1]?.ink ?? 0) > (fit[3]?.ink ?? 0),
     fit.map((f) => f.ink).join(' → '),
   );
-  // Y nunca puede desbordar el cuadro: un texto mal calculado se saldría.
-  check('el texto nunca desborda el lienzo', fit.every((f) => f.ratio < 0.6));
+  // And it can never overflow the box: a badly computed text would spill out.
+  check('the text never overflows the canvas', fit.every((f) => f.ratio < 0.6));
 
-  // ── Los controles del formulario realmente cambian el estado ─────
-  // Esto se rompió una vez: `form.elements.namedItem()` devuelve un
-  // RadioNodeList para un grupo de radios, y el type check lo descartaba en
-  // silencio. El formato se quedaba siempre en el default sin que nada
-  // fallara. Es el tipo de bug que sólo aparece mirando el archivo
-  // descargado.
-  console.log('\ncontroles del formulario:');
-  for (const format of ['svg', 'gif', 'webp', 'jpeg', 'png'] as const) {
+  // ── The form controls really change the state ──────────────────────
+  // This broke once: `form.elements.namedItem()` returns a RadioNodeList for a
+  // radio group, and the type check discarded it silently. The format stayed on
+  // the default and nothing failed. It is the kind of bug that only shows up
+  // when you look at the downloaded file.
+  console.log('\nform controls:');
+  for (const format of ['svg', 'webp', 'jpeg', 'png'] as const) {
     const got = await evaluate<string>(`(() => {
       document.querySelector('input[name="imageFormat"][value="${format}"]').click();
       return document.querySelector('input[name="imageFormat"]:checked').value;
     })()`);
-    check(`eligir ${format} queda seleccionado`, got === format, `quedó ${got}`);
+    check(`choosing ${format} stays selected`, got === format, `stuck on ${got}`);
   }
 
   const kind = await evaluate<string>(`(() => {
     document.querySelector('input[name="kind"][value="video"]').click();
     return document.querySelector('input[name="kind"]:checked').value;
   })()`);
-  check('cambiar a Video queda seleccionado', kind === 'video', `quedó ${kind}`);
+  check('switching to Video stays selected', kind === 'video', `stuck on ${kind}`);
 
   const afterKind = await evaluate<{ videoVisible: boolean; imageVisible: boolean }>(`(() => {
     const sec = (k) => document.querySelector('[data-kind="' + k + '"]');
     return { videoVisible: !sec('video').hidden, imageVisible: !sec('image').hidden };
   })()`);
-  check('al cambiar a Video se muestra su sección', afterKind.videoVisible && !afterKind.imageVisible,
-    `video ${afterKind.videoVisible ? 'visible' : 'oculto'}, imagen ${afterKind.imageVisible ? 'visible' : 'oculto'}`);
+  check('switching to Video shows its section', afterKind.videoVisible && !afterKind.imageVisible,
+    `video ${afterKind.videoVisible ? 'visible' : 'hidden'}, image ${afterKind.imageVisible ? 'visible' : 'hidden'}`);
 
-  // ── Los formatos animados tienen línea de tiempo propia ─────────
-  // El GIF es una imagen, pero se anima. Los controles de duración y FPS
-  // estaban dentro del tab de Video, así que al elegir GIF no había dónde
-  // animarlo y salía con un único frame. ffprobe lo detectó: pedía 10 fps y
-  // el archivo tenía 1 frame.
-  console.log('\nformatos animados:');
-  const animated = await evaluate<{ timelineVisible: boolean; nota: string; barra: boolean }>(`(() => {
+  // ── Every format with a timeline lives in the video tab ────────────
+  // The GIF, the AVI and the ZIP are images, but they animate. Their controls
+  // used to be inside the Video tab only, so choosing the GIF in the Image tab
+  // left nowhere to animate it and the file came out with a single frame.
+  // ffprobe caught it: it asked for 10 fps and the file had 1 frame.
+  console.log('\nformats with a timeline:');
+  const tabs = await evaluate<{ image: string[]; video: string[] }>(`(() => ({
+    image: [...document.querySelectorAll('input[name="imageFormat"]')].map((i) => i.value),
+    video: [...document.querySelectorAll('input[name="videoFormat"]')].map((i) => i.value),
+  }))()`);
+  check(
+    'the image tab only has the still formats',
+    !tabs.image.some((f) => ['gif', 'mjpeg-avi', 'jpeg-zip'].includes(f)),
+    tabs.image.join(', '),
+  );
+  check(
+    'the video tab has the animated ones',
+    ['gif', 'mjpeg-avi', 'jpeg-zip'].every((f) => tabs.video.includes(f)),
+    tabs.video.join(', '),
+  );
+
+  const animated = await evaluate<{ timelineVisible: boolean; note: string; bar: boolean; quality: boolean }>(`(() => {
     const pick = (n, v) => document.querySelector('input[name="' + n + '"][value="' + v + '"]').click();
     const set = (id, v) => { const e = document.querySelector(id); e.value = String(v); e.dispatchEvent(new Event('input', { bubbles: true })); };
-    // El bloque anterior dejó el form en modo video. Sin volver a Imagen, la
-    // nota del GIF no se muestra y todo lo de abajo genera video.
-    pick('kind', 'image');
-    pick('imageFormat', 'gif');
+    pick('kind', 'video');
+    pick('videoFormat', 'gif');
     set('#duration', '2');
     set('#fps', '12');
     return {
       timelineVisible: !document.querySelector('#timeline').hidden,
-      nota: document.querySelector('#fpsEffective').textContent || '',
-      notaVisible: !document.querySelector('#fpsEffective').hidden,
-      barra: !document.querySelector('input[name="showProgressBar"]').disabled,
+      note: document.querySelector('#fpsEffective').textContent || '',
+      noteVisible: !document.querySelector('#fpsEffective').hidden,
+      bar: !document.querySelector('input[name="showProgressBar"]').disabled,
+      quality: !document.querySelector('.quality').hidden,
     };
   })()`);
-  check('elegir GIF muestra los controles de línea de tiempo', animated.timelineVisible);
-  check('avisa el FPS efectivo del GIF', animated.nota.includes('12.5'), animated.nota);
-  check('la barra de progreso queda habilitada', animated.barra);
+  check('choosing the GIF shows the timeline controls', animated.timelineVisible);
+  check('it reports the effective GIF FPS', animated.note.includes('12.5'), animated.note);
+  check('the progress bar is enabled', animated.bar);
+  check('the quality slider follows the format', animated.quality);
 
-  // Y que el archivo salga con los frames de verdad, no con uno.
+  // And that the file comes out with the real frames, not with one.
   await exportAndCheck(
-    'GIF animado con los frames pedidos, no uno solo',
-    `document.querySelector('input[name="kind"][value="image"]').click();
-     document.querySelector('input[name="imageFormat"][value="gif"]').click();
+    'animated GIF with the requested frames, not a single one',
+    `document.querySelector('input[name="kind"][value="video"]').click();
+     document.querySelector('input[name="videoFormat"][value="gif"]').click();
      document.querySelector('#duration').value = '2';
      document.querySelector('#fps').value = '12';
      document.querySelector('#duration').dispatchEvent(new Event('input', { bubbles: true }));
      document.querySelector('#fps').dispatchEvent(new Event('input', { bubbles: true }));`,
     (b) => {
-      // Cuenta los Graphic Control Extensions: uno por frame. 2s a 12fps son
-      // 24 frames; con uno solo el GIF no se animaría.
+      // Counts the Graphic Control Extensions: one per frame. 2s at 12fps is
+      // 24 frames; with a single one the GIF would not animate.
       let frames = 0;
       for (let i = 0; i < b.length - 1; i++) if (b[i] === 0x21 && b[i + 1] === 0xf9) frames++;
       return frames >= 20;
     },
   );
 
-  // ── Exportadores reales ───────────────────────────────────────────
-  console.log('\nexportadores (archivos descargados de verdad):');
-  // Cada exportación arranca desde un estado conocido, o el formato anterior
-  // se arrastra y las verificaciones mienten.
+  // ── Real exporters ─────────────────────────────────────────────────
+  console.log('\nexporters (really downloaded files):');
+  // Every export starts from a known state, or the previous format carries
+  // over and the checks lie.
   await evaluate(`(() => {
     document.querySelector('input[name="kind"][value="image"]').click();
     document.querySelector('input[name="imageFormat"][value="png"]').click();
@@ -314,12 +326,12 @@ try {
     await evaluate(`(() => { ${setup} })()`);
     await evaluate(`document.querySelector('#generate').click()`);
 
-    // Se espera a que aparezca un archivo nuevo y que su tamaño se estabilice
-    // (Chrome escribe en streaming, así que hay que darle tiempo).
+    // It waits for a new file to appear and for its size to settle (Chrome
+    // writes in streaming, so it needs time).
     //
-    // En paralelo se mira el mensaje de la UI: si el exportador tira un error,
-    // aparece ahí y no hay ningún archivo que esperar. Sin esto, un fallo
-    // spendía el timeout entero en silencio.
+    // In parallel it looks at the message of the UI: if the exporter throws,
+    // it shows up there and there is no file to wait for. Without this, a
+    // failure spent the whole timeout in silence.
     let name: string | undefined;
     let uiError = '';
     const started = Date.now();
@@ -335,7 +347,7 @@ try {
             if ((await stat(p)).size === first) name = candidate;
           }
         } catch {
-          // Desapareció entre readdir y stat: es normal, se reintenta.
+          // It vanished between readdir and stat: normal, it retries.
         }
       }
       if (!name) {
@@ -351,7 +363,7 @@ try {
     }
 
     if (!name) {
-      check(label, false, uiError ? `la UI reportó: ${uiError}` : 'no se descargó ningún archivo');
+      check(label, false, uiError ? `the UI reported: ${uiError}` : 'no file was downloaded');
       return;
     }
     const bytes = new Uint8Array(await readFile(join(downloads, name)));
@@ -364,54 +376,59 @@ try {
     w.dispatchEvent(new Event('input',{bubbles:true}));`;
 
   await exportAndCheck(
-    'PNG con firma y tEXt de metadata',
+    'PNG with signature and tEXt metadata',
     `${setDims(320, 240)} document.querySelector('input[name="imageFormat"][value="png"]').click();`,
-    (b) => b[0] === 0x89 && b[1] === 0x50 && new TextDecoder('latin1').decode(b).includes('el-coso-3000'),
+    (b) => b[0] === 0x89 && b[1] === 0x50 && new TextDecoder('latin1').decode(b).includes('El Coso 3000'),
   );
 
   await exportAndCheck(
-    'SVG con la fuente embebida y metadata',
+    'SVG with the embedded font and metadata',
     `document.querySelector('input[name="imageFormat"][value="svg"]').click();`,
     (b) => {
       const s = new TextDecoder().decode(b);
-      return s.includes('<svg') && s.includes('el-coso-3000') && s.includes('font/woff2');
+      return s.includes('<svg') && s.includes('El Coso 3000') && s.includes('font/woff2');
     },
   );
 
   await exportAndCheck(
-    'GIF89a con paleta global y loop infinito',
-    `document.querySelector('input[name="imageFormat"][value="gif"]').click();`,
-    (b) => new TextDecoder('latin1').decode(b.slice(0, 6)) === 'GIF89a' && new TextDecoder('latin1').decode(b).includes('NETSCAPP'),
-  );
-
-  await exportAndCheck(
-    'JPEG con el comentario inyectado',
+    'JPEG with the injected comment',
     `document.querySelector('input[name="imageFormat"][value="jpeg"]').click();`,
-    (b) => b[0] === 0xff && b[1] === 0xd8 && new TextDecoder('latin1').decode(b).includes('el-coso-3000'),
+    (b) => b[0] === 0xff && b[1] === 0xd8 && new TextDecoder('latin1').decode(b).includes('El Coso 3000'),
   );
 
   await exportAndCheck(
-    'WebP con chunk XMP',
+    'WebP with an XMP chunk',
     `document.querySelector('input[name="imageFormat"][value="webp"]').click();`,
     (b) => new TextDecoder('latin1').decode(b.slice(0, 4)) === 'RIFF' && new TextDecoder('latin1').decode(b.slice(8, 12)) === 'WEBP',
   );
 
+  const pickTimeline = (f: string) => `
+    document.querySelector('input[name="kind"][value="video"]').click();
+    document.querySelector('input[name="videoFormat"][value="${f}"]').click();
+    const set = (id, v) => { const e = document.querySelector(id); e.value = String(v); e.dispatchEvent(new Event('input', { bubbles: true })); };
+    set('#duration', 1); set('#fps', 4);`;
+
   await exportAndCheck(
-    'ZIP con el comentario de metadata',
-    `document.querySelector('input[name="imageFormat"][value="jpeg-zip"]').click();`,
+    'GIF89a with a global palette and an infinite loop',
+    `${setDims(320, 240)}${pickTimeline('gif')}`,
+    (b) => new TextDecoder('latin1').decode(b.slice(0, 6)) === 'GIF89a' && new TextDecoder('latin1').decode(b).includes('NETSCAPP'),
+  );
+
+  await exportAndCheck(
+    'ZIP with the metadata comment',
+    `${setDims(320, 240)}${pickTimeline('jpeg-zip')}`,
     (b) => b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04,
   );
 
-  // El video depende de WebCodecs, así que sólo se exige si el navegador lo tiene.
+  // Video depends on WebCodecs, so it is only required when the browser has it.
   const hasWebCodecs = await evaluate<boolean>('"VideoEncoder" in window');
-  console.log(`\nWebCodecs en este navegador: ${hasWebCodecs ? 'sí' : 'no'}`);
+  console.log(`\nWebCodecs in this browser: ${hasWebCodecs ? 'yes' : 'no'}`);
   if (hasWebCodecs) {
     await exportAndCheck(
-      'MP4 con caja ftyp y metadatos',
-      `document.querySelector('input[name="kind"][value="video"]').click();
+      'MP4 with an ftyp box and metadata',
+      `${setDims(320, 240)} document.querySelector('input[name="kind"][value="video"]').click();
        document.querySelector('input[name="videoFormat"][value="mp4"]').click();
        const set = (id, v) => { const e = document.querySelector(id); e.value = String(v); e.dispatchEvent(new Event('input', { bubbles: true })); };
-       set('#width', 320); set('#height', 240);
        set('#fps', 4); set('#duration', 1);`,
       (b) => {
         const s = new TextDecoder('latin1').decode(b.slice(0, 64));
@@ -419,14 +436,14 @@ try {
       },
     );
   } else {
-    console.log('  (se omite el video: este navegador no tiene WebCodecs)');
+    console.log('  (video is skipped: this browser has no WebCodecs)');
   }
 
-  // ── WebMCP: API declarativa ───────────────────────────────────────
-  // Son atributos HTML, así que existen siempre. Lo que cambia es si el
-  // navegador los usa para exponer la herramienta: eso exige aislamiento de
-  // origen, y `file://` no lo tiene. Los atributos igual tienen que estar
-  // completos, porque el archivo puede servirse por HTTP después.
+  // ── WebMCP: declarative API ────────────────────────────────────────
+  // These are HTML attributes, so they are always there. What changes is
+  // whether the browser uses them to expose the tool: that needs origin
+  // isolation, and `file://` does not have it. The attributes still have to
+  // be complete, because the file may be served over HTTP later.
   console.log('\nwebmcp:');
   const webmcp = await evaluate<{
     present: boolean;
@@ -440,7 +457,7 @@ try {
   }>(`(() => {
     const f = document.querySelector('#panel');
     const campos = [...f.querySelectorAll('input, select, textarea')];
-    const nombre = (c) => c.name || c.id || '(sin name)';
+    const nombre = (c) => c.name || c.id || '(no name)';
     return {
       present: 'modelContext' in document,
       formTool: f.getAttribute('toolname'),
@@ -453,30 +470,31 @@ try {
     };
   })()`);
 
-  check('el formulario declara toolname', webmcp.formTool === 'generate_placeholder', webmcp.formTool ?? 'falta');
-  check('el formulario declara tooldescription', !!webmcp.formDesc && webmcp.formDesc.length > 40);
-  // Cada campo necesita ambos: sin description el agente no sabe qué es, y
-  // sin title tiene que parsear el texto largo para sacar el nombre.
+  check('the form declares toolname', webmcp.formTool === 'generate_placeholder', webmcp.formTool ?? 'missing');
+  check('the form declares tooldescription', !!webmcp.formDesc && webmcp.formDesc.length > 40);
+  // Every field needs both: without the description the agent does not know
+  // what it is, and without the title it has to parse the long text to get
+  // the name.
   check(
-    'todos los campos tienen toolparamdescription',
+    'every field has a toolparamdescription',
     webmcp.sinDesc.length === 0,
-    `${webmcp.conDesc}/${webmcp.total}${webmcp.sinDesc.length ? ` — faltan: ${webmcp.sinDesc.join(', ')}` : ''}`,
+    `${webmcp.conDesc}/${webmcp.total}${webmcp.sinDesc.length ? ` — missing: ${webmcp.sinDesc.join(', ')}` : ''}`,
   );
   check(
-    'todos los campos tienen toolparamtitle',
+    'every field has a toolparamtitle',
     webmcp.sinTitle.length === 0,
-    `${webmcp.conTitle}/${webmcp.total}${webmcp.sinTitle.length ? ` — faltan: ${webmcp.sinTitle.join(', ')}` : ''}`,
+    `${webmcp.conTitle}/${webmcp.total}${webmcp.sinTitle.length ? ` — missing: ${webmcp.sinTitle.join(', ')}` : ''}`,
   );
   check(
-    'sin romper si el navegador no soporta WebMCP',
+    'no break when the browser does not support WebMCP',
     true,
-    webmcp.present ? 'registrado' : 'degradó en silencio (los atributos siguen en el HTML)',
+    webmcp.present ? 'registered' : 'degraded silently (the attributes are still in the HTML)',
   );
 } finally {
-  try { ws?.close(); } catch { /* ya estaba cerrado */ }
+  try { ws?.close(); } catch { /* already closed */ }
   chrome.kill();
   server.stop(true);
 }
 
-console.log(failures === 0 ? '\n✔ navegador OK' : `\n✘ ${failures} fallo(s)`);
+console.log(failures === 0 ? '\n✔ browser OK' : `\n✘ ${failures} failure(s)`);
 process.exit(failures === 0 ? 0 : 1);

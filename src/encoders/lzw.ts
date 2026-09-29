@@ -1,34 +1,33 @@
 /**
- * Compresión LZW tal y como la exige el bloque de datos de imagen del GIF.
+ * LZW compression as required by the GIF image data block.
  *
- * Es la variante "de cadena" del algoritmo: no comprime bytes sino índices de
- * paleta, y el diccionario de subcadenas se reconstruye en el decodificador a
- * partir de los mismos códigos que ve, así que nunca viaja en el archivo. Por
- * eso el codificador y el decodificador tienen que crecer el ancho de código
- * exactamente en el mismo instante; desfasarse un código y el archivo entero
- * queda ilegible.
+ * This is the algorithm's "string" variant: it compresses palette indices, not
+ * bytes, and the decoder rebuilds the substring dictionary from the same codes
+ * it sees, so the dictionary is never stored in the file. The encoder and
+ * decoder must therefore increase the code width at exactly the same moment;
+ * one code of drift makes the entire file unreadable.
  */
 
 /**
- * Bytes recién asignados. El genérico importa: `Blob` sólo acepta vistas sobre
- * un `ArrayBuffer` real, y un `Uint8Array` pelado se tipa como potencialmente
- * compartido.
+ * Newly allocated bytes. The generic matters: `Blob` only accepts views over
+ * a real `ArrayBuffer`, while a bare `Uint8Array` is typed as potentially
+ * shared.
  */
 export type Bytes = Uint8Array<ArrayBuffer>;
 
-/** La spec topa el diccionario en 12 bits (4096 entradas). */
+/** The spec caps the dictionary at 12 bits (4096 entries). */
 const MAX_CODES = 1 << 12;
-/** Los datos de imagen del GIF viajan en trozos de a lo sumo 255 bytes. */
+/** GIF image data is sent in blocks of at most 255 bytes. */
 const MAX_SUB_BLOCK = 255;
 
 /**
- * Buffer de bytes que crece de a poco.
+ * A byte buffer that grows incrementally.
  *
- * El tamaño comprimido de un frame no se conoce de antemano: depende del
- * contenido y del propio nivel de compresión, así que pedir un máximo "por si
- * acaso" desperdicia memoria (un frame de 1080p son 2 MB de índices) y pedirlo
- * chico obliga a calcular el peor caso. Crecer al doble cuando se llena es lo
- * único que nunca desborda.
+ * A frame's compressed size is unknown in advance: it depends on the content
+ * and compression level, so requesting a maximum "just in case" wastes memory
+ * (a 1080p frame has 2 MB of indices), while requesting too little requires
+ * calculating the worst case. Doubling the buffer when full is the only option
+ * that never overflows.
  */
 export class ByteWriter {
   private buf: Uint8Array<ArrayBuffer>;
@@ -55,22 +54,21 @@ export class ByteWriter {
     for (let i = 0; i < bytes.length; i++) this.push(bytes[i]!);
   }
 
-  /** Recorta al largo real. El `slice` devuelve un `ArrayBuffer` propio. */
+  /** Trims to the actual length. `slice` returns its own `ArrayBuffer`. */
   finish(): Bytes {
     return this.buf.slice(0, this.len);
   }
 }
 
-/** Escribe un entero de 16 bits en little-endian, como manda el GIF. */
+/** Writes a 16-bit integer in little-endian, as required by GIF. */
 export function pushUint16(out: ByteWriter, value: number): void {
   out.push(value & 0xff);
   out.push((value >>> 8) & 0xff);
 }
 
 /**
- * Los payloads largos del GIF (datos LZW, comentarios) van en sub-bloques de
- * hasta 255 bytes, cada uno precedido por su largo, y la cadena termina con un
- * sub-bloque de largo 0.
+ * Long GIF payloads (LZW data, comments) use sub-blocks of up to 255 bytes,
+ * each preceded by its length, and the chain ends with a sub-block of length 0.
  */
 export function writeSubBlocks(out: ByteWriter, data: Uint8Array): void {
   for (let at = 0; at < data.length; at += MAX_SUB_BLOCK) {
@@ -82,31 +80,31 @@ export function writeSubBlocks(out: ByteWriter, data: Uint8Array): void {
 }
 
 /**
- * Comprime índices de paleta con LZW de GIF.
+ * Compresses palette indices with GIF LZW.
  *
- * @param indices Un byte por píxel, todos menores a `1 << minCodeSize`.
- * @param minCodeSize Bits por índice en la entrada. La spec exige 2..8.
- * @returns La cadena de sub-bloques lista para escribir: el límite de 255 bytes
- *   por bloque forma parte de la codificación, no del armador del archivo.
+ * @param indices One byte per pixel, all less than `1 << minCodeSize`.
+ * @param minCodeSize Bits per input index. The spec requires 2..8.
+ * @returns The sub-block chain ready to write: the 255-byte limit per block
+ *   is part of the encoding, not the file assembler.
  */
 export function lzwCompress(indices: Uint8Array, minCodeSize: number): Bytes {
   if (!Number.isInteger(minCodeSize) || minCodeSize < 2 || minCodeSize > 8) {
-    throw new RangeError(`minCodeSize fuera de rango: ${minCodeSize} (se admiten 2..8)`);
+    throw new RangeError(`minCodeSize out of range: ${minCodeSize} (expected 2..8)`);
   }
 
   const out = new ByteWriter(Math.max(1024, indices.length >> 1));
   const block = new Uint8Array(MAX_SUB_BLOCK);
   let blockLen = 0;
 
-  // El primer código debe ser un clear: si el archivo arranca con un código de
-  // datos, el decodificador no tiene diccionario y no puede hacer nada.
+  // The first code must be a clear: if the file starts with a data code, the
+  // decoder has no dictionary and cannot do anything.
   const clearCode = 1 << minCodeSize;
   const eoiCode = clearCode + 1;
   let nextCode = eoiCode + 1;
   let codeSize = minCodeSize + 1;
 
-  // Los bits salen LSB-first: el bit 0 del código va al bit 0 del byte. Los que
-  // no cierran un byte quedan en `acc` y se completan con el código siguiente.
+  // Bits are written LSB-first: bit 0 of the code goes to bit 0 of the byte.
+  // Bits that do not fill a byte stay in `acc` and are completed by the next code.
   let acc = 0;
   let accBits = 0;
 
@@ -128,18 +126,18 @@ export function lzwCompress(indices: Uint8Array, minCodeSize: number): Bytes {
     }
   };
 
-  // El diccionario se indexa por la clave entera `prefijo << 8 | byte`, que
-  // abarca hasta 4095*256+255 = 1.048.576 casillas. Un `Int32Array` de
-  // 4096 (el tope de códigos) dejaría fuera de rango casi todo y, como en un
-  // typed array la escritura fuera de rango se descarta EN SILENCIO, el
-  // diccionario parecería lleno y no comprimiría nada. Por eso va en un Map:
-  // la clave es un entero directo, sin hashing ni objetos, y no tiene tope.
+  // The dictionary uses the integer key `prefix << 8 | byte`, which spans up
+  // to 4095*256+255 = 1,048,576 slots. An `Int32Array` of 4096 (the code limit)
+  // would leave almost everything out of range; since typed arrays silently
+  // discard out-of-range writes, the dictionary would appear full and compress
+  // nothing. Use a Map instead: the key is a direct integer, with no hashing or
+  // objects, and there is no fixed size limit.
   const dict = new Map<number, number>();
 
   emit(clearCode);
   if (indices.length > 0) {
-    // `prefix` es siempre el código de la cadena acumulada hasta acá; se busca
-    // su extensión con el byte siguiente y, si existe, se sigue agregando.
+    // `prefix` is always the code for the string accumulated so far; look up
+    // its extension with the next byte and keep adding if it exists.
     let prefix = indices[0]!;
     for (let i = 1; i < indices.length; i++) {
       const next = indices[i]!;
@@ -154,35 +152,35 @@ export function lzwCompress(indices: Uint8Array, minCodeSize: number): Bytes {
 
       if (nextCode < MAX_CODES) {
         dict.set(key, nextCode++);
-        // ── Momento exacto en que hay que AGRANDAR el ancho ────────────────
+        // ── Exact point at which to INCREASE the width ─────────────────────
         //
-        // Es `nextCode === (1 << codeSize) + 1`: la entrada 2^codeSize + 1, es
-        // decir UN CÓDIGO más tarde que lo que haría falta para que la tabla
-        // propia del encoder quepa en el ancho actual.
+        // It is `nextCode === (1 << codeSize) + 1`: entry 2^codeSize + 1, one
+        // code later than the encoder's own table needs to fit in the current
+        // width.
         //
-        // El motivo es que el decodificador va una entrada POR DETRÁS. No
-        // puede crear la cadena `prefijo + byte` hasta ver el código siguiente,
-        // así que incorpora esa entrada recién DESPUÉS de haber leído el código
-        // que el encoder acababa de emitir: cuando el encoder asigna la entrada
-        // N, el decoder asigna la N-1. El decoder agranda su ancho cuando su
-        // tabla alcanza 2^codeSize, o sea un código después que el encoder.
+        // The decoder is one entry BEHIND. It cannot create the string
+        // `prefix + byte` until it sees the next code, so it adds that entry
+        // only AFTER reading the code the encoder just emitted: when the
+        // encoder assigns entry N, the decoder assigns N-1. The decoder
+        // increases its width when its table reaches 2^codeSize, one code after
+        // the encoder.
         //
-        // Si acá se agrandara en `nextCode === 1 << codeSize` (que es lo que
-        // hace la propia tabla del encoder) el encoder se adelantaría un
-        // código: escribiría un código con el ancho nuevo que el decoder todavía
-        // no conoce, el decoder leería ese código con el ancho viejo y a partir
-        // de ahí TODOS los códigos quedarían desfasados un bit. El síntoma es
-        // silencioso —el archivo se abre y parece casi correcto— y por eso la
-        // regla va escrita así y no "como parece que debería".
+        // If the width increased here at `nextCode === 1 << codeSize` (as the
+        // encoder's own table would), the encoder would get one code ahead: it
+        // would write a code at the new width before the decoder knows it, so
+        // the decoder would read that code at the old width and every code
+        // after it would be offset by one bit. The symptom is silent—the file
+        // opens and looks almost correct—so the rule is written this way, not
+        // "the way it seems it should work."
         //
-        // Referencia: es exactamente lo que hace el compresor de ffmpeg
-        // (`libavcodec/lzwenc.c`), que sí se lee con cualquier decodificador de
-        // GIF del mundo, y lo que su decodificador exige al leer
+        // Reference: this is exactly what the ffmpeg compressor does
+        // (`libavcodec/lzwenc.c`), which is read by every GIF decoder, and what
+        // its decoder requires when reading
         // (`libavcodec/lzw.c`: `if (slot >= top_slot) cursize++`).
         if (nextCode === (1 << codeSize) + 1 && codeSize < 12) codeSize++;
       } else {
-        // Diccionario lleno: sin un clear, el código 4096 no entraría en 12
-        // bits y el archivo deja de ser decodificable.
+        // Full dictionary: without a clear, code 4096 would not fit in 12 bits
+        // and the file would no longer be decodable.
         emit(clearCode);
         dict.clear();
         nextCode = eoiCode + 1;
@@ -198,7 +196,7 @@ export function lzwCompress(indices: Uint8Array, minCodeSize: number): Bytes {
     block[blockLen++] = acc & 0xff;
   }
   flushBlock();
-  out.push(0x00); // fin de la cadena de sub-bloques
+  out.push(0x00); // end of the sub-block chain
 
   return out.finish();
 }

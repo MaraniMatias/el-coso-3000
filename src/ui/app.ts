@@ -7,22 +7,22 @@ import { exportGif } from '../encoders/gif';
 import { exportImage, type StillImageFormat } from '../encoders/image';
 import { exportJpegZip, exportMjpegAvi } from '../encoders/mjpeg';
 import { availableVideoFormats, exportVideo } from '../encoders/video';
-import type { ImageFormat, PaletteEntry, ProgressInfo, Spec, VideoFormat } from '../core/types';
+import type { ImageFormat, PaletteEntry, ProgressInfo, Spec, TimelineFormat, VideoFormat } from '../core/types';
 import { setupWebMcp, webmcpStatusText } from './webmcp';
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string): T => {
   const el = document.querySelector<T>(sel);
-  if (!el) throw new Error(`falta el elemento ${sel}`);
+  if (!el) throw new Error(`missing element ${sel}`);
   return el;
 };
 
 const form = $<HTMLFormElement>('#panel');
 const canvas = $<HTMLCanvasElement>('#canvas');
-// El contexto se resuelve una vez y se asegura no nulo. Narrowing con `throw`
-// no sobrevive a los closures, así que se resuelve acá adentro.
+// The context is resolved once and asserted non-null. Narrowing with `throw`
+// does not survive the closures, so it is resolved here.
 const ctx2d: CanvasRenderingContext2D = (() => {
   const c = canvas.getContext('2d', { alpha: false });
-  if (!c) throw new Error('el navegador no soporta canvas 2D');
+  if (!c) throw new Error('the browser does not support canvas 2D');
   return c;
 })();
 
@@ -30,12 +30,18 @@ let selectedPalette: PaletteEntry | null = null;
 let abortController: AbortController | null = null;
 let previewAnimation = 0;
 
-/** Imágenes que se pueden pedir en un click, sin pasar por un submenú. */
+/** Image formats that carry a timeline of their own, now offered in the video tab. */
 const ANIMATED_IMAGE_FORMATS: ReadonlySet<ImageFormat> = new Set<ImageFormat>(['gif', 'mjpeg-avi', 'jpeg-zip']);
-/** Formatos que aceptan el slider de calidad. */
-const LOSSY: ReadonlySet<ImageFormat> = new Set<ImageFormat>(['jpeg', 'webp', 'gif', 'mjpeg-avi', 'jpeg-zip']);
+/** Formats that accept the quality slider. */
+const LOSSY: ReadonlySet<ImageFormat | VideoFormat> = new Set<ImageFormat | VideoFormat>([
+  'jpeg',
+  'webp',
+  'gif',
+  'mjpeg-avi',
+  'jpeg-zip',
+]);
 
-// ── Lectura del formulario ────────────────────────────────────────────
+// ── Reading the form ───────────────────────────────────────────────────
 
 function num(name: string, fallback: number): number {
   const el = form.elements.namedItem(name);
@@ -51,12 +57,13 @@ function num(name: string, fallback: number): number {
 }
 
 /**
- * Lee un campo de texto o el valor seleccionado de un grupo de radios.
+ * Reads a text field or the selected value of a radio group.
  *
- * Ojo con esto: para un grupo de radios, `form.elements.namedItem` NO devuelve
- * un input, devuelve un `RadioNodeList`. Un `instanceof HTMLInputElement` da
- * false y el valor se pierde en silencio, con lo que el form parece no cambiar
- * nunca. El `.value` del `RadioNodeList` sí es el del radio marcado.
+ * Watch out for this one: for a radio group, `form.elements.namedItem` does
+ * NOT return an input, it returns a `RadioNodeList`. An
+ * `instanceof HTMLInputElement` check returns false and the value is lost
+ * silently, so the form looks like it never changes. The `.value` of the
+ * `RadioNodeList` is the one of the checked radio.
  */
 function str(name: string, fallback: string): string {
   const el = form.elements.namedItem(name);
@@ -70,18 +77,22 @@ function checked(name: string): boolean {
   return el instanceof HTMLInputElement && el.checked;
 }
 
-
 function currentKind(): 'image' | 'video' {
   return str('kind', 'image') === 'video' ? 'video' : 'image';
 }
 
+/** The format the current tab is going to produce. */
+function currentFormat(): ImageFormat | TimelineFormat {
+  return currentKind() === 'video'
+    ? (str('videoFormat', 'mp4') as TimelineFormat)
+    : (str('imageFormat', 'png') as ImageFormat);
+}
+
 function readSpec(): Spec {
   const quality = num('quality', 90) / 100;
-  const isVideo = currentKind() === 'video';
-  // GIF, AVI y ZIP son imágenes pero tienen línea de tiempo. Si se les
-  // forzara `duration: 0` saldrían con un único frame, que no es un GIF
-  // animado sino una imagen con extensión de GIF.
-  const timed = isVideo || ANIMATED_IMAGE_FORMATS.has(str('imageFormat', 'png') as ImageFormat);
+  // Only the video tab has a timeline now, so that is the only thing that
+  // decides whether the output has more than one frame.
+  const timed = currentKind() === 'video';
   return {
     width: Math.max(1, num('width', 300)),
     height: Math.max(1, num('height', 200)),
@@ -90,20 +101,20 @@ function readSpec(): Spec {
     paletteName: selectedPalette?.name ?? 'custom',
     duration: timed ? num('duration', 5) : 0,
     fps: num('fps', 15),
-    // La barra y el reloj sólo tienen sentido con una línea de tiempo real.
+    // The bar and the clock only make sense with a real timeline.
     showProgressBar: timed && checked('showProgressBar'),
     showTime: timed && checked('showTime'),
     quality,
   };
 }
 
-/** FPS que un GIF realmente va a tener, dado que el delay va en centésimas. */
+/** The FPS a GIF will really have, given that the delay goes in hundredths. */
 export function effectiveGifFps(fps: number): number {
   const delayCs = Math.max(1, Math.round(100 / fps));
   return 100 / delayCs;
 }
 
-// ── Contraste ────────────────────────────────────────────────────────
+// ── Contrast ──────────────────────────────────────────────────────────
 
 function refreshContrast(): void {
   const spec = readSpec();
@@ -113,10 +124,10 @@ function refreshContrast(): void {
   level.textContent = result.level;
   level.dataset.level = result.level;
   $('#levelNote').textContent = {
-    AAA: 'supera el máximo de WCAG',
-    AA: 'cumple WCAG AA',
-    'AA-large': 'sólo apto para texto grande',
-    fail: 'insuficiente',
+    AAA: 'beats the WCAG maximum',
+    AA: 'meets WCAG AA',
+    'AA-large': 'only fits large text',
+    fail: 'not enough',
   }[result.level];
 }
 
@@ -124,8 +135,9 @@ function applyColors(bg: string, entry: PaletteEntry | null): void {
   const clean = normalizeHex(bg);
   const fg = deriveForeground(clean);
   ($<HTMLInputElement>('#bg')).value = `#${clean}`;
-  // El texto nunca se elige a mano: sale del fondo. Esa es toda la garantía
-  // de legibilidad de la app, y por eso el input es readonly.
+  // The text is never picked by hand: it comes from the background. That is
+  // the whole legibility guarantee of the app, which is why the input is
+  // readonly.
   ($<HTMLInputElement>('#fg')).value = `#${fg}`;
   applyPageTheme(clean);
   selectedPalette = entry;
@@ -137,12 +149,12 @@ function applyColors(bg: string, entry: PaletteEntry | null): void {
 }
 
 /**
- * Vuelca el color elegido en el tema de la página, para que la interfaz tome
- * su tono.
+ * Dumps the chosen color into the page theme, so the interface takes its hue.
  *
- * Se pasan sólo tono y saturación: la luminosidad de cada superficie la fija
- * el CSS según el esquema activo. Así la página se tiñe completa sin que la
- * legibilidad de la interfaz dependa del color que se haya elegido.
+ * Only the hue and the saturation are passed: the lightness of each surface is
+ * set by the CSS depending on the active scheme. That way the whole page gets
+ * tinted without the legibility of the interface depending on the color that
+ * was picked.
  */
 function applyPageTheme(bg: string): void {
   const { r, g, b } = hexToRgb(bg);
@@ -150,12 +162,12 @@ function applyPageTheme(bg: string): void {
   const root = document.documentElement.style;
   root.setProperty('--tint-h', String(Math.round(h)));
   root.setProperty('--tint-s', `${Math.round(s * 100)}%`);
-  // El color de la barra del navegador en móvil, que si no queda en el
-  // color con el que arrancó la página.
+  // The color of the mobile browser bar, which would otherwise stay on the
+  // color the page started with.
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', cssColor(bg));
 }
 
-// ── Vista previa ─────────────────────────────────────────────────────
+// ── Preview ───────────────────────────────────────────────────────────
 
 function stopPreviewAnimation(): void {
   if (previewAnimation) cancelAnimationFrame(previewAnimation);
@@ -174,16 +186,16 @@ function renderPreview(progress?: number): void {
 function updateMetaLine(spec: Spec): void {
   const parts = [
     `${spec.width}×${spec.height}`,
-    `paleta ${spec.paletteName}`,
-    `contraste ${checkContrast(spec.fg, spec.bg).label}`,
+    `palette ${spec.paletteName}`,
+    `contrast ${checkContrast(spec.fg, spec.bg).label}`,
   ];
-  if (spec.duration > 0) parts.push(`${spec.duration}s a ${spec.fps} fps`);
+  if (spec.duration > 0) parts.push(`${spec.duration}s at ${spec.fps} fps`);
   $('#metaLine').textContent = parts.join(' · ');
 }
 
 /**
- * En modo video la barra se anima para que se entienda que representa el
- * avance. Es sólo preview; el archivo real lo dibuja el encoder.
+ * In video mode the bar is animated so it reads as progress. It is only the
+ * preview; the real file is drawn by the encoder.
  */
 function animatePreview(): void {
   stopPreviewAnimation();
@@ -202,7 +214,7 @@ function animatePreview(): void {
   previewAnimation = requestAnimationFrame(tick);
 }
 
-// ── Paleta ───────────────────────────────────────────────────────────
+// ── Palette ───────────────────────────────────────────────────────────
 
 function renderSwatches(): void {
   const host = $('#swatches');
@@ -213,7 +225,7 @@ function renderSwatches(): void {
     btn.className = 'swatch';
     btn.dataset.name = entry.name;
     btn.title = `${entry.label} · ${entry.bg} / ${entry.fg} · ${entry.contrast.label}`;
-    btn.setAttribute('aria-label', `Paleta ${entry.label}, contraste ${entry.contrast.label}`);
+    btn.setAttribute('aria-label', `Palette ${entry.label}, contrast ${entry.contrast.label}`);
     btn.setAttribute('aria-pressed', 'false');
     btn.style.background = `linear-gradient(135deg, ${cssColor(entry.bg)} 0 58%, ${cssColor(entry.fg)} 58% 100%)`;
     btn.addEventListener('click', () => applyColors(entry.bg, entry));
@@ -221,7 +233,7 @@ function renderSwatches(): void {
   }
 }
 
-// ── Estado derivado de los controles ─────────────────────────────────
+// ── State derived from the controls ───────────────────────────────────
 
 function refreshDependentUi(): void {
   const kind = currentKind();
@@ -230,14 +242,16 @@ function refreshDependentUi(): void {
   }
   if (kind === 'image') stopPreviewAnimation();
 
-  const imageFormat = str('imageFormat', 'png') as ImageFormat;
+  // The quality slider follows the format of the active tab: JPEG and WebP
+  // take it in the image tab, and the animated formats in the video one.
+  const format = currentFormat();
   const qualityField = form.querySelector<HTMLElement>('.quality');
-  if (qualityField) qualityField.hidden = !LOSSY.has(imageFormat);
+  if (qualityField) qualityField.hidden = !LOSSY.has(format);
 
-  // La línea de tiempo aparece si el formato elegido la tiene, sin importar
-  // en qué tab esté: el GIF es una imagen, pero se anima.
+  // Every format with a timeline lives in the video tab, so the section shows
+  // up exactly there.
   const timeline = $('#timeline');
-  const timed = kind === 'video' || ANIMATED_IMAGE_FORMATS.has(imageFormat);
+  const timed = kind === 'video';
   timeline.hidden = !timed;
 
   const spec = readSpec();
@@ -246,30 +260,29 @@ function refreshDependentUi(): void {
   const rounds = kind === 'video' && even.changed;
   evenWarning.hidden = !rounds;
   if (rounds) {
-    evenWarning.textContent = `H.264 exige dimensiones pares: el video se hará de ${even.width}×${even.height}.`;
+    evenWarning.textContent = `H.264 needs even dimensions: the video will be ${even.width}×${even.height}.`;
   }
 
-  // El GIF sólo admite retardos en centésimas, así que el FPS real casi
-  // nunca es el que se pidió. Se avisa con el número, no con un "puede diferir".
+  // The GIF only takes hundredth delays, so the real FPS is almost never the
+  // requested one. It is reported with the number, not with a "may differ".
   const fpsEffective = $('#fpsEffective');
-  if (kind === 'image' && imageFormat === 'gif') {
+  if (format === 'gif') {
     const eff = effectiveGifFps(spec.fps);
     fpsEffective.hidden = false;
-    fpsEffective.textContent = `El GIF sólo admite retardos en centésimas: ${spec.fps} fps salen como ${eff.toFixed(1)} fps.`;
+    fpsEffective.textContent = `The GIF only takes hundredth delays: ${spec.fps} fps come out as ${eff.toFixed(1)} fps.`;
   } else {
     fpsEffective.hidden = true;
   }
 
-  // Con un solo frame no hay barra que mostrar.
-  // Con un solo frame no hay barra que mostrar.
+  // With a single frame there is no bar to show.
   const singleFrame = Math.round(spec.duration * spec.fps) <= 1;
   for (const name of ['showProgressBar', 'showTime'] as const) {
     const el = form.elements.namedItem(name);
     if (el instanceof HTMLInputElement) el.disabled = singleFrame;
   }
 
-  // El preview se anima para cualquier formato con línea de tiempo, no sólo
-  // para el tab de video: así el GIF muestra su barra moviéndose.
+  // The preview is animated for any format with a timeline, so the GIF shows
+  // its bar moving.
   if (timed && !singleFrame) {
     animatePreview();
   } else {
@@ -278,7 +291,7 @@ function refreshDependentUi(): void {
   }
 }
 
-// ── Generación ───────────────────────────────────────────────────────
+// ── Generating ────────────────────────────────────────────────────────
 
 function showMessage(text: string, tone: 'error' | 'info' = 'error'): void {
   const el = $('#message');
@@ -307,7 +320,7 @@ function onProgress(info: ProgressInfo): void {
   $('#progressFill').style.width = `${pct}%`;
   const text =
     info.frame !== undefined && info.totalFrames !== undefined
-      ? `${info.message ?? 'Procesando'} (${info.frame}/${info.totalFrames})`
+      ? `${info.message ?? 'Processing'} (${info.frame}/${info.totalFrames})`
       : (info.message ?? `${pct.toFixed(0)}%`);
   $('#progressText').textContent = text;
 }
@@ -318,24 +331,24 @@ async function generate(): Promise<void> {
   const spec = readSpec();
   abortController = new AbortController();
   setBusy(true);
-  onProgress({ progress: 0, message: 'Preparando…' });
+  onProgress({ progress: 0, message: 'Preparing…' });
 
   try {
     const signal = abortController.signal;
     const result =
       kind === 'video'
-        ? await exportVideo(spec, str('videoFormat', 'mp4') as VideoFormat, onProgress, signal)
-        : await exportImageDispatch(spec, str('imageFormat', 'png') as ImageFormat, onProgress, signal);
+        ? await exportTimeline(spec, str('videoFormat', 'mp4') as TimelineFormat, onProgress, signal)
+        : await exportImage(spec, str('imageFormat', 'png') as StillImageFormat, onProgress, signal);
 
-    onProgress({ progress: 1, message: 'Listo' });
+    onProgress({ progress: 1, message: 'Done' });
     downloadBlob(result.blob, result.filename);
     showMessage(
-      `${result.filename} · ${(result.size / 1024).toFixed(1)} KB · generado por el-coso-3000`,
+      `${result.filename} · ${(result.size / 1024).toFixed(1)} KB · generated by El Coso 3000`,
       'info',
     );
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
-      showMessage('Cancelado.', 'info');
+      showMessage('Cancelled.', 'info');
     } else {
       showMessage(err instanceof Error ? err.message : String(err));
     }
@@ -345,19 +358,24 @@ async function generate(): Promise<void> {
   }
 }
 
-async function exportImageDispatch(
+/**
+ * The video tab produces the four video containers plus the three animated
+ * image formats, which have a timeline too and are written by their own
+ * encoders.
+ */
+async function exportTimeline(
   spec: Spec,
-  format: ImageFormat,
+  format: TimelineFormat,
   onProgress_: (i: ProgressInfo) => void,
   signal: AbortSignal,
 ) {
   if (format === 'gif') return exportGif(spec, onProgress_, signal);
   if (format === 'mjpeg-avi') return exportMjpegAvi(spec, onProgress_, signal);
   if (format === 'jpeg-zip') return exportJpegZip(spec, onProgress_, signal);
-  return exportImage(spec, format as StillImageFormat, onProgress_, signal);
+  return exportVideo(spec, format, onProgress_, signal);
 }
 
-// ── WebMCP: lo que el agente puede tocar ─────────────────────────────
+// ── WebMCP: what an agent can drive ───────────────────────────────────
 
 function applySettings(input: Record<string, unknown>): { ok: true } | { ok: false; error: string } {
   try {
@@ -382,11 +400,11 @@ function applySettings(input: Record<string, unknown>): { ok: true } | { ok: fal
       setCheckbox('showTime', input.showTime);
     }
 
-    // El color se resuelve al final, para que un `background` sin palette
-    // tenga prioridad sobre la paleta y no al revés.
+    // The color is resolved last, so a `background` without a palette takes
+    // precedence over the palette and not the other way around.
     if (typeof input.palette === 'string') {
       const found = palette().find((p) => p.name === input.palette || p.label === input.palette);
-      if (!found) return { ok: false, error: `no conozco la paleta "${String(input.palette)}"` };
+      if (!found) return { ok: false, error: `unknown palette "${String(input.palette)}"` };
       applyColors(found.bg, found);
     }
     if (typeof input.background === 'string') {
@@ -415,36 +433,38 @@ function setCheckbox(name: string, value: boolean): void {
 
 function describe(): Record<string, unknown> {
   const spec = readSpec();
-  const kind = currentKind();
   return {
     width: spec.width,
     height: spec.height,
-    kind,
-    format: kind === 'video' ? str('videoFormat', 'mp4') : str('imageFormat', 'png'),
+    kind: currentKind(),
+    format: currentFormat(),
     background: spec.bg,
     foreground: spec.fg,
     palette: spec.paletteName,
     contrast: checkContrast(spec.fg, spec.bg).label,
-    ...(kind === 'video' ? { duration: spec.duration, fps: spec.fps } : {}),
+    ...(spec.duration > 0 ? { duration: spec.duration, fps: spec.fps } : {}),
   };
 }
 
-// ── Arranque ─────────────────────────────────────────────────────────
+// ── Start-up ──────────────────────────────────────────────────────────
 
 async function syncVideoAvailability(): Promise<void> {
   const spec = readSpec();
   const supported = await availableVideoFormats(spec.width, spec.height);
   for (const input of form.querySelectorAll<HTMLInputElement>('input[name="videoFormat"]')) {
-    const available = supported.includes(input.value as VideoFormat);
+    // The animated image formats are not encoders of this browser, they are
+    // always available.
+    const animated = ANIMATED_IMAGE_FORMATS.has(input.value as ImageFormat);
+    const available = animated || supported.includes(input.value as VideoFormat);
     input.disabled = !available;
     const span = input.nextElementSibling as HTMLElement | null;
-    if (span) span.title = available ? '' : 'Este navegador no puede codificar en este formato';
+    if (span) span.title = available ? '' : 'This browser cannot encode this format';
   }
   const warn = $('#videoUnsupported');
   if (supported.length === 0) {
     warn.hidden = false;
     warn.textContent =
-      'Este navegador no soporta WebCodecs, así que no se puede generar video. Las imágenes y el GIF siguen funcionando. En Firefox Android no hay soporte.';
+      'This browser has no WebCodecs support, so video cannot be generated. Images and the GIF still work. There is no support in Firefox for Android.';
   } else {
     warn.hidden = true;
   }
@@ -456,7 +476,8 @@ function wireEvents(): void {
     if (!(target instanceof HTMLInputElement)) return;
 
     if (target.id === 'bg') {
-      // Cambiar el fondo a mano saca la paleta: el usuario está interveniendo.
+      // Changing the background by hand drops the palette: the user is
+      // intervening.
       applyColors(target.value, null);
       return;
     }
@@ -471,7 +492,7 @@ function wireEvents(): void {
         $('#fpsOut').textContent = target.value;
         break;
       case 'kind':
-        // `refreshDependentUi` ya decide si el preview se anima.
+        // `refreshDependentUi` already decides whether the preview animates.
         refreshDependentUi();
         void syncVideoAvailability();
         return;
@@ -505,22 +526,14 @@ function wireEvents(): void {
     setNum('height', w);
     refreshDependentUi();
   });
-
-  for (const btn of form.querySelectorAll<HTMLButtonElement>('.presets button')) {
-    btn.addEventListener('click', () => {
-      setNum('width', Number(btn.dataset.w));
-      setNum('height', Number(btn.dataset.h));
-      refreshDependentUi();
-    });
-  }
 }
 
 async function main(): Promise<void> {
   await ensureFontLoaded();
   renderSwatches();
 
-  // Arranca con una paleta al azar, no con la primera de la lista: cada
-  // visita abre con un color distinto.
+  // It starts on a random palette, not on the first one of the list: every
+  // visit opens with a different color.
   const start = randomPalette();
   applyColors(start.bg, start);
 
@@ -533,7 +546,7 @@ async function main(): Promise<void> {
     generate: async () => {
       await generate();
       const el = $('#message');
-      return el.hidden ? 'Generado.' : (el.textContent ?? 'Generado.');
+      return el.hidden ? 'Generated.' : (el.textContent ?? 'Generated.');
     },
     describe,
   });

@@ -1,14 +1,14 @@
 /**
- * Tests del encoder de video.
+ * Video encoder tests.
  *
- * Bun no tiene `VideoEncoder`, ni canvas, ni `showSaveFilePicker`, así que la
- * línea de `exportVideo` que va de `output.start()` a `finalize()` no se puede
- * ejercitar acá. Lo que sí se testea es todo lo que la rodea y todo lo que
- * decide: qué contenedor y qué códec le toca a cada formato, la aritmética de
- * frames, keyframes, progreso y ETA, los topes con sus mensajes, la metadata, y
- * el bucle de encoding con un `drawFrame` y un `source.add` falsos.
+ * Bun has no `VideoEncoder`, canvas, or `showSaveFilePicker`, so the part of
+ * `exportVideo` from `output.start()` to `finalize()` cannot be exercised here.
+ * What is tested is everything around it and everything it decides: which
+ * container and codec each format uses, frame arithmetic, keyframes, progress
+ * and ETA, the limits and their messages, metadata, and the encoding loop with
+ * fake `drawFrame` and `source.add` calls.
  *
- * Corre: `bun test`
+ * Run: `bun test`
  */
 
 import { describe, expect, test } from 'bun:test';
@@ -50,7 +50,7 @@ const spec = (over: Partial<Spec> = {}): Spec => ({
   ...over,
 });
 
-/** Mensaje de error de lo que lanza, o `null` si no lanzó. */
+/** Error message from the thrown value, or `null` if nothing was thrown. */
 function errorOf(fn: () => unknown): string | null {
   try {
     fn();
@@ -62,27 +62,27 @@ function errorOf(fn: () => unknown): string | null {
 
 const close = (a: number, b: number) => Math.abs(a - b) < 1e-9;
 
-// ── Contenedores ───────────────────────────────────────────────────────────
+// ── Containers ────────────────────────────────────────────────────────────
 
-describe('tabla de contenedores', () => {
-  test('cada formato usa la clase de mediabunny que le corresponde', () => {
+describe('container table', () => {
+  test('each format uses its corresponding mediabunny class', () => {
     expect(outputFormatFor('mp4').constructor.name).toBe('Mp4OutputFormat');
     expect(outputFormatFor('mov').constructor.name).toBe('MovOutputFormat');
     expect(outputFormatFor('webm').constructor.name).toBe('WebMOutputFormat');
     expect(outputFormatFor('mkv').constructor.name).toBe('MkvOutputFormat');
   });
 
-  test('la tabla dice el mismo nombre de clase que produce', () => {
+  test('the table lists the same class name that is produced', () => {
     for (const format of VIDEO_FORMATS) {
       expect(VIDEO_FORMATS_TABLE[format].container).toBe(outputFormatFor(format).constructor.name);
     }
   });
 
-  test('la tabla cubre exactamente los formatos del core', () => {
+  test('the table covers exactly the core formats', () => {
     expect(Object.keys(VIDEO_FORMATS_TABLE).sort()).toEqual([...VIDEO_FORMATS].sort());
   });
 
-  test('extensión y MIME de cada contenedor', () => {
+  test('extension and MIME type for each container', () => {
     const expected = {
       mp4: ['.mp4', 'video/mp4'],
       mov: ['.mov', 'video/quicktime'],
@@ -98,7 +98,7 @@ describe('tabla de contenedores', () => {
   });
 });
 
-describe('preferencia de códec', () => {
+describe('codec preference', () => {
   const expectedCodecs = {
     mp4: 'avc,av1,vp9',
     mov: 'avc,av1,vp9',
@@ -106,29 +106,29 @@ describe('preferencia de códec', () => {
     mkv: 'vp9,vp8,av1',
   } as const;
 
-  test('el orden de preferencia es el del contenedor', () => {
+  test('the preference order matches the container', () => {
     for (const format of VIDEO_FORMATS) {
       expect(VIDEO_FORMATS_TABLE[format].codecs.join()).toBe(expectedCodecs[format]);
     }
   });
 
-  // Si un códec preferido no lo acepta el contenedor, el filtro por contenedor
-  // lo saca y nunca llega al muxer, que después tiraría a mitad de la
-  // codificación con un error que no dice nada del contexto.
-  test('ningún códec preferido queda afuera del contenedor', () => {
+  // If a preferred codec is not accepted by the container, the container
+  // filter removes it before it reaches the muxer, which would otherwise throw
+  // midway through encoding with an error that gives no context.
+  test('no preferred codec is unsupported by its container', () => {
     for (const format of VIDEO_FORMATS) {
       const supported = outputFormatFor(format).getSupportedVideoCodecs();
       expect(VIDEO_FORMATS_TABLE[format].codecs.filter((codec) => !supported.includes(codec))).toEqual([]);
     }
   });
 
-  test('el filtro tiene algo que filtrar: webm no acepta avc, mp4 sí', () => {
+  test('the filter has something to filter: webm rejects avc, mp4 accepts it', () => {
     expect(outputFormatFor('webm').getSupportedVideoCodecs()).not.toContain('avc');
     expect(outputFormatFor('mp4').getSupportedVideoCodecs()[0]).toBe('avc');
   });
 });
 
-// ── Aritmética ─────────────────────────────────────────────────────────────
+// ── Arithmetic ────────────────────────────────────────────────────────────
 
 describe('totalFrames = max(1, round(duration * fps))', () => {
   test.each([
@@ -139,11 +139,11 @@ describe('totalFrames = max(1, round(duration * fps))', () => {
     [3.7, 24, 89],
     [1, 1, 1],
     [2.5, 25, 63],
-  ])('%ss a %ifs → %i frames', (duration, fps, expected) => {
+  ])('%ss at %ifps → %i frames', (duration, fps, expected) => {
     expect(totalFramesFor(duration, fps)).toBe(expected);
   });
 
-  test('5s a 30fps NO son 5 * 60 (el error clásico del ETA)', () => {
+  test('5s at 30fps is NOT 5 * 60 (the classic ETA mistake)', () => {
     expect(totalFramesFor(5, 30)).not.toBe(5 * 60);
     expect(totalFramesFor(5, 30)).toBe(150);
   });
@@ -157,7 +157,7 @@ describe('keyEvery = max(1, round(fps * 2))', () => {
     [1, 2],
     [0.4, 1],
     [0, 1],
-  ])('%ifs → keyframe cada %i frames', (fps, expected) => {
+  ])('%ifs → keyframe every %i frames', (fps, expected) => {
     expect(keyFrameEvery(fps)).toBe(expected);
   });
 });
@@ -165,21 +165,21 @@ describe('keyEvery = max(1, round(fps * 2))', () => {
 // ── Plan ───────────────────────────────────────────────────────────────────
 
 describe('planExport', () => {
-  test('redondea las dimensiones a pares y deja el Spec con las reales', () => {
+  test('rounds dimensions up to even numbers and keeps the Spec dimensions accurate', () => {
     const plan = planExport(spec({ width: 641, height: 361 }));
     expect([plan.width, plan.height]).toEqual([642, 362]);
     expect([plan.spec.width, plan.spec.height]).toEqual([642, 362]);
-    // El redondeo no puede cambiar la cuenta de frames.
+    // Rounding must not change the frame count.
     expect(plan.totalFrames).toBe(150);
   });
 
-  test('el nombre del archivo lleva las dimensiones reales', () => {
+  test('the filename uses the actual dimensions', () => {
     expect(filenameForSpec(planExport(spec({ width: 641, height: 361 })).spec, 'mp4')).toBe('642x362-30fps-5s.mp4');
     expect(filenameForSpec(planExport(spec({ width: 641, height: 361 })).spec, 'webm')).toBe('642x362-30fps-5s.webm');
     expect(filenameForSpec(planExport(spec()).spec, 'mov')).toBe('1920x1080-30fps-5s.mov');
   });
 
-  test('deja las dimensiones que ya son pares', () => {
+  test('keeps dimensions that are already even', () => {
     const plan = planExport(spec());
     expect([plan.width, plan.height]).toEqual([1920, 1080]);
     expect(plan.totalFrames).toBe(150);
@@ -187,93 +187,93 @@ describe('planExport', () => {
     expect(plan.frameDuration).toBe(1 / 30);
   });
 
-  test('media duración con fps bajo da un solo frame, nunca cero', () => {
+  test('a short duration at low fps gives one frame, never zero', () => {
     expect(planExport(spec({ duration: 0.5, fps: 1 })).totalFrames).toBe(1);
   });
 });
 
-describe('topes: se rechazan con un mensaje, nunca en silencio', () => {
-  test(`más de ${MAX_VIDEO_DIMENSION} px por lado`, () => {
+describe('limits: reject with a message, never silently', () => {
+  test(`more than ${MAX_VIDEO_DIMENSION} px on either side`, () => {
     const message = errorOf(() => planExport(spec({ width: 7680, height: 4320 })));
     expect(message).toContain(String(MAX_VIDEO_DIMENSION));
     expect(message).toContain('7680x4320');
   });
 
-  test('el tope corre por cualquier lado, no sólo por el ancho', () => {
+  test('the limit applies to either side, not just the width', () => {
     expect(errorOf(() => planExport(spec({ width: 1920, height: 5000 })))).toContain(String(MAX_VIDEO_DIMENSION));
   });
 
-  test(`justo en el tope entra`, () => {
+  test(`exactly at the limit is allowed`, () => {
     expect(errorOf(() => planExport(spec({ width: MAX_VIDEO_DIMENSION, height: MAX_VIDEO_DIMENSION, duration: 0.1, fps: 1 })))).toBeNull();
   });
 
-  test(`más de ${MAX_TOTAL_FRAMES} frames dice cuántos serían`, () => {
+  test(`more than ${MAX_TOTAL_FRAMES} frames reports how many there would be`, () => {
     const message = errorOf(() => planExport(spec({ duration: 61, fps: 60 })));
     expect(message).toContain('3660');
     expect(message).toContain(String(MAX_TOTAL_FRAMES));
   });
 
-  test('el tope de frames entra justo por los dos lados', () => {
+  test('the frame limit is allowed exactly at both tested frame rates', () => {
     expect(errorOf(() => planExport(spec({ duration: 60, fps: 60 })))).toBeNull();
     expect(errorOf(() => planExport(spec({ duration: 60, fps: 30 })))).toBeNull();
   });
 
   test.each([
     ['fps 0', { fps: 0 }],
-    ['fps negativo', { fps: -30 }],
-    ['duración NaN', { duration: Number.NaN }],
-    ['duración negativa', { duration: -1 }],
-  ])('%s se rechaza', (_label, over) => {
+    ['negative fps', { fps: -30 }],
+    ['NaN duration', { duration: Number.NaN }],
+    ['negative duration', { duration: -1 }],
+  ])('%s is rejected', (_label, over) => {
     expect(errorOf(() => planExport(spec(over)))).not.toBeNull();
   });
 });
 
-// ── Soporte del navegador ──────────────────────────────────────────────────
+// ── Browser support ───────────────────────────────────────────────────────
 
-describe('detección de capacidad (en Bun no hay WebCodecs)', () => {
-  test('isVideoExportSupported() es false y no tira', () => {
+describe('capability detection (Bun has no WebCodecs)', () => {
+  test('isVideoExportSupported() is false and does not throw', () => {
     expect(isVideoExportSupported()).toBe(false);
   });
 
-  test('el mensaje dice qué falta y dónde no está', () => {
+  test('the message says what is missing and where it is unavailable', () => {
     expect(NO_ENCODER_MESSAGE).toContain('WebCodecs');
     expect(NO_ENCODER_MESSAGE).toContain('Firefox');
     expect(NO_ENCODER_MESSAGE).toContain('Android');
   });
 
-  test('availableVideoFormats() devuelve [] sin códecs, sin tirar', async () => {
+  test('availableVideoFormats() returns [] without codecs and does not throw', async () => {
     expect(await availableVideoFormats(1920, 1080)).toEqual([]);
   });
 
-  test('el resultado se cachea por dimensiones', async () => {
+  test('the result is cached by dimensions', async () => {
     const first = availableVideoFormats(1280, 720);
     expect(await availableVideoFormats(1280, 720)).toBe(await first);
     expect(await availableVideoFormats(641, 361)).not.toBe(await first);
   });
 
-  test('exportVideo corta antes de tocar nada si no hay WebCodecs', async () => {
+  test('exportVideo stops before doing anything if WebCodecs is unavailable', async () => {
     expect(exportVideo(spec(), 'mp4')).rejects.toThrow(NO_ENCODER_MESSAGE);
   });
 });
 
-// ── Progreso y ETA ─────────────────────────────────────────────────────────
+// ── Progress and ETA ──────────────────────────────────────────────────────
 
 describe('formatEta', () => {
   test.each([
-    [0, 'menos de 1 s'],
-    [0.2, 'menos de 1 s'],
-    [0.5, 'menos de 1 s'],
+    [0, 'less than 1 s'],
+    [0.2, 'less than 1 s'],
+    [0.5, 'less than 1 s'],
     [1, '1 s'],
     [3.4, '3 s'],
     [59.4, '59 s'],
     [59.6, '1 min 0 s'],
     [60, '1 min 0 s'],
     [125.4, '2 min 5 s'],
-  ])('%is → "%s"', (seconds, expected) => {
+  ])('formatEta(%is) returns the expected ETA', (seconds, expected) => {
     expect(formatEta(seconds)).toBe(expected);
   });
 
-  test('nunca escribe "min 60 s"', () => {
+  test('never writes "min 60 s"', () => {
     expect(formatEta(119.6)).not.toContain('60 s');
   });
 });
@@ -281,7 +281,7 @@ describe('formatEta', () => {
 describe('progressInfo', () => {
   const plan = planExport(spec({ duration: 5, fps: 30 }));
 
-  test('todos los ticks dan progreso en 0..1 y son consistentes', () => {
+  test('all ticks report progress in 0..1 and are consistent', () => {
     for (let done = 0; done <= plan.totalFrames; done++) {
       const info = progressInfo(plan, done, done * 0.01);
       expect(info.progress).toBeGreaterThanOrEqual(0);
@@ -291,7 +291,7 @@ describe('progressInfo', () => {
     }
   });
 
-  test('el primero va en 0 y el último en 1, con los 150 frames declarados', () => {
+  test('the first is 0 and the last is 1, with all 150 frames accounted for', () => {
     expect(progressInfo(plan, 0, 0).progress).toBe(0);
     const last = progressInfo(plan, plan.totalFrames, 20);
     expect(last.progress).toBe(1);
@@ -299,7 +299,7 @@ describe('progressInfo', () => {
     expect(last.totalFrames).toBe(150);
   });
 
-  test('el progreso nunca retrocede', () => {
+  test('progress never goes backward', () => {
     let previous = 0;
     for (let done = 0; done <= plan.totalFrames; done++) {
       const { progress } = progressInfo(plan, done, done * 0.01);
@@ -308,57 +308,57 @@ describe('progressInfo', () => {
     }
   });
 
-  test('`done` fuera de rango se clampa', () => {
+  test('`done` is clamped when out of range', () => {
     expect(progressInfo(plan, -5, 0).progress).toBe(0);
     expect(progressInfo(plan, -5, 0).frame).toBe(0);
     expect(progressInfo(plan, 9999, 0).progress).toBe(1);
     expect(progressInfo(plan, 9999, 0).frame).toBe(150);
   });
 
-  test('el mensaje lleva frame/total y ningún NaN', () => {
+  test('the message includes frame/total and never contains NaN', () => {
     expect(progressInfo(plan, 120, 1.2).message).toContain('120/150');
     const messages = Array.from({ length: 151 }, (_, done) => progressInfo(plan, done, done * 0.01).message ?? '');
     expect(messages.join('|')).not.toMatch(/NaN|Infinity/);
   });
 
-  // El ETA sale de frames medidos, no de `duration * 60`. Con 150 frames y un
-  // segundo real por frame, después del primero faltan 149 segundos, no 299.
-  test('el ETA se mide en frames, no en segundos de reloj', () => {
-    expect(progressInfo(plan, 1, 1).message).toContain('faltan ~2 min 29 s');
-    expect(progressInfo(plan, 75, 15).message).toContain('faltan ~15 s');
+  // ETA is based on measured frames, not `duration * 60`. With 150 frames and
+  // one real second per frame, after the first frame 149 seconds remain, not 299.
+  test('ETA is measured in frames, not wall-clock seconds', () => {
+    expect(progressInfo(plan, 1, 1).message).toContain('~2 min 29 s left');
+    expect(progressInfo(plan, 75, 15).message).toContain('~15 s left');
   });
 
-  test('sin frames medidos no se inventa un ETA, y al terminar no hay', () => {
+  test('no ETA is invented without measured frames, and none remains at the end', () => {
     expect(progressInfo(plan, 0, 0).message).not.toContain('faltan');
     expect(progressInfo(plan, plan.totalFrames, 20).message).not.toContain('faltan');
   });
 });
 
-// ── Metadata ───────────────────────────────────────────────────────────────
+// ── Metadata ──────────────────────────────────────────────────────────────
 
-describe('metadata del video', () => {
+describe('video metadata', () => {
   const tags = videoMetadataTags(planExport(spec({ width: 641, height: 361 })).spec);
 
-  test('los campos normalizados salen de buildMetadata con las dimensiones reales', () => {
+  test('normalized fields come from buildMetadata with the actual dimensions', () => {
     expect(tags.title).toBe('Placeholder 642x362');
     expect(tags.description).toContain('Placeholder 642x362');
     expect(tags.artist).toContain(APP_NAME);
   });
 
-  test('raw lleva Software y Source', () => {
+  test('raw contains Software and Source', () => {
     expect(tags.raw?.Software).toBe(APP_NAME);
     expect(tags.raw?.Source).toBe(REPO_URL);
   });
 
-  // El muxer ISOBMFF descarta las keys de `raw` de más de 4 caracteres, así que
-  // el bloque completo va en `comment`, que sí respetan los cuatro contenedores.
-  test('comment lleva el bloque completo, Software y Source incluidos', () => {
+  // The ISOBMFF muxer drops `raw` keys longer than 4 characters, so the full
+  // block goes in `comment`, which all four containers preserve.
+  test('comment contains the full block, including Software and Source', () => {
     expect(tags.comment).toContain(`Software: ${APP_NAME}`);
     expect(tags.comment).toContain(`Source: ${REPO_URL}`);
   });
 });
 
-// ── Bucle de encoding ──────────────────────────────────────────────────────
+// ── Encoding loop ─────────────────────────────────────────────────────────
 
 interface Recorded {
   drawn: number[];
@@ -366,7 +366,7 @@ interface Recorded {
   progress: Array<{ frame?: number; progress: number }>;
 }
 
-/** Sink falso: cuenta en vez de dibujar y codificar. */
+/** Fake sink: counts instead of drawing and encoding. */
 function recordingSink(onAdd?: (index: number) => void): FrameSink & { log: Recorded } {
   const log: Recorded = { drawn: [], added: [], progress: [] };
   return {
@@ -383,27 +383,27 @@ function recordingSink(onAdd?: (index: number) => void): FrameSink & { log: Reco
 
 const loopPlan = () => planExport(spec({ duration: 5, fps: 30 }));
 
-describe('bucle de encoding', () => {
-  test('5s a 30fps: 150 frames dibujados y encolados', async () => {
+describe('encoding loop', () => {
+  test('5s at 30fps: 150 frames drawn and enqueued', async () => {
     const run = recordingSink();
     await encodeFrames(loopPlan(), run);
     expect(run.log.drawn).toHaveLength(150);
     expect(run.log.added).toHaveLength(150);
   });
 
-  test('el frame i se dibuja con su propio avance y va en i/30s', async () => {
+  test('frame i is drawn with its own progress and timestamp i/30s', async () => {
     const run = recordingSink();
     await encodeFrames(loopPlan(), run);
-    // El primero dibuja la barra vacía, como la imagen estática.
+    // The first frame draws the empty progress bar, like the still image.
     expect(run.log.drawn[0]).toBe(0);
     expect(run.log.drawn.every((progress, i) => close(progress, i / 150))).toBe(true);
     expect(run.log.added.every((a, i) => close(a.timestamp, i / 30) && close(a.duration, 1 / 30))).toBe(true);
-    // El último arranca en 4.9667s, no en 5s: los timestamps son del frame, no
-    // del final del video.
+    // The last frame starts at 4.9667s, not 5s: timestamps belong to the frame,
+    // not to the end of the video.
     expect(run.log.added[149]?.timestamp).toBe(149 / 30);
   });
 
-  test('keyframes cada 2 segundos de reloj, para poder scrubbear', async () => {
+  test('keyframes every 2 seconds of wall-clock time for scrubbing', async () => {
     const run = recordingSink();
     await encodeFrames(loopPlan(), run);
     expect(run.log.added.filter((a) => a.keyFrame).map((a) => a.timestamp)).toEqual([0, 2, 4]);
@@ -412,7 +412,7 @@ describe('bucle de encoding', () => {
     );
   });
 
-  test('un tick de progreso por frame, y el último cierra en 1', async () => {
+  test('one progress tick per frame, with the last ending at 1', async () => {
     const run = recordingSink();
     await encodeFrames(loopPlan(), run, (info) => run.log.progress.push(info));
     expect(run.log.progress).toHaveLength(150);
@@ -420,15 +420,15 @@ describe('bucle de encoding', () => {
     expect(run.log.progress.at(-1)?.progress).toBe(1);
   });
 
-  test('0.5s a 1fps es un frame solo, y además keyframe', async () => {
+  test('0.5s at 1fps is a single frame, and it is also a keyframe', async () => {
     const run = recordingSink();
     await encodeFrames(planExport(spec({ duration: 0.5, fps: 1 })), run);
     expect(run.log.added).toEqual([{ timestamp: 0, duration: 1, keyFrame: true }]);
   });
 });
 
-describe('bucle de encoding: cancelación', () => {
-  test('con el signal ya cortado no dibuja nada', async () => {
+describe('encoding loop: cancellation', () => {
+  test('with an already-aborted signal, nothing is drawn', async () => {
     const controller = new AbortController();
     controller.abort();
     const run = recordingSink();
@@ -439,7 +439,7 @@ describe('bucle de encoding: cancelación', () => {
     expect(run.log.added).toHaveLength(0);
   });
 
-  test.each([0, 41, 100])('cancelar en el frame %i para ahí', async (stopAt) => {
+  test.each([0, 41, 100])('cancelling at frame %i stops there', async (stopAt) => {
     const controller = new AbortController();
     const run = recordingSink((index) => {
       if (index === stopAt) controller.abort();
@@ -453,7 +453,7 @@ describe('bucle de encoding: cancelación', () => {
     expect(run.log.added.every((a, i) => close(a.timestamp, i / 30))).toBe(true);
   });
 
-  test('cortar en el último frame no es una cancelación: ya no queda nada', async () => {
+  test('aborting on the last frame is not a cancellation: nothing remains', async () => {
     const controller = new AbortController();
     const plan = loopPlan();
     const run = recordingSink((index) => {
@@ -465,8 +465,8 @@ describe('bucle de encoding: cancelación', () => {
   });
 });
 
-describe('bucle de encoding: backpressure', () => {
-  test('nunca hay dos `add` en vuelo a la vez: el `await` serializa', async () => {
+describe('encoding loop: backpressure', () => {
+  test('there are never two `add` calls in flight: `await` serializes them', async () => {
     let inFlight = 0;
     let maxInFlight = 0;
     const seen: number[] = [];

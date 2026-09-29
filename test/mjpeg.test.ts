@@ -1,13 +1,13 @@
 /**
- * Tests de los dos containers de JPEG animado.
+ * Tests for the two animated JPEG containers.
  *
- * Bun no tiene DOM ni canvas, así que lo que se testea acá es la parte que no
- * necesita ninguno de los dos: los constructores de bytes y las invariantes de
- * estructura. El camino de render queda fuera (ver `renderJpegFrames`).
+ * Bun has no DOM or canvas, so this tests the parts that need neither: the byte
+ * builders and structural invariants. The rendering path is out of scope (see
+ * `renderJpegFrames`).
  *
- * Los readers de AVI y de ZIP están escritos acá a propósito, sin reusar nada
- * del encoder: si el test compartiera el código del muxer, probaría que el
- * muxer es consistente consigo mismo y no que el archivo es correcto.
+ * The AVI and ZIP readers are deliberately written here without reusing
+ * anything from the encoder: if the test shared the muxer's code, it would
+ * check that the muxer is consistent with itself, not that the file is correct.
  */
 
 import { describe, expect, test } from 'bun:test';
@@ -27,7 +27,7 @@ const i32 = (bytes: Bytes, at: number): number => viewOf(bytes).getInt32(at, tru
 const tag = (bytes: Bytes, at: number, len = 4): string => String.fromCharCode(...bytes.subarray(at, at + len));
 const text = (bytes: Bytes, at: number, len: number): string => new TextDecoder().decode(bytes.subarray(at, at + len));
 
-/** Bytes que no se comprimen: LCG determinista, para que el test sea estable. */
+/** Incompressible bytes: deterministic LCG to keep the test stable. */
 function incompressible(length: number, seed = 1): Bytes {
   const out = new Uint8Array(length);
   let s = seed >>> 0;
@@ -66,14 +66,14 @@ const SAMPLE: Spec = {
 // ── CRC32 ─────────────────────────────────────────────────────────────────
 
 describe('crc32', () => {
-  test('vectores conocidos', () => {
-    // El vector canónico del polinomio reflejado 0xEDB88320.
+  test('known vectors', () => {
+    // The canonical vector for the reflected polynomial 0xEDB88320.
     expect(crc32(new TextEncoder().encode('123456789'))).toBe(0xcbf43926);
     expect(crc32(new Uint8Array(0))).toBe(0);
     expect(crc32(new TextEncoder().encode('The quick brown fox jumps over the lazy dog'))).toBe(0x414fa339);
   });
 
-  test('depende sólo del contenido, no del backing store', () => {
+  test('depends only on the content, not the backing store', () => {
     const padded = new Uint8Array(32);
     padded.set(new TextEncoder().encode('123456789'), 8);
     expect(crc32(padded.subarray(8, 17))).toBe(0xcbf43926);
@@ -95,13 +95,13 @@ describe('CompressionStream deflate-raw', () => {
       await new Response(source.pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer(),
     );
     expect(deflated.length).toBeLessThan(original.length);
-    // deflate pelado arranca en 0x01; con el header de zlib sería 0x78.
+    // Raw deflate starts with 0x01; with the zlib header it would be 0x78.
     expect(deflated[0]).not.toBe(0x78);
     expect(await inflateRaw(deflated)).toEqual(original);
   });
 });
 
-// ── Reader de ZIP (escrito acá, no reusado del encoder) ───────────────────
+// ── ZIP reader (written here, not reused from the encoder) ─────────────────
 
 const SIG_LOCAL = 0x04034b50;
 const SIG_CENTRAL = 0x02014b50;
@@ -115,7 +115,7 @@ interface ZipEntryView {
   compressedSize: number;
   size: number;
   localOffset: number;
-  /** Offset del payload, deduced del local header. */
+  /** Payload offset, deduced from the local header. */
   dataAt: number;
   content: Uint8Array;
 }
@@ -128,15 +128,15 @@ interface ZipView {
   count: number;
 }
 
-/** El EOCD no tiene offset propio: se busca de atrás hacia adelante. */
+/** The EOCD has no offset of its own: search for it from the end backward. */
 function findEocd(bytes: Bytes): number {
   for (let at = bytes.length - 22; at >= 0; at--) {
     if (u32(bytes, at) !== SIG_EOCD) continue;
-    // La única posición válida es la última en la que el largo de comentario
-    // declarado cierra exactamente contra el fin del archivo.
+    // The only valid position is the last one where the declared comment
+    // length ends exactly at the end of the file.
     if (at + 22 + u16(bytes, at + 20) === bytes.length) return at;
   }
-  throw new Error('ZIP inválido: no se encontró el EOCD');
+  throw new Error('Invalid ZIP: the EOCD was not found');
 }
 
 async function parseZip(bytes: Bytes): Promise<ZipView> {
@@ -164,20 +164,20 @@ async function parseZip(bytes: Bytes): Promise<ZipView> {
     const name = text(bytes, at + 46, nameLen);
     at += 46 + nameLen + extraLen + commentLen;
 
-    // El central directory es un índice: no alcanza con leerlo, hay que
-    // seguir el offset y comprobar que el local header esté donde dice.
+    // The central directory is an index: reading it is not enough; follow the
+    // offset and verify that the local header is where it says it is.
     if (u32(bytes, localOffset) !== SIG_LOCAL) throw new Error(`${name}: local header sin firma`);
-    if (u16(bytes, localOffset + 8) !== method) throw new Error(`${name}: el método local no coincide`);
+    if (u16(bytes, localOffset + 8) !== method) throw new Error(`${name}: the local method does not match`);
     const localNameLen = u16(bytes, localOffset + 26);
     const localExtraLen = u16(bytes, localOffset + 28);
     if (text(bytes, localOffset + 30, localNameLen) !== name) throw new Error(`${name}: el nombre local no coincide`);
     const dataAt = localOffset + 30 + localNameLen + localExtraLen;
-    if (dataAt + compressedSize > eocd) throw new Error(`${name}: los datos se pasan del archivo`);
+    if (dataAt + compressedSize > eocd) throw new Error(`${name}: the data runs past the file`);
 
     const stored = bytes.subarray(dataAt, dataAt + compressedSize);
     const content = method === 8 ? await inflateRaw(stored) : stored;
-    if (content.length !== size) throw new Error(`${name}: el tamaño descomprimido no coincide`);
-    // El CRC va sobre los datos originales, nunca sobre el payload.
+    if (content.length !== size) throw new Error(`${name}: the uncompressed size does not match`);
+    // CRC is computed over the original data, never over the payload.
     if (crc32(content) !== crc) throw new Error(`${name}: CRC ${crc.toString(16)} != ${crc32(content).toString(16)}`);
     entries.push({ name, flags, method, crc, compressedSize, size, localOffset, dataAt, content });
   }
@@ -194,7 +194,7 @@ describe('buildJpegZip', () => {
     { name: 'frame_00002.jpg', data: incompressible(1500, 7) },
   ];
 
-  test('estructura: nombres, tamaños, CRC y comentario', async () => {
+  test('structure: names, sizes, CRC, and comment', async () => {
     const zip = await buildJpegZip(entries, 'comentario de prueba');
     const view = await parseZip(zip);
 
@@ -208,48 +208,48 @@ describe('buildJpegZip', () => {
       expect(parsed!.crc).toBe(crc32(entry.data));
       expect(parsed!.content).toEqual(entry.data);
     }
-    // Los local headers van en orden y el central directory arranca donde
-    // terminan: eso es lo que el EOCD declara.
+    // Local headers are in order and the central directory starts where they
+    // end: that is what the EOCD declares.
     const last = view.entries[view.entries.length - 1]!;
     expect(view.cdOffset).toBe(last.dataAt + last.compressedSize);
     expect(zip.length).toBe(view.cdOffset + view.cdSize + 22 + 'comentario de prueba'.length);
   });
 
-  test('deflate sólo cuando ahorra; stored si no', async () => {
+  test('deflate only when it saves space; otherwise stored', async () => {
     const view = await parseZip(await buildJpegZip(entries));
     const json = view.entries[0]!;
     const jpg = view.entries[1]!;
-    // El JSON es texto highly repetitivo: deflate lo achica.
+    // JSON is highly repetitive text: deflate makes it smaller.
     expect(json.method).toBe(8);
     expect(json.compressedSize).toBeLessThan(json.size);
-    // Datos incomprimibles: guardar stored es más simple y más rápido.
+    // Incompressible data: storing it is simpler and faster.
     expect(jpg.method).toBe(0);
     expect(jpg.compressedSize).toBe(jpg.size);
   });
 
-  test('los nombres ASCII no llevan el flag UTF-8', async () => {
+  test('ASCII names do not have the UTF-8 flag', async () => {
     const view = await parseZip(await buildJpegZip(entries));
     for (const entry of view.entries) expect(entry.flags & 0x800).toBe(0);
   });
 
-  test('un nombre no-ASCII sí lleva el flag UTF-8', async () => {
-    const view = await parseZip(await buildJpegZip([{ name: 'fotograma_ñ_00001.jpg', data: fill(4, 1) }]));
+  test('a non-ASCII name has the UTF-8 flag', async () => {
+    const view = await parseZip(await buildJpegZip([{ name: 'frame_ñ_00001.jpg', data: fill(4, 1) }]));
     expect(view.entries[0]!.flags & 0x800).toBe(0x800);
-    expect(view.entries[0]!.name).toBe('fotograma_ñ_00001.jpg');
+    expect(view.entries[0]!.name).toBe('frame_ñ_00001.jpg');
   });
 
-  test('un nombre de más de 255 bytes falla', async () => {
+  test('a name longer than 255 bytes fails', async () => {
     const long: JpegZipEntry = { name: `${'a'.repeat(260)}.jpg`, data: fill(4, 1) };
-    await expect(buildJpegZip([long])).rejects.toThrow('demasiado largo');
+    await expect(buildJpegZip([long])).rejects.toThrow('too long for a ZIP');
   });
 
-  test('sin EOCD no parsea', async () => {
+  test('does not parse without an EOCD', async () => {
     const zip = await buildJpegZip(entries, 'comentario');
     const truncated = zip.slice(0, zip.length - 22 - 'comentario'.length);
     expect(() => findEocd(truncated)).toThrow('EOCD');
   });
 
-  test('CRC corrupto se detecta', async () => {
+  test('detects a corrupted CRC', async () => {
     const zip = await buildJpegZip(entries);
     const view0 = await parseZip(zip);
     const dataAt = view0.entries[1]!.localOffset + 30 + 'frame_00001.jpg'.length;
@@ -257,23 +257,23 @@ describe('buildJpegZip', () => {
     await expect(parseZip(zip)).rejects.toThrow('CRC');
   });
 
-  test('abortar corta el armado', async () => {
+  test('aborting stops assembly', async () => {
     const controller = new AbortController();
     controller.abort();
     try {
       await buildJpegZip(entries, '', controller.signal);
-      throw new Error('debía lanzar AbortError');
+      throw new Error('it should have thrown an AbortError');
     } catch (err) {
       expect((err as DOMException).name).toBe('AbortError');
     }
   });
 });
 
-// ── Reader de AVI (escrito acá, no reusado del encoder) ───────────────────
+// ── AVI reader (written here, not reused from the encoder) ─────────────────
 
 interface RiffChunk {
   tag: string;
-  /** FourCC de tipo, sólo en las listas. */
+  /** Type FourCC, only in lists. */
   listType: string;
   at: number;
   size: number;
@@ -321,7 +321,7 @@ function parseAvi(bytes: Bytes): AviView {
   if (tag(bytes, 0) !== 'RIFF') throw new Error('No es un RIFF');
   const riffSize = u32(bytes, 4);
   if (riffSize !== bytes.length - 8) {
-    throw new Error(`Tamaño RIFF inconsistente: declara ${riffSize} y el archivo tiene ${bytes.length - 8}`);
+    throw new Error(`Inconsistent RIFF size: it declares ${riffSize} and the file has ${bytes.length - 8}`);
   }
   if (tag(bytes, 8) !== 'AVI ') throw new Error('El RIFF no declara AVI ');
 
@@ -345,12 +345,12 @@ function parseAvi(bytes: Bytes): AviView {
     idx.push({ fourcc: tag(bytes, at), flags: u32(bytes, at + 4), offset: u32(bytes, at + 8), size: u32(bytes, at + 12) });
   }
   if (idx1.at + 8 + idx1.size - (idx1.payloadStart + idx.length * 16) !== 0) {
-    throw new Error('El idx1 no es múltiplo de 16');
+    throw new Error('The idx1 is not a multiple of 16');
   }
 
-  // Convención del índice: los offsets son relativos a la posición del fourcc
-  // 'movi' menos 4, o sea al campo de tamaño del LIST. El primer chunk queda
-  // en 8, nunca en 0.
+  // Index convention: offsets are relative to the position of the 'movi'
+  // fourcc minus 4, i.e. to the LIST size field. The first chunk is at 8,
+  // never 0.
   const moviBase = movi.at + 4;
   if (idx.length !== moviFrames.length) {
     throw new Error(`idx1 tiene ${idx.length} entradas y movi tiene ${moviFrames.length}`);
@@ -358,9 +358,9 @@ function parseAvi(bytes: Bytes): AviView {
   idx.forEach((entry, i) => {
     const frame = moviFrames[i]!;
     if (entry.offset !== frame.at - moviBase) {
-      throw new Error(`Entrada ${i} del idx1 apunta a ${entry.offset} y el frame está en ${frame.at - moviBase}`);
+      throw new Error(`Entry ${i} of the idx1 points to ${entry.offset} and the frame is at ${frame.at - moviBase}`);
     }
-    if (entry.size !== frame.size) throw new Error(`Entrada ${i} del idx1 declara un tamaño distinto`);
+    if (entry.size !== frame.size) throw new Error(`Entry ${i} of the idx1 declares a different size`);
     if (entry.fourcc !== frame.tag) throw new Error(`Entrada ${i} del idx1 con fourcc distinto`);
   });
 
@@ -399,14 +399,14 @@ function parseAvi(bytes: Bytes): AviView {
 describe('buildMjpegAvi', () => {
   const meta = buildMetadata(SAMPLE);
   const params = { width: SAMPLE.width, height: SAMPLE.height, fps: SAMPLE.fps, meta };
-  // Tamaños impares y pares mezclados, para que el padding del RIFF importe.
+  // A mix of odd and even sizes, so RIFF padding matters.
   const frames = [
     new Uint8Array([0xf7, 0xd8, 0xff]),
     new Uint8Array([1, 2, 3, 4, 5, 6]),
     new Uint8Array([9, 9, 9, 9, 9]),
   ];
 
-  test('estructura RIFF y cabecera', () => {
+  test('RIFF structure and header', () => {
     const avi = buildMjpegAvi(frames, params);
     expect(tag(avi, 0)).toBe('RIFF');
     expect(u32(avi, 4)).toBe(avi.length - 8);
@@ -423,7 +423,7 @@ describe('buildMjpegAvi', () => {
     expect(view.avihHeight).toBe(SAMPLE.height);
   });
 
-  test('strh y BITMAPINFOHEADER', () => {
+  test('strh and BITMAPINFOHEADER', () => {
     const view = parseAvi(buildMjpegAvi(frames, params));
     expect(view.strh.type).toBe('vids');
     expect(view.strh.handler).toBe('MJPG');
@@ -438,21 +438,21 @@ describe('buildMjpegAvi', () => {
     expect(view.strf.compression).toBe('MJPG');
   });
 
-  test('movi lleva los frames tal cual e idx1 los indexa', () => {
+  test('movi contains the frames unchanged and idx1 indexes them', () => {
     const avi = buildMjpegAvi(frames, params);
     const view = parseAvi(avi);
     expect(view.movi.map((f) => f.chunkTag)).toEqual(['00dc', '00dc', '00dc']);
     expect(view.idx).toHaveLength(3);
-    expect(view.idx[0]!.offset).toBe(8); // 4 del tamaño del LIST + 4 de 'movi'
+    expect(view.idx[0]!.offset).toBe(8); // 4 for the LIST size + 4 for 'movi'
     for (const [i, frame] of frames.entries()) {
       expect(view.movi[i]!.size).toBe(frame.length);
-      // `at` es donde arranca el chunk, así que el payload está 8 bytes después.
+      // `at` is where the chunk starts, so the payload is 8 bytes later.
       expect(avi.slice(view.movi[i]!.at + 8, view.movi[i]!.at + 8 + frame.length)).toEqual(frame);
       expect(view.idx[i]!.flags & 0x10).toBe(0x10); // AVIIF_KEYFRAME
     }
   });
 
-  test('INFO lleva la URL del repo y el comentario', () => {
+  test('INFO contains the repo URL and comment', () => {
     const view = parseAvi(buildMjpegAvi(frames, params));
     expect(view.info.ISBJ).toBe(REPO_URL);
     expect(view.info.ICMT).toBe(meta.comment);
@@ -460,22 +460,22 @@ describe('buildMjpegAvi', () => {
     expect(view.info.INAM).toBe(meta.title);
   });
 
-  test('un solo frame también es un AVI válido', () => {
+  test('a single frame is also a valid AVI', () => {
     const view = parseAvi(buildMjpegAvi([frames[0]!], params));
     expect(view.totalFrames).toBe(1);
     expect(view.idx).toHaveLength(1);
   });
 
-  test('tamaño RIFF inconsistente', () => {
+  test('inconsistent RIFF size', () => {
     const avi = buildMjpegAvi(frames, params);
     viewOf(avi).setUint32(4, avi.length + 10, true);
-    expect(() => parseAvi(avi)).toThrow('Tamaño RIFF inconsistente');
+    expect(() => parseAvi(avi)).toThrow('Inconsistent RIFF size');
   });
 
-  test('idx1 con otra cantidad de entradas que movi', () => {
-    // Archivo internally consistente salvo por el índice: se saca la última
-    // entrada y se corrigen los dos tamaños RIFF. Es el corruption más común
-    // al hand-rollear un muxer, y tiene que detectable.
+  test('idx1 with a different number of entries than movi', () => {
+    // The file is internally consistent except for the index: remove the last
+    // entry and fix both RIFF sizes. This is the most common corruption when
+    // hand-rolling a muxer, and it must be detectable.
     const avi = buildMjpegAvi(frames, params);
     const idx1 = walkChunks(avi, 12, avi.length).find((c) => c.tag === 'idx1')!;
     viewOf(avi).setUint32(idx1.at + 4, idx1.size - 16, true);

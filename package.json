@@ -2,7 +2,7 @@
   "name": "elcoso3000",
   "module": "src/main.ts",
   "type": "module",
-  "description": "Generador de placeholders de imagen y video, offline y sin servidor.",
+  "description": "Image and video placeholder generator, offline and with no server.",
   "license": "MPL-2.0",
   "scripts": {
     "build": "bun run scripts/build.ts",

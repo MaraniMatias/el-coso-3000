@@ -1,17 +1,17 @@
 /**
- * Guardado de archivos.
+ * File saving.
  *
- * Se prefiere `showSaveFilePicker` cuando está disponible, porque permite
- * escribir el archivo a disco mientras se codifica en vez de acumular el
- * video entero en memoria. Si no está, se cae al `<a download>` de siempre.
+ * Prefer `showSaveFilePicker` when available because it writes the file to
+ * disk during encoding instead of accumulating the entire video in memory.
+ * Otherwise, fall back to the usual `<a download>`.
  */
 
 export interface SaveTarget {
-  /** Cierra el destino. En el modo picker es un no-op. */
+  /** Closes the target. A no-op in picker mode. */
   close(): Promise<void>;
-  /** Escribe un chunk. Sólo disponible en modo picker. */
+  /** Writes a chunk. Only available in picker mode. */
   write?(chunk: Uint8Array): Promise<void>;
-  /** `true` si soporta escritura incremental. */
+  /** `true` if incremental writing is supported. */
   readonly streaming: boolean;
 }
 
@@ -32,14 +32,14 @@ const PICKER_TYPES: Record<string, PickerType> = {
   'video/webm': { description: 'WebM', accept: { 'video/webm': ['.webm'] } },
   'video/x-matroska': { description: 'Matroska', accept: { 'video/x-matroska': ['.mkv'] } },
   'video/x-msvideo': { description: 'AVI (Motion JPEG)', accept: { 'video/x-msvideo': ['.avi'] } },
-  'application/zip': { description: 'ZIP de JPEG', accept: { 'application/zip': ['.zip'] } },
+  'application/zip': { description: 'JPEG ZIP', accept: { 'application/zip': ['.zip'] } },
 };
 
 /**
- * Abre un destino de escritura para el archivo pedido.
+ * Opens a write target for the requested file.
  *
- * Devuelve `null` si el usuario cancela el diálogo de guardado; eso no es un
- * error, es una cancelación.
+ * Returns `null` if the user cancels the save dialog; that is cancellation,
+ * not an error.
  */
 export async function openSaveTarget(filename: string, mimeType: string): Promise<SaveTarget | null> {
   const picker = (globalThis as {
@@ -69,7 +69,7 @@ export async function openSaveTarget(filename: string, mimeType: string): Promis
   }
 }
 
-/** Descarga un blob ya construido. Es el camino sin streaming. */
+/** Downloads an already-built blob. This is the non-streaming path. */
 export function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -79,7 +79,7 @@ export function downloadBlob(blob: Blob, filename: string): void {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  // Se libera en el siguiente tick: Safari necesita que la URL siga viva
-  // mientras el click se procesa.
+  // Release on the next tick: Safari needs the URL to stay alive while the
+  // click is processed.
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }

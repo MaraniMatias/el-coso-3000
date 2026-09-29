@@ -1,16 +1,16 @@
 /**
- * Exportadores de imagen estática: PNG, JPEG, WebP y SVG.
+ * Static image exporters: PNG, JPEG, WebP, and SVG.
  *
- * Los cuatro caminos salen del mismo `drawFrame`, así que el rástero y el
- * vector no pueden divergir. La diferencia es sólo el último tramo: los tres
- * rásteros pasan por `toBlob`, y el SVG se emite a mano reusando el layout del
- * core (`layoutDimensions` / `layoutLine`) para no reimplementar el auto-ajuste.
+ * All four paths use the same `drawFrame`, so raster and vector output cannot
+ * diverge. Only the final step differs: the three raster formats use `toBlob`,
+ * while SVG is emitted by hand using the core layout (`layoutDimensions` /
+ * `layoutLine`) to avoid reimplementing auto-fit.
  *
- * `toBlob` no expone ningún hook para escribir metadata, así que la metadata se
- * inyecta en los bytes después de codificar: chunks `tEXt` en PNG, un segmento
- * `COM` en JPEG y un chunk `XMP ` en WebP. Son las tres inyecciones
- * consecutivas, pero es el único camino que hay para cumplir el requisito de
- * que el archivo lleve los datos dentro.
+ * Since `toBlob` exposes no hook to write metadata, metadata
+ * is injected into the bytes after encoding: `tEXt` chunks in PNG, a `COM`
+ * segment in JPEG, and an `XMP ` chunk in WebP. These are three separate
+ * injections, but this is the only way to meet the requirement that the file
+ * contain its metadata.
  */
 
 import { hexToRgba } from '../core/color';
@@ -23,10 +23,10 @@ import { FONT_WEIGHT, type ExportResult, type ProgressCallback, type Spec } from
 
 export type StillImageFormat = 'png' | 'jpeg' | 'webp' | 'svg';
 
-/** Formatos donde `quality` significa algo. En PNG no tiene efecto. */
+/** Formats where `quality` has an effect. It does nothing in PNG. */
 const QUALITY_FORMATS = new Set<StillImageFormat>(['jpeg', 'webp']);
 
-/** Nombre legible para los mensajes de error. */
+/** Human-readable label for error messages. */
 const FORMAT_LABEL: Record<StillImageFormat, string> = {
   png: 'PNG',
   jpeg: 'JPEG',
@@ -35,25 +35,25 @@ const FORMAT_LABEL: Record<StillImageFormat, string> = {
 };
 
 /**
- * Opacidad de la guía de la barra. Tiene que coincidir con `TRACK_ALPHA` de
- * `draw-frame.ts`; no se exporta desde el core porque sólo la usa el pie.
+ * Opacity of the bar guide. It must match `TRACK_ALPHA` in `draw-frame.ts`;
+ * it is not exported from the core because only the footer uses it.
  */
 const TRACK_ALPHA = 0.16;
 
-/** Cualquier lienzo en el que se pueda dibujar. */
+/** Any drawable canvas. */
 type Surface = HTMLCanvasElement | OffscreenCanvas;
 
 /**
- * Bytes recién asignados. El genérico importa: `Blob` sólo acepta vistas sobre
- * un `ArrayBuffer` real, y un `Uint8Array` pelado se tipa como potencialmente
- * compartido.
+ * Newly allocated bytes. The generic matters: `Blob` only accepts views over
+ * a real `ArrayBuffer`, while a bare `Uint8Array` is typed as potentially
+ * shared.
  */
 type Bytes = Uint8Array<ArrayBuffer>;
 
-// ── Lienzo ───────────────────────────────────────────────────────────────
+// ── Canvas ────────────────────────────────────────────────────────────────
 
 function abortError(): DOMException {
-  return new DOMException('Exportación cancelada', 'AbortError');
+  return new DOMException('Export canceled', 'AbortError');
 }
 
 function checkAbort(signal?: AbortSignal): void {
@@ -68,22 +68,22 @@ function createSurface(width: number, height: number): Surface {
     canvas.height = height;
     return canvas;
   }
-  throw new Error('No hay canvas disponible: se necesita OffscreenCanvas o un documento.');
+  throw new Error('No canvas is available: OffscreenCanvas or a document is required.');
 }
 
 function context2d(surface: Surface): CanvasRenderingContext2D {
   const ctx = surface.getContext('2d');
-  if (!ctx) throw new Error('El navegador no entregó un contexto 2D para el canvas.');
-  // `OffscreenCanvasRenderingContext2D` no es `CanvasRenderingContext2D` en los
-  // tipos (le faltan `reset`, `isContextLost`, `drawFocusIfNeeded`), pero trae
-  // el mismo subconjunto de dibujo y medición que usa el core, así que para
-  // `drawFrame` y el layout son intercambiables.
+  if (!ctx) throw new Error('The browser did not provide a 2D canvas context.');
+  // In the types, `OffscreenCanvasRenderingContext2D` is not a
+  // `CanvasRenderingContext2D` (it lacks `reset`, `isContextLost`, and
+  // `drawFocusIfNeeded`), but it has the same drawing and measurement methods
+  // used by the core, so it is interchangeable for `drawFrame` and layout.
   return ctx as CanvasRenderingContext2D;
 }
 
 function releaseSurface(surface: Surface): void {
-  // Dejar la superficie en cero suelta el backing store en el acto. Esperar al
-  // GC deja varios MB de allocations de GPU vivos si el usuario exporta en ráfaga.
+  // Zeroing the surface immediately releases its backing store. Waiting for the
+  // GC leaves several MB of GPU allocations alive if the user exports repeatedly.
   surface.width = 0;
   surface.height = 0;
 }
@@ -95,16 +95,16 @@ function encodeCanvas(
   signal?: AbortSignal,
 ): Promise<Blob> {
   const type = mimeFor(format);
-  const unsupported = () => new Error(`Este navegador no puede exportar ${FORMAT_LABEL[format]}. Probá con otro formato.`);
+  const unsupported = () => new Error(`This browser cannot export ${FORMAT_LABEL[format]}. Try another format.`);
 
-  // `OffscreenCanvas` no tiene `toBlob`: expone `convertToBlob`, que es el
-  // mismo concepto con promesas en vez de callback.
+  // `OffscreenCanvas` has no `toBlob`; it exposes `convertToBlob`, the same
+  // concept using promises instead of a callback.
   if ('convertToBlob' in surface) {
     return surface
       .convertToBlob(QUALITY_FORMATS.has(format) ? { type, quality } : { type })
       .then((blob) => {
-        // `toBlob`/`convertToBlob` no observan el `AbortSignal`, así que el
-        // flag se mira a mano cuando vuelven.
+        // `toBlob`/`convertToBlob` do not observe the `AbortSignal`, so check
+        // the flag manually when they return.
         checkAbort(signal);
         if (!blob) throw unsupported();
         return blob;
@@ -122,7 +122,7 @@ function encodeCanvas(
 
 // ── CRC32 ────────────────────────────────────────────────────────────────
 
-/** Tabla del polinomio reflejado 0xEDB88320, el que exige la spec de PNG. */
+/** Table for the reflected polynomial 0xEDB88320 required by the PNG spec. */
 const CRC_TABLE = ((): Uint32Array => {
   const table = new Uint32Array(256);
   for (let i = 0; i < 256; i++) {
@@ -133,14 +133,14 @@ const CRC_TABLE = ((): Uint32Array => {
   return table;
 })();
 
-/** CRC32 (polinomio 0xEDB88320), el que exige la spec de PNG. */
+/** CRC32 (polynomial 0xEDB88320), as required by the PNG spec. */
 export function crc32(bytes: Uint8Array): number {
   let c = 0xffffffff;
   for (let i = 0; i < bytes.length; i++) c = (CRC_TABLE[(c ^ bytes[i]!) & 0xff] ?? 0) ^ (c >>> 8);
   return (c ^ 0xffffffff) >>> 0;
 }
 
-// ── Utilidades de bytes ───────────────────────────────────────────────────
+// ── Byte utilities ────────────────────────────────────────────────────────
 
 function fourCC(bytes: Uint8Array, offset: number): string {
   return String.fromCharCode(bytes[offset] ?? 0, bytes[offset + 1] ?? 0, bytes[offset + 2] ?? 0, bytes[offset + 3] ?? 0);
@@ -158,27 +158,27 @@ function matchesAt(bytes: Uint8Array, offset: number, expected: readonly number[
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] as const;
 
-/** Arma un chunk PNG: largo BE, tipo ASCII, datos, CRC32 de tipo+datos. */
+/** Builds a PNG chunk: BE length, ASCII type, data, CRC32 of type+data. */
 export function pngChunk(type: string, data: Uint8Array): Bytes {
   const out = new Uint8Array(12 + data.length);
   const view = viewOf(out);
   view.setUint32(0, data.length);
   for (let i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
   out.set(data, 8);
-  // El CRC se calcula sobre tipo + datos, nunca sobre el largo.
+  // Calculate the CRC over type + data, never the length.
   view.setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length)));
   return out;
 }
 
 /**
- * Inserta chunks ya armados justo antes del `IEND`.
+ * Inserts prebuilt chunks immediately before `IEND`.
  *
- * El `IEND` tiene que seguir siendo el último chunk: si no, los decodificadores
- * lo toman como basura y el PNG no abre. Por eso se lo busca recorriendo desde
- * el `IHDR` en vez de asumir que está al final a ciegas.
+ * `IEND` must remain the last chunk; otherwise decoders treat it as garbage and
+ * the PNG will not open. Search for it by walking from `IHDR` instead of blindly
+ * assuming it is at the end.
  */
 export function insertPngChunks(png: Uint8Array, chunks: Bytes[]): Bytes {
-  if (!matchesAt(png, 0, PNG_SIGNATURE)) throw new Error('No es un PNG: la firma no cierra.');
+  if (!matchesAt(png, 0, PNG_SIGNATURE)) throw new Error('Not a PNG: signature mismatch.');
 
   const view = viewOf(png);
   let offset = 8;
@@ -190,7 +190,7 @@ export function insertPngChunks(png: Uint8Array, chunks: Bytes[]): Bytes {
     }
     offset += 12 + view.getUint32(offset);
   }
-  if (iend < 0) throw new Error('PNG inválido: no se encontró el chunk IEND.');
+  if (iend < 0) throw new Error('Invalid PNG: IEND chunk not found.');
 
   const extra = chunks.reduce((n, c) => n + c.length, 0);
   const out = new Uint8Array(png.length + extra);
@@ -205,15 +205,15 @@ export function insertPngChunks(png: Uint8Array, chunks: Bytes[]): Bytes {
 }
 
 /**
- * `tEXt` es Latin-1 según la spec. El vocabulario de la metadata entra entero
- * en Latin-1, pero lo que se pase de 255 degrada a `?` en vez de romper el
- * chunk (un UTF-8 a medias deja basura en cualquier lector).
+ * `tEXt` is Latin-1 according to the spec. The metadata vocabulary fits in
+ * Latin-1, but values above 255 become `?` instead of corrupting the chunk
+ * (partial UTF-8 leaves garbage for every reader).
  */
 export function pngTextChunks(pairs: Array<[string, string]>): Bytes[] {
   return pairs.map(([key, value]) => {
     const data = new Uint8Array(key.length + 1 + value.length);
     for (let i = 0; i < key.length; i++) data[i] = key.charCodeAt(i);
-    data[key.length] = 0; // separador NUL entre clave y valor
+    data[key.length] = 0; // NUL separator between key and value
     for (let i = 0; i < value.length; i++) {
       const code = value.charCodeAt(i);
       data[key.length + 1 + i] = code <= 0xff ? code : 0x3f;
@@ -225,18 +225,17 @@ export function pngTextChunks(pairs: Array<[string, string]>): Bytes[] {
 // ── JPEG ──────────────────────────────────────────────────────────────────
 
 /**
- * Inserta un segmento `COM` (0xFFFE) inmediatamente después del `SOI`.
+ * Inserts a `COM` segment (0xFFFE) immediately after `SOI`.
  *
- * El campo de largo incluye sus propios 2 bytes, y todo segmento JPEG tiene que
- * ser de largo par, así que si el texto deja el largo impar se agrega un byte
- * de relleno. El `COM` va primero porque el `SOI` es lo único que el parser exige
- * ver antes de cualquier otra cosa.
+ * The length field includes its own 2 bytes, and every JPEG segment must have
+ * an even length, so add a padding byte if the text leaves an odd length. Put
+ * `COM` first because `SOI` is the only thing the parser requires before it.
  */
 export function insertJpegComment(jpeg: Uint8Array, text: string): Bytes {
-  if (!matchesAt(jpeg, 0, [0xff, 0xd8])) throw new Error('No es un JPEG: falta el marcador SOI.');
+  if (!matchesAt(jpeg, 0, [0xff, 0xd8])) throw new Error('Not a JPEG: SOI marker missing.');
 
-  // El `COM` no fija charset, así que va UTF-8, que es lo que leen las
-  // herramientas de inspección hoy.
+  // `COM` does not specify a charset, so use UTF-8, which inspection tools
+  // read today.
   const payload = new TextEncoder().encode(text);
   const pad = (2 + payload.length) % 2;
   const out = new Uint8Array(jpeg.length + 4 + payload.length + pad);
@@ -260,20 +259,20 @@ export function insertJpegComment(jpeg: Uint8Array, text: string): Bytes {
 
 // ── WebP ──────────────────────────────────────────────────────────────────
 
-/** Chunks de píxeles: EXIF/XMP van antes del primero de estos. */
+/** Pixel chunks: EXIF/XMP go before the first of these. */
 const WEBP_IMAGE_CHUNKS = new Set(['VP8 ', 'VP8L', 'ANMF']);
 
 /**
- * Inserta un chunk `XMP ` en el contenedor RIFF.
+ * Inserts an `XMP ` chunk into the RIFF container.
  *
- * Dos detalles que hacen fallar la mitad de las implementaciones: el largo de
- * RIFF (offset 4) es `archivo - 8` y hay que actualizarlo, y los payloads de
- * chunk se alinean a byte par con un byte de relleno. El chunk va antes del
- * primer chunk de imagen para respetar el orden que fija la spec de WebP.
+ * Two details that trip up many implementations: the RIFF length (offset 4) is
+ * `file - 8` and must be updated, and chunk payloads are aligned to an even
+ * byte with padding. Insert the chunk before the first image chunk to follow
+ * the order required by the WebP spec.
  */
 export function insertWebpXmp(webp: Uint8Array, payload: Uint8Array): Bytes {
   if (fourCC(webp, 0) !== 'RIFF' || fourCC(webp, 8) !== 'WEBP') {
-    throw new Error('No es un WebP: falta la cabecera RIFF/WEBP.');
+    throw new Error('Not a WebP: RIFF/WEBP header missing.');
   }
 
   const view = viewOf(webp);
@@ -294,7 +293,7 @@ export function insertWebpXmp(webp: Uint8Array, payload: Uint8Array): Bytes {
   out[cursor] = 0x58; // 'X'
   out[cursor + 1] = 0x4d; // 'M'
   out[cursor + 2] = 0x50; // 'P'
-  out[cursor + 3] = 0x20; // espacio: el fourCC es 'XMP '
+  out[cursor + 3] = 0x20; // space: the fourCC is 'XMP '
   outView.setUint32(cursor + 4, payload.length, true);
   cursor += 8;
   out.set(payload, cursor);
@@ -305,12 +304,12 @@ export function insertWebpXmp(webp: Uint8Array, payload: Uint8Array): Bytes {
   }
 
   out.set(webp.subarray(at), cursor);
-  // El largo declarado por RIFF no incluye los 8 bytes de su propia cabecera.
+  // The RIFF length excludes its own 8-byte header.
   outView.setUint32(4, out.length - 8, true);
   return out;
 }
 
-/** XMP mínimo pero válido, para que las herramientas lo lean como metadata. */
+/** Minimal but valid XMP, so tools read it as metadata. */
 function xmpPayload(meta: FileMetadata): Bytes {
   const packet = [
     '<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>',
@@ -337,12 +336,12 @@ const XML_ENTITIES: Record<string, string> = {
   "'": '&apos;',
 };
 
-/** Escapa todo lo que puede romper un nodo de texto o un atributo. */
+/** Escapes anything that could break a text node or attribute. */
 function esc(text: string): string {
   return text.replace(/[&<>"']/g, (c) => XML_ENTITIES[c] ?? c);
 }
 
-/** Los atributos no necesitan más de dos decimales, y así el archivo queda chico. */
+/** Attributes need no more than two decimals, which keeps the file small. */
 function num(n: number): string {
   return String(Math.round(n * 100) / 100);
 }
@@ -350,10 +349,10 @@ function num(n: number): string {
 // ── SVG ───────────────────────────────────────────────────────────────────
 
 /**
- * Un renglón por `<text>`, con la línea base en el mismo lugar que pondría
- * `paintText`: `blockTop + ascent` y avanzando `lineHeight`. SVG usa por
- * defecto `text-anchor: start` y línea base alfabética, así que el `center` del
- * canvas se traduce a `text-anchor="middle"` y la `y` es la línea base.
+ * One `<text>` per line, with the baseline where `paintText` would put it:
+ * `blockTop + ascent`, advancing by `lineHeight`. SVG defaults to
+ * `text-anchor: start` and an alphabetic baseline, so canvas `center` becomes
+ * `text-anchor="middle"` and `y` is the baseline.
  */
 function svgTextLines(layout: TextLayout, centerX: number, top: number, areaHeight: number, fill: string): string[] {
   const blockTop = top + (areaHeight - layout.height) / 2;
@@ -370,11 +369,11 @@ function svgTextLines(layout: TextLayout, centerX: number, top: number, areaHeig
 }
 
 /**
- * Emite el SVG completo.
+ * Emits the complete SVG.
  *
- * `measure` sólo se usa para medir texto: no se dibuja nada con él. El layout
- * sale entero del core con los mismos parámetros que usa `drawFrame`, así que
- * el SVG y el PNG dicen exactamente lo mismo.
+ * `measure` is only used to measure text; nothing is drawn with it. The layout
+ * comes entirely from the core with the same parameters as `drawFrame`, so the
+ * SVG and PNG say exactly the same thing.
  */
 export function buildSvg(spec: Spec, measure: CanvasRenderingContext2D): string {
   const { width, height } = spec;
@@ -398,7 +397,7 @@ export function buildSvg(spec: Spec, measure: CanvasRenderingContext2D): string 
   if (geo.stripHeight > 0) {
     const barTop = height - geo.barHeight;
     if (spec.showTime && geo.timeFontSize > 0) {
-      // Imagen estática: `drawFrame` sin progreso marca 0.
+      // Static image: `drawFrame` without progress uses 0.
       const clock = layoutLine(
         measure,
         timecode(0, spec.duration),
@@ -411,8 +410,8 @@ export function buildSvg(spec: Spec, measure: CanvasRenderingContext2D): string 
       }
     }
     if (spec.showProgressBar && geo.barHeight > 0) {
-      // En una imagen estática la barra va vacía: sólo se dibuja la guía, tal
-      // como hace `drawFrame` con `progress` en 0.
+      // The bar is empty in a static image: only draw the guide, as
+      // `drawFrame` does with `progress` set to 0.
       body.push(
         `<rect y="${num(barTop)}" width="${num(width)}" height="${num(geo.barHeight)}" fill="${esc(hexToRgba(spec.fg, TRACK_ALPHA))}"/>`,
       );
@@ -422,22 +421,22 @@ export function buildSvg(spec: Spec, measure: CanvasRenderingContext2D): string 
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
     `<svg xmlns="http://www.w3.org/2000/svg" width="${num(width)}" height="${num(height)}" viewBox="0 0 ${num(width)} ${num(height)}">`,
-    // `<metadata>` es lo primero que se lee del archivo, antes que el defs.
+    // `<metadata>` is the first thing read from the file, before defs.
     `<metadata>${esc(metadataAsText(buildMetadata(spec)))}</metadata>`,
-    // La fuente va embebida: el SVG tiene que seguir siendo correcto abierto en
-    // una máquina sin Montserrat. El CDATA evita tener que escapar el CSS.
+    // Embed the font so the SVG remains correct when opened on a machine
+    // without Montserrat. CDATA avoids having to escape the CSS.
     `<defs><style type="text/css"><![CDATA[${FONT_FACE_CSS}]]></style></defs>`,
     ...body,
     '</svg>',
   ].join('\n');
 }
 
-// ── Exportación ───────────────────────────────────────────────────────────
+// ── Export ────────────────────────────────────────────────────────────────
 
 /**
- * Exporta el placeholder como imagen fija.
+ * Exports the placeholder as a still image.
  *
- * @param format `png`, `jpeg`, `webp` o `svg`.
+ * @param format `png`, `jpeg`, `webp`, or `svg`.
  */
 export async function exportImage(
   spec: Spec,
@@ -451,13 +450,13 @@ export async function exportImage(
 
   const finish = (bytes: Bytes | string): ExportResult => {
     const blob = new Blob([bytes], { type: mimeType });
-    onProgress?.({ progress: 1, message: 'Listo' });
+    onProgress?.({ progress: 1, message: 'Done' });
     return { blob, filename, mimeType, size: blob.size };
   };
 
   if (format === 'svg') {
-    onProgress?.({ progress: 0, message: 'Midiendo el texto…' });
-    // El canvas del SVG sólo existe para tener un contexto con el que medir.
+    onProgress?.({ progress: 0, message: 'Measuring text…' });
+    // The SVG canvas only provides a context for measuring.
     const surface = createSurface(spec.width, spec.height);
     let svg: string;
     try {
@@ -466,17 +465,17 @@ export async function exportImage(
       releaseSurface(surface);
     }
     checkAbort(signal);
-    onProgress?.({ progress: 0.3, message: 'Escribiendo el SVG…' });
+    onProgress?.({ progress: 0.3, message: 'Writing SVG…' });
     return finish(svg);
   }
 
   const surface = createSurface(spec.width, spec.height);
   let blob: Blob;
   try {
-    onProgress?.({ progress: 0, message: 'Dibujando…' });
+    onProgress?.({ progress: 0, message: 'Drawing…' });
     drawFrame(context2d(surface), spec);
     checkAbort(signal);
-    onProgress?.({ progress: 0.3, message: `Codificando ${FORMAT_LABEL[format]}…` });
+    onProgress?.({ progress: 0.3, message: `Encoding ${FORMAT_LABEL[format]}…` });
     blob = await encodeCanvas(surface, format, spec.quality, signal);
   } finally {
     releaseSurface(surface);
@@ -484,7 +483,7 @@ export async function exportImage(
 
   const raw = new Uint8Array(await blob.arrayBuffer());
   checkAbort(signal);
-  // Acá sí hace falta la metadata: el SVG la emite `buildSvg` por su cuenta.
+  // Metadata is needed here; SVG emits it in `buildSvg`.
   const meta = buildMetadata(spec);
   switch (format) {
     case 'png':

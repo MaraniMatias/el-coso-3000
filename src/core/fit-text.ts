@@ -1,36 +1,43 @@
 import { FONT_FAMILY, FONT_WEIGHT, type Spec } from './types';
 
-/** Piso absoluto de legibilidad. Por debajo de esto el texto deja de servir. */
+/** Absolute legibility floor. Below this the text stops being useful. */
 const ABSOLUTE_FLOOR = 10;
-/** Techo: nunca más grande que esto en lado menor del canvas. */
+/** Ceiling: never bigger than this on the shortest side of the canvas. */
 const MAX_FONT_RATIO = 0.14;
 const MAX_FONT_CEILING = 220;
 const MIN_FONT_CEILING = 12;
-/** Interlineado, como múltiplo del tamaño de fuente. */
+/** Leading, as a multiple of the font size. */
 const LINE_HEIGHT_RATIO = 1.12;
-/** Padding alrededor del bloque de texto, como fracción del lado menor. */
+/** Padding around the text block, as a fraction of the shortest side. */
 const PADDING_RATIO = 0.08;
+/**
+ * The text never grows past this fraction of the shortest side, no matter how
+ * much room the canvas has. A placeholder whose dimensions fill it edge to
+ * edge stops looking like a placeholder, so the block is confined to a square
+ * box of `MIN(width, height) * MAX_SIDE_RATIO`.
+ */
+const MAX_SIDE_RATIO = 0.6;
 
 export interface TextLayout {
   fontSize: number;
   lines: string[];
   lineHeight: number;
-  /** Ancho real medido del bloque, en px. */
+  /** Measured width of the block, in px. */
   width: number;
-  /** Alto real medido del bloque, en px. */
+  /** Measured height of the block, in px. */
   height: number;
-  /** `true` si hubo que encoger por debajo del piso de legibilidad. */
+  /** `true` when it had to shrink below the legibility floor. */
   shrunk: boolean;
-  /** Altura sobre la línea base del renglón más alto. Para centrar exacto. */
+  /** Height above the baseline of the tallest line. For exact centering. */
   ascent: number;
-  /** Profundidad bajo la línea base. */
+  /** Depth below the baseline. */
   descent: number;
 }
 
 export interface FitOptions {
-  /** Multiplicador sobre el tamaño de fuente. Para el reloj, ~0.5. */
+  /** Multiplier on the font size. For the clock, ~0.5. */
   scale?: number;
-  /** Padding en px. Si se omite, se deriva de las dimensiones. */
+  /** Padding in px. When omitted, it is derived from the dimensions. */
   padding?: number;
   minFontSize?: number;
   maxFontSize?: number;
@@ -45,7 +52,7 @@ export function paddingFor(width: number, height: number): number {
   return Math.min(width, height) * PADDING_RATIO;
 }
 
-/** Mide un bloque de líneas ya compuesto. No modifica el ctx salvo por la fuente. */
+/** Measures an already composed block of lines. Only the font is touched. */
 function measureBlock(
   ctx: CanvasRenderingContext2D,
   lines: string[],
@@ -60,9 +67,9 @@ function measureBlock(
   for (const line of lines) {
     const m = ctx.measureText(line);
     width = Math.max(width, m.width);
-    // `actualBoundingBox*` da la caja real de los glifos. Se usa el máximo
-    // entre ascent y descent, no la altura de línea, para que unas minúsculas
-    // sin acentos no reserven espacio de más.
+    // `actualBoundingBox*` gives the real box of the glyphs. The max of ascent
+    // and descent is used, not the line height, so that lowercase letters
+    // without accents do not reserve more room than they need.
     ascent = Math.max(ascent, m.actualBoundingBoxAscent ?? fontSize * 0.72);
     descent = Math.max(descent, m.actualBoundingBoxDescent ?? fontSize * 0.22);
   }
@@ -75,19 +82,21 @@ function fits(ctx: CanvasRenderingContext2D, lines: string[], size: number, maxW
   return m.w <= maxW && m.h <= maxH;
 }
 
-/** Por debajo de esto no se dibuja: ya no es texto, es ruido. */
+/** Below this nothing is drawn: it is no longer text, it is noise. */
 const MIN_DRAWABLE = 6;
 
 /**
- * Mayor tamaño de fuente cuyo bloque entra en el área dada.
+ * Biggest font size whose block fits the given area.
  *
- * El ancho y el alto medidos crecen monótonamente con el tamaño, así que la
- * bisección converge al valor exacto. Devuelve `0` si no entra ni al tamaño
- * mínimo dibujable, que es la señal de "no dibujar nada".
+ * The measured width and height grow monotonically with the size, so the
+ * bisection converges on the exact value. It returns `0` if the block does not
+ * fit even at the smallest drawable size, which is the signal for "draw
+ * nothing".
  *
- * El piso de legibilidad (`minFontSize`) NO es un límite de la búsqueda: si
- * el texto entra a 20px entra perfecto, y uno a 8px vale más que no dibujar
- * nada. El piso sólo se usa después, para avisar que se encogió de más.
+ * The legibility floor (`minFontSize`) is NOT a limit of the search: if the
+ * text fits at 20px it fits perfectly, and one at 8px is better than drawing
+ * nothing. The floor is only used afterwards, to report that it shrank too
+ * much.
  */
 function searchSize(
   ctx: CanvasRenderingContext2D,
@@ -112,20 +121,44 @@ function searchSize(
 }
 
 /**
- * Compone el texto del placeholder. Por diseño sólo contiene las dimensiones.
+ * Composes the text of the placeholder. By design it only holds the dimensions.
  *
- * Se prueban varias formas y se gana la que permits el texto MÁS GRANDE. A
- * igualdad de tamaño se prefiere la de menos líneas, que se lee más limpio.
+ * Several shapes are tried and the one that allows the BIGGEST text wins, with
+ * fewer lines preferred on a tie. But a single line is kept whenever it is
+ * still readable: splitting only buys a bigger font size, and the 60% cap
+ * exists to make the text SMALLER. Two lines are worth it only when the
+ * one-line shape would fall below the legibility floor, as on a tall banner.
  */
 export function dimensionCandidates(width: number, height: number): string[][] {
   const w = String(width);
   const h = String(height);
   return [
-    [`${w} × ${h}`],   // una línea, la más legible
-    [`${w}×${h}`],     // una línea compacta, sin espacios
-    [`${w}`, `× ${h}`], // dos líneas, para formatos muy apaisados
+    [`${w} × ${h}`],   // one line, the most legible
+    [`${w}×${h}`],     // one compact line, no spaces
+    [`${w}`, `× ${h}`], // two lines, for very wide formats
     [`${w}`, `×${h}`],
   ];
+}
+
+/** Bigger font wins; on a tie, fewer lines; on a tie, narrower. */
+function beats(candidate: TextLayout, best: TextLayout): boolean {
+  return (
+    candidate.fontSize > best.fontSize + 0.01 ||
+    (Math.abs(candidate.fontSize - best.fontSize) <= 0.01 && candidate.lines.length < best.lines.length) ||
+    (Math.abs(candidate.fontSize - best.fontSize) <= 0.01 &&
+      candidate.lines.length === best.lines.length &&
+      candidate.width < best.width)
+  );
+}
+
+/**
+ * Area the dimensions may occupy: whatever the caller allows, capped to the
+ * 60% square of the shortest side. Doing the cap here means every caller
+ * gets it, and the exports and the live preview cannot disagree.
+ */
+export function textAreaFor(spec: Spec, maxW: number, maxH: number): { maxW: number; maxH: number } {
+  const side = Math.min(maxW, maxH, Math.min(spec.width, spec.height) * MAX_SIDE_RATIO);
+  return { maxW: side, maxH: side };
 }
 
 export function layoutDimensions(
@@ -139,15 +172,17 @@ export function layoutDimensions(
   const min = opts.minFontSize ?? ABSOLUTE_FLOOR;
   const max = opts.maxFontSize ?? clampMaxFont(spec.width, spec.height);
   const label = spec.label ?? `${spec.width} × ${spec.height}`;
+  const area = textAreaFor(spec, maxW, maxH);
 
-  // El label explícito manda y no se descompone.
+  // An explicit label wins and is not decomposed.
   const candidates = spec.label ? [spec.label.split('\n')] : dimensionCandidates(spec.width, spec.height);
 
   let best: TextLayout | null = null;
+  let bestSingle: TextLayout | null = null;
   for (const lines of candidates) {
-    const size = searchSize(ctx, lines, max, maxW, maxH, weight);
-    // `0` significa que ni al mínimo dibujable entra: se descarta el
-    // candidato y se prueba el siguiente.
+    const size = searchSize(ctx, lines, max, area.maxW, area.maxH, weight);
+    // `0` means it does not fit even at the smallest drawable size: the
+    // candidate is dropped and the next one is tried.
     if (size <= 0) continue;
     const m = measureBlock(ctx, lines, size, weight);
     const candidate: TextLayout = {
@@ -160,23 +195,16 @@ export function layoutDimensions(
       ascent: m.ascent,
       descent: m.descent,
     };
-    if (!best) {
-      best = candidate;
-      continue;
-    }
-    // Mayor tamaño gana; a igualdad, menos líneas; a igualdad, más simple.
-    const better =
-      candidate.fontSize > best.fontSize + 0.01 ||
-      (Math.abs(candidate.fontSize - best.fontSize) <= 0.01 && candidate.lines.length < best.lines.length) ||
-      (Math.abs(candidate.fontSize - best.fontSize) <= 0.01 &&
-        candidate.lines.length === best.lines.length &&
-        candidate.width < best.width);
-    if (better) best = candidate;
+    if (!best || beats(candidate, best)) best = candidate;
+    if (lines.length === 1 && (!bestSingle || beats(candidate, bestSingle))) bestSingle = candidate;
   }
+  // A readable single line always wins: two lines only pay off when the
+  // one-line shape ends up below the legibility floor.
+  if (bestSingle && !bestSingle.shrunk) return bestSingle;
   return best;
 }
 
-/** Una sola línea, sin descomposición. Para el reloj de la barra de progreso. */
+/** A single line, without decomposition. For the clock on the progress bar. */
 export function layoutLine(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -207,5 +235,5 @@ export function clampMaxFont(width: number, height: number): number {
   return Math.max(MIN_FONT_CEILING, Math.min(MAX_FONT_CEILING, Math.min(width, height) * MAX_FONT_RATIO));
 }
 
-export { ABSOLUTE_FLOOR, LINE_HEIGHT_RATIO, PADDING_RATIO };
+export { ABSOLUTE_FLOOR, LINE_HEIGHT_RATIO, MAX_SIDE_RATIO, PADDING_RATIO };
 export { measureBlock, applyFont };

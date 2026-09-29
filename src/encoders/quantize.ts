@@ -1,35 +1,34 @@
 /**
- * Cuantización de color por corte de la mediana (median cut).
+ * Color quantization by median cut.
  *
- * Existe una sola paleta para todo el GIF, y esa es la decisión de diseño que
- * más se nota al mirar el resultado: si cada frame se cuantiza por separado la
- * paleta parpadea de un frame al otro aunque el dibujo apenas cambie, y eso se
- * ve mucho peor que cualquier banding de color. Con una paleta global el
- * índice de un píxel significa lo mismo en todos los frames, así que el
- * movimiento es puro.
+ * There is one palette for the entire GIF, and this design choice is the most
+ * noticeable in the result: if each frame is quantized separately, the
+ * palette flickers from frame to frame even when the image barely changes,
+ * which looks much worse than any color banding. With a global palette, a
+ * pixel's index means the same thing in every frame, so motion stays clean.
  *
- * El otro motivo es de costo: indexar contra una paleta fija es una tabla de
- * búsqueda, mientras que cuantizar por frame es un árbol de decisión o una
- * búsqueda lineal por píxel, multiplicado por todos los frames.
+ * The other reason is cost: indexing against a fixed palette is a lookup,
+ * while per-frame quantization requires a decision tree or linear search per
+ * pixel, repeated for every frame.
  */
 
 export interface Palette {
-  /** Tripletas RGB pegadas, 3 bytes por color, en el orden en que las usa la GCT. */
+  /** Packed RGB triples, 3 bytes per color, in the order used by the GCT. */
   rgb: Uint8Array;
-  /** Colores reales. Puede ser menor que el tamaño de la tabla que los contiene. */
+  /** Actual colors. May be fewer than the size of the table that holds them. */
   size: number;
 }
 
-/** Un color único de la entrada y cuántas veces aparece. */
+/** A unique input color and its occurrence count. */
 interface Bucket {
   packed: number;
   count: number;
 }
 
-/** Un grupo de colores que la paleta va a representar con un único promedio. */
+/** A group of colors represented by one palette average. */
 interface Box {
   items: Bucket[];
-  /** Píxeles que representa la caja: define su peso al elegir cuál partir. */
+  /** Pixels represented by the box; determines its weight when choosing which to split. */
   pixels: number;
   rMin: number;
   rMax: number;
@@ -39,7 +38,7 @@ interface Box {
   bMax: number;
 }
 
-/** El canal 0 es el canal de la mediana, 1 el de la media, 2 el de la moda. */
+/** Channel 0 is the median channel, 1 the mean, and 2 the mode. */
 function channelOf(packed: number, channel: 0 | 1 | 2): number {
   if (channel === 0) return (packed >> 16) & 0xff;
   if (channel === 1) return (packed >> 8) & 0xff;
@@ -63,16 +62,16 @@ function makeBox(items: Bucket[]): Box {
   return box;
 }
 
-/** Largo del lado más largo de la caja. Si es 0, todos sus colores son iguales. */
+/** Length of the box's longest side. If 0, all its colors are identical. */
 function longestSide(box: Box): number {
   return Math.max(box.rMax - box.rMin, box.gMax - box.gMin, box.bMax - box.bMin);
 }
 
 /**
- * Parte la caja en dos por el canal más largo, cortando en la mediana ponderada
- * por cantidad de píxeles. Pesar importa: partir el canal más largo a la mitad
- * geométrica deja una caja con el 90% de los píxeles de la original y la
- * cuantización queda igual de mala.
+ * Splits the box along its longest channel, at the median weighted by pixel
+ * count. Weighting matters: splitting the longest channel at its geometric
+ * midpoint can leave 90% of the original pixels in one box, with no improvement
+ * in quantization.
  */
 function splitBox(box: Box): [Box, Box] {
   const rSide = box.rMax - box.rMin;
@@ -80,15 +79,15 @@ function splitBox(box: Box): [Box, Box] {
   const bSide = box.bMax - box.bMin;
   const channel: 0 | 1 | 2 = rSide >= gSide && rSide >= bSide ? 0 : gSide >= bSide ? 1 : 2;
 
-  // El desempate por `packed` es lo que hace la paleta determinista: dos
-  // colores con el mismo valor de canal podrían ordenarse de cualquier manera.
+  // Breaking ties by `packed` makes the palette deterministic: colors with the
+  // same channel value could otherwise be ordered arbitrarily.
   const sorted = box.items;
   sorted.sort((a, b) => channelOf(a.packed, channel) - channelOf(b.packed, channel) || a.packed - b.packed);
 
   const half = box.pixels / 2;
   let acc = 0;
-  // `cut` queda siempre en [1, length-1]: las dos mitades tienen que tener al
-  // menos un color o el corte no avanzaría nunca.
+  // `cut` always stays in [1, length-1]: both halves need at least one color or
+  // the split would never make progress.
   let cut = 1;
   while (cut < sorted.length - 1 && acc + sorted[cut]!.count < half) {
     acc += sorted[cut]!.count;
@@ -98,7 +97,7 @@ function splitBox(box: Box): [Box, Box] {
   return [makeBox(sorted.slice(0, cut)), makeBox(sorted.slice(cut))];
 }
 
-/** El color de la paleta es el promedio de los que representa, pesado por píxeles. */
+/** A palette color is the pixel-weighted average of the colors it represents. */
 function averageColor(items: Bucket[]): [number, number, number] {
   let r = 0;
   let g = 0;
@@ -114,18 +113,18 @@ function averageColor(items: Bucket[]): [number, number, number] {
 }
 
 /**
- * Construye una paleta de a lo sumo `maxColors` colores a partir de muestras RGB
- * empaquetadas de a 3 bytes (`RRGGBB` por tripleta).
+ * Builds a palette of at most `maxColors` colors from RGB samples packed in
+ * groups of 3 bytes (`RRGGBB` per triple).
  *
- * El corte es determinista: la misma entrada devuelve siempre la misma paleta.
+ * The split is deterministic: the same input always produces the same palette.
  */
 export function buildPalette(samples: Uint8Array, maxColors = 256): Palette {
   const limit = Math.max(1, Math.min(256, Math.floor(maxColors)));
 
-  // Histograma de colores únicos. Recorrer la entrada píxel a píxel y partir
-  // cajas de píxeles sueltos daría el mismo resultado, pero lentísimo: con
-  // 65536 muestras y unos pocos colores, recortar de antemano a colores únicos
-  // y trabajar con su peso es la diferencia entre milisegundos y segundos.
+  // Histogram of unique colors. Scanning each input pixel and splitting boxes
+  // of individual pixels would produce the same result, but much more slowly:
+  // with 65536 samples and few colors, reducing to unique colors first and
+  // using their weights makes the difference between milliseconds and seconds.
   const hist = new Map<number, number>();
   for (let i = 0; i + 2 < samples.length; i += 3) {
     const packed = (samples[i]! << 16) | (samples[i + 1]! << 8) | samples[i + 2]!;
@@ -143,16 +142,16 @@ export function buildPalette(samples: Uint8Array, maxColors = 256): Palette {
     for (let i = 0; i < boxes.length; i++) {
       const box = boxes[i]!;
       if (box.items.length < 2) continue;
-      // Partir siempre la caja más pesada es lo que reparte bien el error: una
-      // caja de dos colores casi idénticos pesa menos que una de dos colores
-      // muy distintos, y es justo la primera la que no necesita partirse.
+      // Always split the heaviest box to distribute error well: a box of two
+      // nearly identical colors weighs less than one with very different
+      // colors, and the former is the one that needs no split.
       const weight = box.pixels * longestSide(box);
       if (weight > heaviest) {
         heaviest = weight;
         pick = i;
       }
     }
-    if (pick < 0) break; // no queda ninguna caja que se pueda partir más
+    if (pick < 0) break; // no box can be split further
     const [left, right] = splitBox(boxes[pick]!);
     boxes.splice(pick, 1, left, right);
   }
@@ -168,14 +167,13 @@ export function buildPalette(samples: Uint8Array, maxColors = 256): Palette {
 }
 
 /**
- * Devuelve una función que mapea un color empaquetado (`RRGGBB` en un entero de
- * 24 bits) al índice más cercano de la paleta.
+ * Returns a function that maps a packed color (`RRGGBB` in a 24-bit integer)
+ * to the nearest palette index.
  *
- * Los resultados se cachean por color: el placeholder tiene tres o cuatro
- * colores así que la búsqueda lineal corre una vez por color y el resto de los
- * millones de píxeles es una consulta a un mapa. El antialiasing del texto
- * mete algunos colores intermedios más, pero siguen siendo pocos y se
- * repiten frame a frame.
+ * Results are cached by color: the placeholder has three or four colors, so
+ * the linear search runs once per color and the remaining millions of pixels
+ * are map lookups. Text antialiasing adds a few intermediate colors, but there
+ * are still few of them and they repeat from frame to frame.
  */
 export function createPaletteMapper(palette: Palette): (rgb: number) => number {
   const { rgb, size } = palette;
@@ -191,13 +189,13 @@ export function createPaletteMapper(palette: Palette): (rgb: number) => number {
       const dr = channelOf(packed, 0) - rgb[i * 3]!;
       const dg = channelOf(packed, 1) - rgb[i * 3 + 1]!;
       const db = channelOf(packed, 2) - rgb[i * 3 + 2]!;
-      // Distancia al cuadrado: la raíz no cambia el orden y multiplicar por
-      // tres es lo que más cara sale en un bucle que corre por píxel.
+      // Squared distance: the square root does not change the order, and
+      // multiplying by three is costly in a loop that runs per pixel.
       const dist = dr * dr + dg * dg + db * db;
       if (dist < bestDist) {
         bestDist = dist;
         bestIndex = i;
-        if (dist === 0) break; // no puede acercarse más que el color exacto
+        if (dist === 0) break; // the exact color cannot be closer
       }
     }
 

@@ -1,30 +1,30 @@
 import { APP_NAME, REPO_URL, type Spec } from './types';
 
 /**
- * Metadata que se escribe dentro de todos los archivos generados.
+ * Metadata written inside every generated file.
  *
- * Cada contenedor la expresa a su manera, así que los encoders llaman a
- * `buildMetadata` y después latraducen. El contenido no debería cambiar
- * entre formatos.
+ * Each container expresses it in its own way, so the encoders call
+ * `buildMetadata` and then translate it. The content should not change
+ * between formats.
  */
 export interface FileMetadata {
-  /** `el-coso-3000` */
+  /** `El Coso 3000` */
   software: string;
-  /** `Generado por el-coso-3000` */
+  /** `El Coso 3000` */
   comment: string;
-  /** URL del repo. */
+  /** URL of the repo. */
   source: string;
   /** `Placeholder 1920x1080` */
   title: string;
   description: string;
-  // Contexto del placeholder, útil al inspeccionar el archivo a mano.
+  // Context about the placeholder, useful when inspecting the file by hand.
   width: number;
   height: number;
   palette: string;
-  /** Paleta pastel, `#RRGGBB`, sólo imagen. */
+  /** Pastel palette, `#RRGGBB`, images only. */
   background: string;
   foreground: string;
-  /** Sólo video y formatos animados. */
+  /** Video and animated formats only. */
   duration?: string;
   fps?: string;
 }
@@ -33,12 +33,12 @@ export function buildMetadata(spec: Spec): FileMetadata {
   const dims = `${spec.width}x${spec.height}`;
   const isAnimated = spec.duration > 0;
   const description =
-    `Placeholder ${dims}. Fondo #${spec.bg}, texto #${spec.fg}, paleta ${spec.paletteName}.` +
-    (isAnimated ? ` ${spec.duration}s a ${spec.fps} fps, en bucle.` : ' Imagen estática.');
+    `Placeholder ${dims}. Background #${spec.bg}, text #${spec.fg}, palette ${spec.paletteName}.` +
+    (isAnimated ? ` ${spec.duration}s at ${spec.fps} fps, on a loop.` : ' Still image.');
 
   return {
     software: APP_NAME,
-    comment: `Generado por ${APP_NAME}`,
+    comment: APP_NAME,
     source: REPO_URL,
     title: `Placeholder ${dims}`,
     description,
@@ -51,7 +51,7 @@ export function buildMetadata(spec: Spec): FileMetadata {
   };
 }
 
-/** Bloque listo para escribir en un contenedor de texto (SVG, XMP, COM de AVI). */
+/** Block ready to write into a text container (SVG, XMP, AVI COM chunk). */
 export function metadataAsText(meta: FileMetadata): string {
   return [
     `Software: ${meta.software}`,
@@ -62,7 +62,7 @@ export function metadataAsText(meta: FileMetadata): string {
   ].join('\n');
 }
 
-/** Pares clave/valor planos, para chunks tipo `tEXt` o campos `INFO`. */
+/** Flat key/value pairs, for `tEXt` chunks or `INFO` fields. */
 export function metadataAsPairs(meta: FileMetadata): Array<[string, string]> {
   return [
     ['Software', meta.software],

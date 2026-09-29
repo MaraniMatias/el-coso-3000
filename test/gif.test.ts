@@ -1,11 +1,11 @@
 /**
- * Tests del encoder de GIF.
+ * GIF encoder tests.
  *
- * Bun no tiene DOM ni canvas, así que acá no se prueba `exportGif` de punta a
- * punta: lo que se prueba es toda la lógica pura que hay debajo. El compresor
- * se verifica decodificando su propia salida, la paleta contra la calidad de
- * una paleta al azar, y el archivo con un parser escrito acá mismo, que es la
- * única forma de saber que el GIF está bien armado y no sólo que no tira.
+ * Bun has no DOM or canvas, so `exportGif` is not tested end to end here: what
+ * is tested is all the pure logic underneath. The compressor is verified by
+ * decoding its own output, the palette against the quality of a random
+ * palette, and the file with a parser written right here, which is the only
+ * way to know the GIF is correctly assembled and not merely that it does not throw.
  */
 
 import { describe, expect, test } from 'bun:test';
@@ -16,15 +16,15 @@ import { writeGifFrame, writeGifHeader, writeGifTrailer, type GifHeader } from '
 import { ByteWriter, lzwCompress } from '../src/encoders/lzw';
 import { buildPalette, createPaletteMapper } from '../src/encoders/quantize';
 
-// ── Decoder de LZW (implementación de referencia, sólo para testear) ──────
+// ── LZW decoder (reference implementation, for testing only) ───────────────
 
-/** Junta los sub-bloques de datos LZW en un stream plano de bytes. */
+/** Joins the LZW data sub-blocks into a flat byte stream. */
 function readSubBlocks(bytes: Uint8Array, at: number): { data: Uint8Array; next: number } {
   const chunks: Uint8Array[] = [];
   let cursor = at;
   for (;;) {
     const len = bytes[cursor];
-    if (len === undefined) throw new Error('GIF truncado: sub-bloque sin largo.');
+    if (len === undefined) throw new Error('Truncated GIF: sub-block without a length.');
     cursor += 1;
     if (len === 0) break;
     chunks.push(bytes.subarray(cursor, cursor + len));
@@ -41,8 +41,8 @@ function readSubBlocks(bytes: Uint8Array, at: number): { data: Uint8Array; next:
 }
 
 /**
- * Decoder LZW de GIF. replica el crecimiento de código del codificador a
- * propósito: si el codificador se desfasara un código, el roundtrip falla acá.
+ * GIF LZW decoder. It intentionally mirrors the encoder's code growth: if the
+ * encoder gets one code out of sync, the roundtrip fails here.
  */
 function decodeLzw(bytes: Uint8Array, at: number, minCodeSize: number): { pixels: Uint8Array; next: number } {
   const { data, next } = readSubBlocks(bytes, at);
@@ -57,7 +57,7 @@ function decodeLzw(bytes: Uint8Array, at: number, minCodeSize: number): { pixels
   let bit = 0;
 
   for (;;) {
-    if (bit + codeSize > data.length * 8) throw new Error('LZW truncado: se terminó el stream antes del EOI.');
+    if (bit + codeSize > data.length * 8) throw new Error('Truncated LZW: the stream ended before the EOI.');
     let code = 0;
     for (let k = 0; k < codeSize; k++) {
       const byte = data[bit >> 3]!;
@@ -77,18 +77,18 @@ function decodeLzw(bytes: Uint8Array, at: number, minCodeSize: number): { pixels
     if (code < clearCode) {
       entry = [code];
     } else if (code < nextCode) {
-      // La entrada existe si y sólo si está por debajo de la próxima a asignar.
-      // No alcanza con "¿fue asignada alguna vez?": después de un clear la
-      // tabla arranca de cero y las entradas viejas dejan de existir. Sin esto
-      // el decoder desarma GIFs reales (verificado contra uno de ffmpeg) y
-      // acepta entradas que el encoder nunca emitió.
+      // The entry exists if and only if it is below the next one to be assigned.
+      // "Was it ever assigned?" is not enough: after a clear, the table starts
+      // over and the old entries cease to exist. Without this, the decoder
+      // mangles real GIFs (verified against one from ffmpeg) and accepts
+      // entries the encoder never emitted.
       entry = dict[code]!;
     } else if (prev !== null) {
-      // Caso KwKwK: el código es el que acaba de definirse y su primer byte es
-      // el del prefijo.
+      // KwKwK case: the code is the one just defined, and its first byte is
+      // the prefix byte.
       entry = [...prev, prev[0]!];
     } else {
-      throw new Error(`LZW inválido: código ${code} sin prefijo.`);
+      throw new Error(`Invalid LZW: code ${code} with no prefix.`);
     }
 
     for (const value of entry) out.push(value);
@@ -102,15 +102,15 @@ function decodeLzw(bytes: Uint8Array, at: number, minCodeSize: number): { pixels
 }
 
 /**
- * Cuenta cuántos códigos CLEAR emitted hay en la cadena.
+ * Counts how many CLEAR codes are emitted in the stream.
  *
- * Sirve para que un roundtrip no pase por cubrir a medias el reinicio del
- * diccionario: el bug del ancho era invisible en los casos chica y sólo
- * aparecía cuando la tabla se llenaba y había que emitir un clear en el
- * medio. Un test que dice "esto cubre el clear" tiene que poder demostrarlo.
+ * This ensures a roundtrip does not pass while only partially covering the
+ * dictionary reset: the code-width bug was invisible in small cases and only
+ * appeared when the table filled up and a clear had to be emitted midway. A
+ * test that says "this covers the clear" must be able to prove it.
  *
- * El recorrido es el mismo que el del decoder (mismo orden del clear, mismo
- * crecimiento de ancho) pero sin armar cadenas: sólo cuenta.
+ * The traversal is the same as the decoder's (same clear order, same width
+ * growth), but without building strings: it only counts.
  */
 function countClearCodes(bytes: Uint8Array, minCodeSize: number): number {
   const { data } = readSubBlocks(bytes, 0);
@@ -123,7 +123,7 @@ function countClearCodes(bytes: Uint8Array, minCodeSize: number): number {
   let clears = 0;
 
   for (;;) {
-    if (bit + codeSize > data.length * 8) throw new Error('LZW truncado al contar los clears.');
+    if (bit + codeSize > data.length * 8) throw new Error('LZW truncated while counting the clears.');
     let code = 0;
     for (let k = 0; k < codeSize; k++) {
       code |= ((data[bit >> 3]! >> (bit & 7)) & 1) << k;
@@ -145,7 +145,7 @@ function countClearCodes(bytes: Uint8Array, minCodeSize: number): number {
   }
 }
 
-// ── Parser de GIF ─────────────────────────────────────────────────────────
+// ── GIF parser ────────────────────────────────────────────────────────────
 
 interface ParsedFrame {
   delayCs: number;
@@ -175,13 +175,13 @@ const text = (bytes: Uint8Array, at: number, len: number): string =>
   new TextDecoder().decode(bytes.subarray(at, at + len));
 
 /**
- * Parser mínimo de GIF. Rechaza lo que no puede decodificar: si acepta basura,
- * el test no está probando nada.
+ * Minimal GIF parser. It rejects anything it cannot decode: if it accepts
+ * garbage, the test is not checking anything.
  */
 function parseGif(bytes: Uint8Array): ParsedGif {
   const u8 = bytes;
   const need = (n: number, at: number): void => {
-    if (at + n > u8.length) throw new Error(`GIF truncado: se pidieron ${n} bytes en ${at} y el archivo tiene ${u8.length}.`);
+    if (at + n > u8.length) throw new Error(`Truncated GIF: ${n} bytes were asked for at ${at} and the file has ${u8.length}.`);
   };
   const u16 = (at: number): number => {
     need(2, at);
@@ -190,9 +190,9 @@ function parseGif(bytes: Uint8Array): ParsedGif {
 
   need(13, 0);
   const signature = text(u8, 0, 3);
-  if (signature !== 'GIF') throw new Error(`Firma inválida: ${signature}`);
+  if (signature !== 'GIF') throw new Error(`Invalid signature: ${signature}`);
   const version = text(u8, 3, 3);
-  if (version !== '89a' && version !== '87a') throw new Error(`Versión inválida: ${version}`);
+  if (version !== '89a' && version !== '87a') throw new Error(`Invalid version: ${version}`);
 
   const width = u16(6);
   const height = u16(8);
@@ -202,9 +202,9 @@ function parseGif(bytes: Uint8Array): ParsedGif {
   let gct: Uint8Array | null = null;
   let at = 13;
   if ((packed & 0x80) !== 0) {
-    // El tamaño de la tabla está en los 3 bits bajos como exponente. Todo valor
-    // de acá es legal, pero los bytes tienen que estar: si el campo promete una
-    // tabla más grande de lo que el archivo tiene, el archivo está roto.
+    // The table size is stored in the low 3 bits as an exponent. Every value
+    // here is legal, but the bytes must be present: if the field promises a
+    // larger table than the file contains, the file is broken.
     const entries = 1 << ((packed & 0x07) + 1);
     need(entries * 3, at);
     gct = u8.slice(at, at + entries * 3);
@@ -244,7 +244,7 @@ function parseGif(bytes: Uint8Array): ParsedGif {
         need(1, at);
         const size = u8[at]!;
         need(size, at + 1);
-        if (size !== 4) throw new Error(`GCE inválido: largo ${size}.`);
+        if (size !== 4) throw new Error(`Invalid GCE: size ${size}.`);
         const gcePacked = u8[at + 1]!;
         pendingGce = {
           delayCs: (u8[at + 2]! | (u8[at + 3]! << 8)) >>> 0,
@@ -252,10 +252,10 @@ function parseGif(bytes: Uint8Array): ParsedGif {
         };
         at += 1 + size;
         need(1, at);
-        at += 1; // terminador del bloque
+        at += 1; // block terminator
       } else if (label === 0xff) {
         const { data, next } = readSubBlocks(u8, at);
-        // 11 bytes de identificación, sub-bloque de control, luego el conteo.
+        // 11 identification bytes, control sub-block, then the count.
         if (text(data, 0, 11) !== 'NETSCAPP2.0') throw new Error('Application Extension desconocida.');
         const count = data[13]! | (data[14]! << 8);
         gif.loop = count;
@@ -275,7 +275,7 @@ function parseGif(bytes: Uint8Array): ParsedGif {
       const fh = u16(at + 6);
       const imgPacked = u8[at + 8]!;
       at += 9;
-      if ((imgPacked & 0x80) !== 0) at += 3 * (1 << ((imgPacked & 0x07) + 1)); // tabla local
+      if ((imgPacked & 0x80) !== 0) at += 3 * (1 << ((imgPacked & 0x07) + 1)); // local table
       if ((imgPacked & 0x40) !== 0) throw new Error('GIF entrelazado: no se prueba.');
 
       need(1, at);
@@ -285,7 +285,7 @@ function parseGif(bytes: Uint8Array): ParsedGif {
       at = next;
 
       if (pixels.length !== fw * fh) {
-        throw new Error(`El frame declara ${fw}x${fh} pero trae ${pixels.length} píxeles.`);
+        throw new Error(`The frame declares ${fw}x${fh} but carries ${pixels.length} pixels.`);
       }
       gif.frames.push({
         delayCs: pendingGce?.delayCs ?? 0,
@@ -305,7 +305,7 @@ function parseGif(bytes: Uint8Array): ParsedGif {
   }
 }
 
-// ── Utilidades de test ────────────────────────────────────────────────────
+// ── Test utilities ────────────────────────────────────────────────────────
 
 const SPEC: Spec = {
   width: 4,
@@ -320,7 +320,7 @@ const SPEC: Spec = {
   quality: 0.9,
 };
 
-/** PRNG determinista: los tests tienen que fallar siempre igual. */
+/** Deterministic PRNG: tests must always fail the same way. */
 function rng(seed: number): () => number {
   let state = seed >>> 0;
   return () => {
@@ -337,7 +337,7 @@ function buildTestGif(options: { palette?: Uint8Array; delayCs?: number; frames?
     comment: metadataAsText(buildMetadata(SPEC)),
     loop: 0,
   };
-  // 3 colores reales + el índice 3 reservado para transparencia.
+  // 3 actual colors + index 3 reserved for transparency.
   const frames = options.frames ?? [
     Uint8Array.from([0, 0, 0, 1, 1, 1, 2, 2]),
     Uint8Array.from([1, 1, 1, 2, 2, 2, 3, 3]),
@@ -353,12 +353,12 @@ function buildTestGif(options: { palette?: Uint8Array; delayCs?: number; frames?
 // ── LZW ───────────────────────────────────────────────────────────────────
 
 /**
- * Salida de referencia de `lzwCompress` para la entrada del test "la salida es
- * byte a byte la de un encoder de referencia", en base64 (1016 bytes).
+ * Reference output from `lzwCompress` for the input in the test "the output
+ * matches a reference encoder byte for byte", in base64 (1016 bytes).
  *
- * No es una foto del output actual: son los bytes que produce ffmpeg
- * (`libavcodec/lzwenc.c`) para esa misma entrada, así que el test ata el
- * encoder a la implementación de referencia y no sólo a sí mismo.
+ * This is not a snapshot of the current output: these are the bytes produced
+ * by ffmpeg (`libavcodec/lzwenc.c`) for the same input, so the test ties the
+ * encoder to the reference implementation and not just to itself.
  */
 const REFERENCE_LZW =
   '/wADABggAACAggYFCCA4IIDDAQQFNjRIcGEAhQohXhxYsKFAhwcjUgwwIOFAkhoXeizZ8eHDjgcNDmTIEoBAlTMXFrxY' +
@@ -377,24 +377,24 @@ const REFERENCE_LZW =
   'W7pL0fn5NXz+ca82tjGCNn6KG3AR29br6ChP3tvTXSWZWVMiap2pEKMwc9VGNwrayFrygqb3JO89haqIipo0u0dx5mQR' +
   'Kp2vklSY1WRrQ9ApWWp6YyMLaW4/JHrL1xgDqxk16GQhugqruAQ209iPTEWzHEQCAgA=';
 
-describe('LZW de GIF', () => {
-  // Ojo con `rng(seed)()` dentro del arrow: ahí el PRNG se reinicia en cada
-  // elemento y la "entrada aleatoria" sale de un solo valor repetido. Por eso
-  // los generadores se crean una vez, afuera.
+describe('GIF LZW', () => {
+  // Beware of `rng(seed)()` inside the arrow: the PRNG would reset for each
+  // element and the "random input" would consist of one repeated value. That
+  // is why the generators are created once, outside.
   const random42 = rng(42);
   const cases: Array<{ name: string; data: Uint8Array; minCodeSize: number }> = [
-    { name: 'vacío', data: new Uint8Array(0), minCodeSize: 3 },
-    { name: 'un byte', data: Uint8Array.from([7]), minCodeSize: 3 },
-    { name: 'un byte con minCodeSize 8', data: Uint8Array.from([255]), minCodeSize: 8 },
-    { name: 'todos iguales', data: new Uint8Array(50_000).fill(3), minCodeSize: 3 },
-    { name: 'secuencia creciente', data: Uint8Array.from({ length: 20_000 }, (_, i) => i & 0x07), minCodeSize: 3 },
+    { name: 'empty', data: new Uint8Array(0), minCodeSize: 3 },
+    { name: 'one byte', data: Uint8Array.from([7]), minCodeSize: 3 },
+    { name: 'one byte with minCodeSize 8', data: Uint8Array.from([255]), minCodeSize: 8 },
+    { name: 'all identical', data: new Uint8Array(50_000).fill(3), minCodeSize: 3 },
+    { name: 'increasing sequence', data: Uint8Array.from({ length: 20_000 }, (_, i) => i & 0x07), minCodeSize: 3 },
     {
-      name: 'aleatorio de 100KB',
+      name: '100KB random input',
       data: Uint8Array.from({ length: 100_000 }, () => Math.floor(random42() * 256)),
       minCodeSize: 8,
     },
     {
-      name: 'frame de placeholder (pocos colores)',
+      name: 'placeholder frame (few colors)',
       data: Uint8Array.from({ length: SPEC.width * SPEC.height * 20 }, (_, i) => i % 3),
       minCodeSize: 3,
     },
@@ -402,70 +402,70 @@ describe('LZW de GIF', () => {
 
   for (const { name, data, minCodeSize } of cases) {
     test(`roundtrip: ${name}`, () => {
-      // `lzwCompress` devuelve la cadena de sub-bloques completa, así que el
-      // decoder arranca en el offset 0.
+      // `lzwCompress` returns the complete sub-block sequence, so the decoder
+      // starts at offset 0.
       const { pixels } = decodeLzw(lzwCompress(data, minCodeSize), 0, minCodeSize);
       expect(pixels).toEqual(data);
     });
   }
 
-  test('el roundtrip sobrevive al reinicio del diccionario', () => {
-    // Con minCodeSize 2 el diccionario se llena a los pocos KiB, así que el
-    // compresor tiene que emitir un clear en el medio. Si el ancho de código no
-    // se reinicia con el clear, el decoder se desfasaría y esto falla.
+  test('roundtrip survives a dictionary reset', () => {
+    // With minCodeSize 2, the dictionary fills up after a few KiB, so the
+    // compressor must emit a clear midway. If the code width is not reset with
+    // the clear, the decoder gets out of sync and this fails.
     const random = rng(7);
     const data = Uint8Array.from({ length: 200_000 }, () => Math.floor(random() * 4));
     const { pixels } = decodeLzw(lzwCompress(data, 2), 0, 2);
     expect(pixels).toEqual(data);
   });
 
-  test('rechaza un minCodeSize inválido', () => {
+  test('rejects an invalid minCodeSize', () => {
     expect(() => lzwCompress(Uint8Array.from([0]), 1)).toThrow(RangeError);
     expect(() => lzwCompress(Uint8Array.from([0]), 9)).toThrow(RangeError);
     expect(() => lzwCompress(Uint8Array.from([0]), 2.5)).toThrow(RangeError);
   });
 
-  test('comprime una entrada repetitiva', () => {
-    // Sanidad del algoritmo: si no comprime, el encoder no está comprimiendo
-    // nada aunque el roundtrip pase.
+  test('compresses repetitive input', () => {
+    // Algorithm sanity check: if it does not compress, the encoder is not
+    // compressing anything even if the roundtrip passes.
     const data = new Uint8Array(100_000).fill(1);
     const packed = lzwCompress(data, 3);
     expect(packed.length).toBeLessThan(data.length / 100);
   });
 
-  // ── Cobertura que faltaba ────────────────────────────────────────────────
+  // ── Previously missing coverage ─────────────────────────────────────────
   //
-  // Los tests de arriba pasaban con el encoder roto: el bug del crecimiento
-  // del ancho sólo desfasaba al pasar la entrada 2^codeSize, y con el decoder
-  // roto el error se cancelaba por el camino. Estos tres están elegidos para
-  // que eso no pueda pasar de nuevo.
+  // The tests above passed with the encoder broken: the code-width growth bug
+  // only caused an offset after input 2^codeSize, and with the decoder broken
+  // the error canceled itself out. These three are chosen to prevent that
+  // from happening again.
 
-  test('el roundtrip sobrevive con la tabla llena y un clear intermedio', () => {
-    // minCodeSize 2 => los códigos de datos arrancan en el 6 y la tabla se topa
-    // con el tope de 4096 al cabo de ~4090 entradas. Con esta entrada la tabla
-    // se llena de verdad y el encoder tiene que emitir un clear en el medio:
-    // es el escenario que ningún test de arriba tocaba.
+  test('roundtrip survives a full table and an intermediate clear', () => {
+    // minCodeSize 2 => data codes start at 6 and the table reaches the 4096
+    // limit after ~4090 entries. With this input the table really fills up and
+    // the encoder must emit a clear midway: none of the tests above covered
+    // this scenario.
     const random = rng(11);
     const data = Uint8Array.from({ length: 20_000 }, () => Math.floor(random() * 4));
     const packed = lzwCompress(data, 2);
 
-    // El clear intermedio tiene que estar ahí, no "por si acaso": sin esto el
-    // test pasaría igual con el encoder roto.
-    expect(countClearCodes(packed, 2)).toBe(2); // el inicial + el intermedio
-    expect(packed.length).toBeLessThan(data.length / 2); // y comprime de verdad
+    // The intermediate clear must be present, not merely "just in case":
+    // without this, the test would still pass with the encoder broken.
+    expect(countClearCodes(packed, 2)).toBe(2); // the initial one + the intermediate one
+    expect(packed.length).toBeLessThan(data.length / 2); // and it really compresses
     expect(decodeLzw(packed, 0, 2).pixels).toEqual(data);
   });
 
-  test('roundtrip con minCodeSize de 2 a 8 usando todo el rango de índices', () => {
-    // El rango de índices es 0..2^minCodeSize-1 y los datos de arriba sólo
-    // usaban 4 valores. Con minCodeSize 8 además el clear vale 256, así que
-    // cualquier índice >= 256 es un código de datos y no una raíz: es donde se
-    // rompe el tratamiento deKwKwK y de las entradas reservadas.
+  test('roundtrip with minCodeSize 2 through 8 using the full index range', () => {
+    // The index range is 0..2^minCodeSize-1, and the data above used only 4
+    // values. With minCodeSize 8, clear is also 256, so any index >= 256 is a
+    // data code and not a root: this is where handling of KwKwK and reserved
+    // entries can break.
     for (let minCodeSize = 2; minCodeSize <= 8; minCodeSize++) {
       const range = 1 << minCodeSize;
       const data = Uint8Array.from({ length: 5_000 }, (_, i) => (i * 7 + Math.floor(i / range)) % range);
-      // El generador tiene que tocar de verdad cada índice, o el test no
-      // estaría probando lo que dice probar.
+      // The generator must actually hit every index, or the test would not be
+      // testing what it claims to test.
       expect(new Set(data).size).toBe(range);
 
       const { pixels } = decodeLzw(lzwCompress(data, minCodeSize), 0, minCodeSize);
@@ -473,23 +473,23 @@ describe('LZW de GIF', () => {
     }
   });
 
-  test('la salida es byte a byte la de un encoder de referencia', () => {
-    // Vector de referencia REAL, no una foto del output actual: son los bytes
-    // que produce ffmpeg (`libavcodec/lzwenc.c`) para esta misma entrada, que
-    // se reproduce con:
+  test('output matches a reference encoder byte for byte', () => {
+    // REAL reference vector, not a snapshot of the current output: these are
+    // the bytes produced by ffmpeg (`libavcodec/lzwenc.c`) for this same input,
+    // reproduced with:
     //
     //   ffmpeg -f rawvideo -pix_fmt pal8 -s 3000x1 -i indices.bin \
     //          -frames:v 1 -gifflags 0 out.gif
     //
-    // Los pal8 entran al encoder de GIF sin reindexar, así que la entrada del
-    // comando es exactamente este array de índices.
+    // pal8 is passed to the GIF encoder without reindexing, so the command's
+    // input is exactly this array of indices.
     //
-    // La entrada cruza dos fronteras de ancho (9→10 al asignar la entrada 513
-    // y 10→11 al asignar la 1025), o sea que un cambio en la regla de
-    // crecimiento del ancho se ve en el primer byte que se desfasaría, sin
-    // necesidad de un roundtrip.
+    // The input crosses two width boundaries (9→10 when entry 513 is assigned
+    // and 10→11 when entry 1025 is assigned), so a change to the width-growth
+    // rule shows up in the first byte that would go out of sync, without
+    // needing a roundtrip.
 
-    // LCG determinista: los 3000 bytes de la entrada de referencia.
+    // Deterministic LCG: the 3000 bytes of the reference input.
     let state = 12345 >>> 0;
     const data = Uint8Array.from({ length: 3_000 }, () => {
       state = (state * 1664525 + 1013904223) >>> 0;
@@ -499,16 +499,16 @@ describe('LZW de GIF', () => {
 
     const packed = lzwCompress(data, 8);
     expect(packed).toEqual(expected);
-    // Y el vector tiene que seguir siendo el mismo caso: sin clear intermedio,
-    // porque el punto de este test es el ancho, no el reinicio.
+    // The vector must also remain the same case: no intermediate clear,
+    // because this test is about width, not reset.
     expect(countClearCodes(packed, 8)).toBe(1);
   });
 });
 
 // ── Median cut ────────────────────────────────────────────────────────────
 
-describe('cuantización por corte de la mediana', () => {
-  /** Gradiente con ruido: muchos colores distintos, así la distancia importa. */
+describe('median-cut quantization', () => {
+  /** Noisy gradient: many distinct colors, so distance matters. */
   function noisyGradient(n: number, seed: number): Uint8Array {
     const random = rng(seed);
     const out = new Uint8Array(n * 3);
@@ -520,7 +520,7 @@ describe('cuantización por corte de la mediana', () => {
     return out;
   }
 
-  /** Distancia media de cada muestra al color más cercano de la paleta. */
+  /** Mean distance from each sample to the nearest palette color. */
   function meanError(samples: Uint8Array, rgb: Uint8Array, size: number): number {
     const mapper = createPaletteMapper({ rgb, size });
     let total = 0;
@@ -534,7 +534,7 @@ describe('cuantización por corte de la mediana', () => {
     return total / (samples.length / 3);
   }
 
-  test('nunca supera el máximo pedido de colores', () => {
+  test('never exceeds the requested maximum number of colors', () => {
     const samples = noisyGradient(20_000, 1);
     for (const max of [1, 2, 4, 16, 64, 255, 256]) {
       const palette = buildPalette(samples, max);
@@ -543,14 +543,14 @@ describe('cuantización por corte de la mediana', () => {
     }
   });
 
-  test('colapsa a la cantidad real de colores cuando alcanza', () => {
-    // El caso del placeholder: cuatro colores con 256 slots disponibles.
+  test('collapses to the actual number of colors when possible', () => {
+    // The placeholder case: four colors with 256 slots available.
     const samples = new Uint8Array([0x33, 0x33, 0x33, 0xff, 0xe4, 0xe4, 0x8a, 0x8a, 0x8a, 0x00, 0x00, 0x00]);
     const palette = buildPalette(samples, 256);
     expect(palette.size).toBe(4);
   });
 
-  test('cubre la entrada mejor que una paleta al azar del mismo tamaño', () => {
+  test('covers the input better than a random palette of the same size', () => {
     const samples = noisyGradient(20_000, 2);
     const palette = buildPalette(samples, 16);
     const mine = meanError(samples, palette.rgb, palette.size);
@@ -566,7 +566,7 @@ describe('cuantización por corte de la mediana', () => {
     expect(mine).toBeLessThan(bestRandom);
   });
 
-  test('es determinista', () => {
+  test('is deterministic', () => {
     const samples = noisyGradient(5_000, 3);
     const a = buildPalette(samples, 32);
     const b = buildPalette(samples, 32);
@@ -574,13 +574,13 @@ describe('cuantización por corte de la mediana', () => {
     expect(a.size).toBe(b.size);
   });
 
-  test('no rompe con la entrada vacía', () => {
+  test('handles empty input', () => {
     const palette = buildPalette(new Uint8Array(0), 256);
     expect(palette.size).toBe(1);
     expect(palette.rgb.length).toBe(3);
   });
 
-  test('el mapper devuelve el índice exacto de un color de la paleta', () => {
+  test('the mapper returns the exact index of a palette color', () => {
     const palette = buildPalette(noisyGradient(1_000, 4), 8);
     const mapper = createPaletteMapper(palette);
     for (let i = 0; i < palette.size; i++) {
@@ -590,10 +590,10 @@ describe('cuantización por corte de la mediana', () => {
   });
 });
 
-// ── Estructura del GIF ────────────────────────────────────────────────────
+// ── GIF structure ─────────────────────────────────────────────────────────
 
-describe('estructura del GIF', () => {
-  test('la cabecera y la tabla global de colores están donde deben', () => {
+describe('GIF structure', () => {
+  test('the header and global color table are in the expected locations', () => {
     const gif = parseGif(buildTestGif());
 
     expect(gif.signature).toBe('GIF');
@@ -601,22 +601,22 @@ describe('estructura del GIF', () => {
     expect(gif.width).toBe(SPEC.width);
     expect(gif.height).toBe(SPEC.height);
     expect(gif.gct).not.toBeNull();
-    // 3 colores reales + 1 reservado para transparencia => 4 entradas.
+    // 3 actual colors + 1 reserved for transparency => 4 entries.
     expect(gif.gct!.length).toBe(4 * 3);
     expect(gif.trailer).toBe(0x3b);
   });
 
-  test('el bloque de bucle pide loop infinito', () => {
+  test('the loop block requests infinite looping', () => {
     expect(parseGif(buildTestGif()).loop).toBe(0);
   });
 
-  test('la metadata viaja en el comment extension', () => {
+  test('metadata is carried in the comment extension', () => {
     const gif = parseGif(buildTestGif());
     expect(gif.comment).toBe(metadataAsText(buildMetadata(SPEC)));
     expect(gif.comment).toContain('el-coso-3000');
   });
 
-  test('cada frame lleva su GCE con el delay y el índice transparente', () => {
+  test('each frame has a GCE with the delay and transparent index', () => {
     const gif = parseGif(buildTestGif({ delayCs: 4 }));
     expect(gif.frames).toHaveLength(2);
     for (const frame of gif.frames) {
@@ -629,7 +629,7 @@ describe('estructura del GIF', () => {
     }
   });
 
-  test('los píxeles de los frames sobreviven al LZW', () => {
+  test('frame pixels survive LZW encoding', () => {
     const frames = [
       Uint8Array.from([0, 0, 0, 1, 1, 1, 2, 2]),
       Uint8Array.from([3, 3, 1, 1, 2, 2, 0, 0]),
@@ -639,29 +639,29 @@ describe('estructura del GIF', () => {
     expect(gif.frames[1]!.pixels).toEqual(frames[1]!);
   });
 
-  test('el delay se escribe en centésimas, no en segundos', () => {
-    // 100/30 = 3.33 -> 3cs, que es lo que reproduce el archivo.
+  test('the delay is written in centiseconds, not seconds', () => {
+    // 100/30 = 3.33 -> 3cs, which is what the file reproduces.
     expect(parseGif(buildTestGif({ delayCs: 3 })).frames[0]!.delayCs).toBe(3);
     expect(parseGif(buildTestGif({ delayCs: 1 })).frames[0]!.delayCs).toBe(1);
   });
 
-  test('la GCT crece a potencia de dos y deja un índice libre para el alfa', () => {
+  test('the GCT grows to a power of two and leaves a free index for alpha', () => {
     for (const colors of [1, 2, 3, 5, 17, 255]) {
       const palette = new Uint8Array(colors * 3).fill(0x20);
       const gif = parseGif(buildTestGif({ palette }));
       const entries = gif.gct!.length / 3;
-      expect(entries & (entries - 1)).toBe(0); // potencia de dos
+      expect(entries & (entries - 1)).toBe(0); // power of two
       expect(entries).toBeGreaterThanOrEqual(colors + 1);
       expect(gif.frames[0]!.transparentIndex).toBe(colors);
       expect(gif.frames[0]!.transparentIndex!).toBeLessThan(entries);
-      // La GCT es la potencia de dos más chica que entra la paleta más el slot
-      // transparente, así que con 17 o 255 colores no puede ser de 8: el tope
-      // de 8entries aplica al caso del spec, que usa un puñado de colores.
+      // The GCT is the smallest power of two that fits the palette plus the
+      // transparent slot, so with 17 or 255 colors it cannot be 8: the limit
+      // of 8 entries applies to the spec case, which uses only a few colors.
       if (colors <= 5) expect(entries).toBeLessThanOrEqual(8);
     }
   });
 
-  test('un frame del tamaño que no es se rechaza antes de escribir', () => {
+  test('a frame with the wrong size is rejected before writing', () => {
     const header: GifHeader = {
       width: 4,
       height: 2,
@@ -669,38 +669,38 @@ describe('estructura del GIF', () => {
       comment: 'x',
       loop: 0,
     };
-    expect(() => writeGifFrame(new ByteWriter(16), header, new Uint8Array(7), 4)).toThrow(/píxeles/);
+    expect(() => writeGifFrame(new ByteWriter(16), header, new Uint8Array(7), 4)).toThrow(/pixels/);
   });
 
-  // --- Casos negativos ---
+  // --- Negative cases ---
 
-  test('rechaza un GIF truncado', () => {
+  test('rejects a truncated GIF', () => {
     const full = buildTestGif();
-    // Cortar a mitad del archivo: falta el trailer y el segundo frame quedó a medias.
-    expect(() => parseGif(full.subarray(0, full.length - 6))).toThrow(/truncado/);
-    expect(() => parseGif(full.subarray(0, 5))).toThrow(/truncado/);
-    expect(() => parseGif(new Uint8Array(0))).toThrow(/truncado/);
+    // Cut off halfway through the file: the trailer is missing and the second frame is incomplete.
+    expect(() => parseGif(full.subarray(0, full.length - 6))).toThrow(/Truncated/);
+    expect(() => parseGif(full.subarray(0, 5))).toThrow(/Truncated/);
+    expect(() => parseGif(new Uint8Array(0))).toThrow(/Truncated/);
   });
 
-  test('rechaza una GCT de tamaño incorrecto', () => {
-    // El campo de tamaño de la tabla del descriptor_screen miente: promete 256
-    // entradas y el archivo no las tiene.
+  test('rejects a GCT with the wrong size', () => {
+    // The table-size field in the screen descriptor lies: it promises 256
+    // entries, but the file does not contain them.
     const broken = buildTestGif();
     broken[10] = (broken[10]! & 0xf8) | 0x07;
-    expect(() => parseGif(broken)).toThrow(/truncado/);
+    expect(() => parseGif(broken)).toThrow(/Truncated/);
   });
 
-  test('rechaza una firma que no es GIF', () => {
+  test('rejects a signature that is not GIF', () => {
     const broken = buildTestGif();
     broken[0] = 0x89;
-    expect(() => parseGif(broken)).toThrow(/Firma inválida/);
+    expect(() => parseGif(broken)).toThrow(/Invalid signature/);
   });
 
-  test('rechaza un bloque desconocido', () => {
+  test('rejects an unknown block', () => {
     const broken = buildTestGif();
-    // 13 de cabecera + 12 de GCT + 19 del application extension
-    // (0x21, 0xFF, 0x0B, "NETSCAPP2.0", 0x03, 0x01, 2 bytes de conteo, 0x00):
-    // ahí arranca el comment extension, y 0x42 no es un marcador válido.
+    // 13-byte header + 12-byte GCT + 19-byte application extension
+    // (0x21, 0xFF, 0x0B, "NETSCAPP2.0", 0x03, 0x01, 2 count bytes, 0x00):
+    // the comment extension starts there, and 0x42 is not a valid marker.
     broken[13 + 12 + 19] = 0x42;
     expect(() => parseGif(broken)).toThrow(/desconocido/);
   });

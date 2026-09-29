@@ -1,55 +1,65 @@
 /**
- * Contratos compartidos de el-coso-3000.
+ * Contracts shared across el-coso-3000.
  *
- * Todo el app (UI, encoders, preview) habla únicamente a través de `Spec`.
- * Si cambiás la forma de `Spec`, tocá los encoders en el mismo commit.
+ * The whole app (UI, encoders, preview) talks only through `Spec`. If the
+ * shape of `Spec` changes, the encoders have to change in the same commit.
  */
 
-/** Identidad de la herramienta. Aparece en la metadata de todo archivo generado. */
-export const APP_NAME = 'el-coso-3000';
+/** Tool identity. It ends up in the metadata of every generated file. */
+export const APP_NAME = 'El Coso 3000';
+
+/** Author, as it appears in the metadata of the page. */
+export const AUTHOR = 'Matias Ezequiel Marani';
 
 /**
- * URL del repo. Cambiala acá y se propaga a la metadata de los archivos
- * generados y al pie de la UI.
+ * URL of the repo. Change it here and it propagates to the metadata of the
+ * generated files and to the footer of the UI.
  */
 export const REPO_URL = 'https://github.com/MaraniMatias/el-coso-3000';
 
-/** Tipografía embebida. Montserrat SemiBold (ver `fonts/`). */
+/** Embedded typeface. Montserrat SemiBold (see `fonts/`). */
 export const FONT_FAMILY = 'Montserrat';
 export const FONT_WEIGHT = 600;
 
-/** Formatos de imagen estática y animada. */
+/** Static and animated image formats. */
 export const IMAGE_FORMATS = ['png', 'jpeg', 'webp', 'svg', 'gif', 'mjpeg-avi', 'jpeg-zip'] as const;
 export type ImageFormat = (typeof IMAGE_FORMATS)[number];
 
-/** Contenedores de video. */
+/** Video containers. */
 export const VIDEO_FORMATS = ['mp4', 'webm', 'mov', 'mkv'] as const;
 export type VideoFormat = (typeof VIDEO_FORMATS)[number];
 
-/** Formatos queH.264 no soporta transparency / que pierden el canal alfa. */
-export const FORMATS_WITHOUT_ALPHA: ReadonlySet<ImageFormat | VideoFormat> = new Set<ImageFormat>([
+/**
+ * Everything with a timeline, which is what the video tab produces: the real
+ * containers plus the image formats that carry a timeline of their own.
+ */
+export const TIMELINE_FORMATS = ['mp4', 'webm', 'mov', 'mkv', 'gif', 'mjpeg-avi', 'jpeg-zip'] as const;
+export type TimelineFormat = (typeof TIMELINE_FORMATS)[number];
+
+/** Formats where H.264 has no alpha channel, or that drop it on the way. */
+export const FORMATS_WITHOUT_ALPHA: ReadonlySet<ImageFormat | VideoFormat> = new Set<ImageFormat | VideoFormat>([
   'jpeg',
   'mjpeg-avi',
   'jpeg-zip',
 ]);
 
-/** Niveles de conformidad WCAG 2.1 para contraste de texto normal. */
+/** WCAG 2.1 conformance levels for normal-size text. */
 export type ContrastLevel = 'AAA' | 'AA' | 'AA-large' | 'fail';
 
 export interface ContrastResult {
-  /** Ratio de contraste, ej. `7.24`. */
+  /** Contrast ratio, e.g. `7.24`. */
   ratio: number;
-  /** Ratio formateado con dos decimales, ej. `7.24:1`. */
+  /** Formatted with two decimals, e.g. `7.24:1`. */
   label: string;
   level: ContrastLevel;
 }
 
 export interface PaletteEntry {
-  /** Identificador estable, usado en el nombre del archivo. Ej. `rose`. */
+  /** Stable identifier, used in the file name. E.g. `rose`. */
   name: string;
-  /** Etiqueta legible en la UI, en español. Ej. `Rosa`. */
+  /** Readable label in the UI. E.g. `Rose`. */
   label: string;
-  /** Tono base en grados, 0–360. */
+  /** Base hue in degrees, 0-360. */
   hue: number;
   bg: string;
   fg: string;
@@ -57,38 +67,38 @@ export interface PaletteEntry {
 }
 
 /**
- * Descripción completa de un placeholder. Es la única entrada que aceptan
- * `drawFrame` y todos los encoders.
+ * Full description of a placeholder. It is the only input accepted by
+ * `drawFrame` and by every encoder.
  */
 export interface Spec {
   width: number;
   height: number;
 
-  /** Fondo, hex de 6 dígitos sin `#`, ej. `FFE4E4`. */
+  /** Background, 6-digit hex without `#`, e.g. `FFE4E4`. */
   bg: string;
-  /** Texto, hex de 6 dígitos sin `#`. */
+  /** Text, 6-digit hex without `#`. */
   fg: string;
 
-  /** Nombre de la paleta de la que salió `bg`/`fg`. `custom` si fue manual. */
+  /** Name of the palette `bg`/`fg` came from. `custom` when picked by hand. */
   paletteName: string;
 
   /**
-   * Texto del frame. Por diseño solo contiene las dimensiones.
-   * Se recalcula desde `width`/`height` salvo que se pase explícitamente.
+   * Frame text. By design it only holds the dimensions. It is recomputed from
+   * `width`/`height` unless it is passed explicitly.
    */
   label?: string;
 
   // --- Video ---
-  /** Duración en segundos. */
+  /** Duration in seconds. */
   duration: number;
-  /** FPS pedido por el usuario. */
+  /** Requested FPS. */
   fps: number;
-  /** Dibuja la barra de progreso al pie. */
+  /** Draws a progress bar at the bottom. */
   showProgressBar: boolean;
-  /** Dibuja `0:03 / 0:10` sobre la barra. */
+  /** Draws the `0:03 / 0:10` clock over the progress bar. */
   showTime: boolean;
 
-  // --- Imagen estática ---
+  // --- Still image ---
   /** JPEG/WebP quality 0..1. */
   quality: number;
 }
@@ -98,27 +108,27 @@ export type ProgressCallback = (info: ProgressInfo) => void;
 export interface ProgressInfo {
   /** 0..1. */
   progress: number;
-  /** Frames ya procesados, cuando aplica. */
+  /** Frame index, when it applies. */
   frame?: number;
-  /** Frames totales, cuando aplica. */
+  /** Total frames, when it applies. */
   totalFrames?: number;
-  /** Etiqueta lista para mostrar, ej. `Codificando 120/300`. */
+  /** Ready-to-show string, e.g. `Encoding 120/300`. */
   message?: string;
 }
 
 /**
- * Resultado de toda exportación. `filename` ya incluye las dimensiones.
+ * Result of any export. `filename` already includes the dimensions.
  */
 export interface ExportResult {
   blob: Blob;
   filename: string;
-  /** MIME type resultante. */
+  /** Resulting MIME type. */
   mimeType: string;
-  /** Bytes. */
+  /** Size in bytes. */
   size: number;
 }
 
-/** Firma común de los 7 exportadores. */
+/** Shared signature of the 7 exporters. */
 export type Exporter<TFormat extends string> = (
   spec: Spec,
   format: TFormat,

@@ -1,6 +1,6 @@
 import type { ContrastLevel, ContrastResult, PaletteEntry } from './types';
 
-/** ── Conversión de color ──────────────────────────────────────────────── */
+/** ── Color conversion ────────────────────────────────────────────────── */
 
 export function hexToRgb(hex: string): { r: number; g: number; b: number } {
   const h = hex.replace('#', '');
@@ -14,7 +14,7 @@ export function rgbToHex(r: number, g: number, b: number): string {
   return `${to(r)}${to(g)}${to(b)}`;
 }
 
-/** Normaliza cualquier hex válido a 6 dígitos en mayúsculas, sin `#`. */
+/** Normalizes any valid hex to 6 uppercase digits, without `#`. */
 export function normalizeHex(hex: string): string {
   return rgbToHex(hexToRgb(hex).r, hexToRgb(hex).g, hexToRgb(hex).b).toUpperCase();
 }
@@ -55,20 +55,20 @@ export function hslToHex(h: number, s: number, l: number): string {
   return rgbToHex(r, g, b).toUpperCase();
 }
 
-/** `rgba()` a partir de un hex, para superponer sin recalcular nada. */
+/** `rgba()` out of a hex, to overlay without recomputing anything. */
 export function hexToRgba(hex: string, alpha: number): string {
   const { r, g, b } = hexToRgb(hex);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 /**
- * Hex apto para `ctx.fillStyle` y para CSS.
+ * Hex ready for `ctx.fillStyle` and for CSS.
  *
- * Internamente los colores se guardan sin `#` porque es lo que quiere la
- * metadata de cada formato. Pero canvas y CSS **descartan en silencio** un
- * color sin `#`: `fillStyle = 'F2DEE2'` no tira error, simplemente se queda
- * con el valor anterior (negro). Por eso todo consumidor tiene que pasar por
- * acá en vez de usar el hex crudo.
+ * Internally the colors are stored without `#` because that is what the
+ * metadata of every format wants. But canvas and CSS **silently drop** a color
+ * without `#`: `fillStyle = 'F2DEE2'` does not throw, it just keeps the
+ * previous value (black). That is why every consumer has to go through here
+ * instead of using the raw hex.
  */
 export function cssColor(hex: string): string {
   return hex.startsWith('#') ? hex : `#${hex}`;
@@ -76,7 +76,7 @@ export function cssColor(hex: string): string {
 
 /** ── WCAG 2.1 ────────────────────────────────────────────────────────── */
 
-/** Luminancia relativa WCAG. `0` = negro, `1` = blanco. */
+/** WCAG relative luminance. `0` = black, `1` = white. */
 export function relativeLuminance(r: number, g: number, b: number): number {
   const lin = (v: number) => {
     const c = v / 255;
@@ -113,94 +113,75 @@ export function checkContrast(fg: string, bg: string): ContrastResult {
   };
 }
 
-// ── Generación de la paleta ─────────────────────────────────────────────
+// ── Palette generation ─────────────────────────────────────────────────
 
-/** Objetivos de la paleta pastel generada por fórmula. */
+/** Targets of the formula-generated pastel palette. */
 const BG_LIGHTNESS = 0.91;
 const BG_SATURATION = 0.42;
 const FG_SATURATION = 0.55;
 
-/** Rango de luminosidad del texto, elegido según el del fondo. */
+/** Lightness range of the text, chosen according to the background's. */
 const FG_DARK_RANGE: [number, number] = [0.05, 0.38];
 const FG_LIGHT_RANGE: [number, number] = [0.62, 0.97];
 
 /**
- * Un color por cada tramo de la rueda, en español y ordenados por tono: la
- * grilla de la interfaz los muestra como van en la rueda.
+ * One color per slice of the wheel, ordered by hue: the grid of the interface
+ * shows them the way they go around the wheel. `name` is the stable identifier
+ * that reaches the file metadata; `label` is what the UI shows.
  */
 const PALETTE_NAMES: Array<{ name: string; label: string; hue: number }> = [
-  { name: 'rose', label: 'Rosa', hue: 350 },
+  { name: 'rose', label: 'Rose', hue: 350 },
   { name: 'coral', label: 'Coral', hue: 12 },
-  { name: 'apricot', label: 'Albaricoque', hue: 28 },
-  { name: 'amber', label: 'Ámbar', hue: 45 },
-  { name: 'lime', label: 'Lima', hue: 78 },
-  { name: 'olive', label: 'Oliva', hue: 110 },
-  { name: 'sage', label: 'Salvia', hue: 140 },
-  { name: 'mint', label: 'Menta', hue: 158 },
-  { name: 'teal', label: 'Verde azulado', hue: 172 },
-  { name: 'turquoise', label: 'Turquesa', hue: 188 },
-  { name: 'sky', label: 'Cielo', hue: 200 },
-  { name: 'azure', label: 'Azul', hue: 218 },
-  { name: 'steel', label: 'Acero', hue: 234 },
-  { name: 'indigo', label: 'Índigo', hue: 250 },
-  { name: 'violet', label: 'Violeta', hue: 278 },
-  { name: 'plum', label: 'Ciruela', hue: 294 },
-  { name: 'orchid', label: 'Orquídea', hue: 310 },
-  { name: 'fuchsia', label: 'Fucsia', hue: 330 },
+  { name: 'apricot', label: 'Apricot', hue: 28 },
+  { name: 'amber', label: 'Amber', hue: 45 },
+  { name: 'lime', label: 'Lime', hue: 78 },
+  { name: 'olive', label: 'Olive', hue: 110 },
+  { name: 'sage', label: 'Sage', hue: 140 },
+  { name: 'mint', label: 'Mint', hue: 158 },
+  { name: 'teal', label: 'Teal', hue: 172 },
+  { name: 'turquoise', label: 'Turquoise', hue: 188 },
+  { name: 'sky', label: 'Sky', hue: 200 },
+  { name: 'azure', label: 'Azure', hue: 218 },
+  { name: 'steel', label: 'Steel', hue: 234 },
+  { name: 'indigo', label: 'Indigo', hue: 250 },
+  { name: 'violet', label: 'Violet', hue: 278 },
+  { name: 'plum', label: 'Plum', hue: 294 },
+  { name: 'orchid', label: 'Orchid', hue: 310 },
+  { name: 'fuchsia', label: 'Fuchsia', hue: 330 },
 ];
 
 /**
- * Para un fondo dado, busca el texto del mismo tono con el mayor contraste
- * posible dentro de la pastelidad permitida.
+ * For a given background, looks for the text of the same hue with the highest
+ * contrast possible within the allowed pastelness.
  *
- * Fondo claro → texto oscuro (busca el tono MÁS ALTO que aún llega a 4.5:1,
- * para que no se vea un negro duro). Fondo oscuro → texto claro simétrico.
+ * The SOFTEST tone that still reaches the minimum contrast is chosen: the
+ * requested criterion is that a light red carries a darker red, not a hard
+ * black.
  *
- * Búsqueda binaria sobre la luminosidad, que es monotónica respecto del
- * contraste, así que 24 iteraciones dan precisión de sobra.
- */
-/**
- * Para un fondo dado, busca el texto del mismo tono con el mayor contraste
- * posible dentro de la pastelidad permitida.
- *
- * Se elige el tono MÁS SUAVE que todavía llega al mínimo de contraste: el
- * criterio pedido es que un rojo clarito lleve un rojo más oscuro, no un
- * negro duro.
- *
- * @param minRatio contraste mínimo a garantizar. Por defecto AA (4.5:1).
- * @returns hex de 6 dígitos en mayúsculas, sin `#`.
- */
-/**
- * Para un fondo dado, busca el texto del mismo tono con el mayor contraste
- * posible dentro de la pastelidad permitida.
- *
- * Se elige el tono MÁS SUAVE que todavía llega al mínimo de contraste: el
- * criterio pedido es que un rojo clarito lleve un rojo más oscuro, no un
- * negro duro.
- *
- * @param minRatio contraste mínimo a garantizar. Por defecto AA (4.5:1).
- * @returns hex de 6 dígitos en mayúsculas, sin `#`.
+ * @param minRatio minimum contrast to guarantee. AA (4.5:1) by default.
+ * @returns 6-digit uppercase hex, without `#`.
  */
 export function deriveForeground(bg: string, minRatio = 4.5): string {
   const { r, g, b } = hexToRgb(bg);
   const { h } = rgbToHsl(r, g, b);
   const bgIsLight = luminanceOf(bg) > 0.18;
 
-  // `near` es el extremo MÁS CERCANO al fondo (menos contraste) y `far` el
-  // MÁS ALEJADO (más contraste). Con texto oscuro alejamos bajando L; con
-  // texto claro, subiéndolo.
+  // `near` is the end CLOSEST to the background (least contrast) and `far` the
+  // FURTHEST one (most contrast). With dark text it moves away by lowering L;
+  // with light text, by raising it.
   const [near, far] = bgIsLight ? [FG_DARK_RANGE[1], FG_DARK_RANGE[0]] : FG_LIGHT_RANGE;
   const hue = hslToHex;
 
-  // Si ni el extremo de más contraste alcanza el mínimo, el tono no sirve y
-  // se cae al absoluto (negro o blanco), que siempre cumple.
+  // If not even the end with the most contrast reaches the minimum, the hue is
+  // useless and it falls back to the absolute (black or white), which always
+  // complies.
   if (contrastRatio(hue(h, FG_SATURATION, far), bg) < minRatio) {
     return bgIsLight ? '000000' : 'FFFFFF';
   }
 
-  // Bisección sobre L, monotónica respecto del contraste. Empezamos en `far`
-  // (cumple, por el test de arriba) y vamos moviéndonos hacia `near` hasta
-  // justo antes de que deje de cumplir: ese es el tono más suave posible.
+  // Bisection on L, monotonic with respect to the contrast. It starts at `far`
+  // (which complies, by the test above) and moves towards `near` until just
+  // before it stops complying: that is the softest tone possible.
   let best = far;
   let a = far;
   let z = near;
@@ -216,7 +197,7 @@ export function deriveForeground(bg: string, minRatio = 4.5): string {
   return hue(h, FG_SATURATION, best);
 }
 
-/** Genera la paleta pastel completa. Determinista: mismo array, mismos colores. */
+/** Generates the full pastel palette. Deterministic: same array, same colors. */
 export function buildPalette(): PaletteEntry[] {
   return PALETTE_NAMES.map(({ name, label, hue }) => {
     const bg = hslToHex(hue, BG_SATURATION, BG_LIGHTNESS);
@@ -231,10 +212,10 @@ export function palette(): PaletteEntry[] {
   return cached;
 }
 
-/** Elige una paleta al azar. Usa el PRNG propio para no depender del estado global. */
+/** Picks a palette at random. It uses its own PRNG to avoid global state. */
 export function randomPalette(): PaletteEntry {
   const p = palette();
   const pick = p[Math.floor(Math.random() * p.length)];
-  if (!pick) throw new Error('la paleta está vacía');
+  if (!pick) throw new Error('the palette is empty');
   return pick;
 }

@@ -1,22 +1,23 @@
 /**
- * WebMCP: expone la app como herramienta para agentes de IA.
+ * WebMCP: exposes the app as a tool for AI agents.
  *
- * WebMCP es un estándar propuesto (origin trial en Chrome 149+). La página
- * tiene dos caminos y ambos son mejoras puras:
+ * WebMCP is a proposed standard (origin trial in Chrome 149+). The page has
+ * two paths and both are pure enhancements:
  *
- *  1. API declarativa — los atributos `toolname` / `tooldescription` /
- *     `toolparamdescription` que ya están en `src/index.html` sobre el
- *     formulario. El navegador convierte el form en una herramienta.
- *  2. API imperativa — `document.modelContext.registerTool`, que expone una
- *     herramienta con JSON Schema y permite devolver datos estructurados.
+ *  1. Declarative API — the `toolname` / `tooldescription` /
+ *     `toolparamdescription` attributes already in `src/index.html` on the
+ *     form. The browser turns the form into a tool.
+ *  2. Imperative API — `document.modelContext.registerTool`, which exposes a
+ *     tool with a JSON Schema and can return structured data.
  *
- * Si el navegador no soporta nada de esto, `setupWebMcp` no hace nada y la
- * app sigue funcionando igual. Por eso todo va detrás de feature detection y
- * no hay ningún error en el camino normal.
+ * If the browser supports none of this, `setupWebMcp` does nothing and the app
+ * keeps working exactly the same. That is why everything sits behind feature
+ * detection and there is no error on the normal path.
  */
 import { palette } from '../core/color';
+import { TIMELINE_FORMATS } from '../core/types';
 
-/** Subconjunto de la API que usamos. Todavía no está en los tipos del DOM. */
+/** The subset of the API we use. It is not in the DOM types yet. */
 interface ModelContext {
   registerTool(tool: {
     name: string;
@@ -27,12 +28,13 @@ interface ModelContext {
   }): Promise<void>;
 }
 
-/** Lo que la app le cede a la herramienta para que pueda operarla de verdad. */
+/** What the app hands over to the tool so it can really drive it. */
 export interface WebMcpHost {
-  /** Aplica una configuración completa a los controles. */  applySettings(input: Record<string, unknown>): { ok: true } | { ok: false; error: string };
-  /** Dispara la generación con la configuración actual. */
+  /** Applies a full configuration to the controls. */
+  applySettings(input: Record<string, unknown>): { ok: true } | { ok: false; error: string };
+  /** Triggers the generation with the current configuration. */
   generate(): Promise<string>;
-  /** Lee la configuración actual, para que el agente sepa el estado. */
+  /** Reads the current configuration, so the agent knows the state. */
   describe(): Record<string, unknown>;
 }
 
@@ -49,55 +51,55 @@ export function isWebMcpSupported(): boolean {
 const SCHEMA = {
   type: 'object',
   properties: {
-    width: { type: 'integer', minimum: 1, maximum: 4096, description: 'Ancho en píxeles.' },
-    height: { type: 'integer', minimum: 1, maximum: 4096, description: 'Alto en píxeles.' },
+    width: { type: 'integer', minimum: 1, maximum: 4096, description: 'Width in pixels.' },
+    height: { type: 'integer', minimum: 1, maximum: 4096, description: 'Height in pixels.' },
     kind: {
       type: 'string',
       enum: ['image', 'video'],
-      description: 'Generar una imagen fija o un video en bucle.',
+      description: 'Generate a still image or a looping output.',
     },
     imageFormat: {
       type: 'string',
-      enum: ['png', 'jpeg', 'webp', 'svg', 'gif', 'mjpeg-avi', 'jpeg-zip'],
-      description: 'Formato de salida para kind=image. Por defecto png.',
+      enum: ['png', 'jpeg', 'webp', 'svg'],
+      description: 'Output format for kind=image. Defaults to png.',
     },
     videoFormat: {
       type: 'string',
-      enum: ['mp4', 'webm', 'mov', 'mkv'],
-      description: 'Contenedor de salida para kind=video. Por defecto mp4.',
+      enum: [...TIMELINE_FORMATS],
+      description:
+        'Output format for kind=video, including the animated image containers. Defaults to mp4.',
     },
     palette: {
       type: 'string',
-      description:
-        'Nombre de la paleta pastel, por ejemplo "azul" o "salvia". Si además se pasa background, gana background.',
+      description: 'Name of the pastel palette, for example "azure" or "sage". If background is passed too, background wins.',
     },
     background: {
       type: 'string',
-      description: 'Color de fondo en hex de 6 dígitos, por ejemplo "F2DEE2", sin #. El texto se deriva solo.',
+      description: 'Background color as 6 hex digits, for example "F2DEE2", without #. The text is derived from it.',
     },
-    duration: { type: 'number', minimum: 1, maximum: 30, description: 'Segundos. Sólo para video.' },
-    fps: { type: 'integer', minimum: 1, maximum: 60, description: 'Cuadros por segundo. Sólo para video.' },
-    showProgressBar: { type: 'boolean', description: 'Dibujar la barra de progreso al pie. Sólo para video.' },
-    showTime: { type: 'boolean', description: 'Dibujar el reloj 0:03 / 0:10. Sólo para video.' },
+    duration: { type: 'number', minimum: 1, maximum: 30, description: 'Seconds. Video only.' },
+    fps: { type: 'integer', minimum: 1, maximum: 60, description: 'Frames per second. Video only.' },
+    showProgressBar: { type: 'boolean', description: 'Draw a progress bar at the bottom. Video only.' },
+    showTime: { type: 'boolean', description: 'Draw the 0:03 / 0:10 clock. Video only.' },
     download: {
       type: 'boolean',
-      description: 'Si es false, sólo configura y devuelve la vista previa sin descargar. Por defecto true.',
+      description: 'If false, it only configures and returns the preview without downloading. Defaults to true.',
     },
   },
 } as const;
 
 const DESCRIPTION = [
-  'Genera un placeholder de imagen o video con el color del texto derivado automáticamente',
-  'para garantizar contraste WCAG. El texto del placeholder son las dimensiones.',
-  // La lista sale de la paleta real, para que no pueda quedar desactualizada.
-  `Paletas pastel disponibles: ${palette().map((p) => p.label.toLowerCase()).join(', ')}.`,
+  'Generates an image or video placeholder with the text color derived automatically',
+  'to guarantee WCAG contrast. The text of the placeholder is the dimensions.',
+  // The list comes from the real palette, so it cannot go stale.
+  `Pastel palettes available: ${palette().map((p) => p.label.toLowerCase()).join(', ')}.`,
 ].join(' ');
 
 /**
- * Registra la herramienta imperativa. Devuelve `true` si quedó registrada.
+ * Registers the imperative tool. Returns `true` if it ended up registered.
  *
- * Los errores acá son deliberadamente silenciosos: si el navegador tiró al
- * registrar, la app tiene que seguir andando igual.
+ * The errors here are deliberately silent: if the browser threw while
+ * registering, the app still has to work.
  */
 export async function setupWebMcp(host: WebMcpHost): Promise<boolean> {
   const ctx = modelContext();
@@ -109,35 +111,35 @@ export async function setupWebMcp(host: WebMcpHost): Promise<boolean> {
       description: DESCRIPTION,
       inputSchema: SCHEMA as unknown as Record<string, unknown>,
       annotations: {
-        // Generar un archivo y dispararle una descarga al usuario SÍ es un
-        // efecto secundario, así que readOnlyHint va en false.
+        // Generating a file and triggering a download for the user IS a side
+        // effect, so readOnlyHint goes to false.
         readOnlyHint: false,
         untrustedContentHint: false,
       },
       async execute(input) {
         const applied = host.applySettings(input);
-        if (!applied.ok) return `No se pudo aplicar la configuración: ${applied.error}`;
+        if (!applied.ok) return `Could not apply the configuration: ${applied.error}`;
         if (input.download === false) {
-          return `Configurado sin descargar: ${JSON.stringify(host.describe())}`;
+          return `Configured without downloading: ${JSON.stringify(host.describe())}`;
         }
         try {
           return await host.generate();
         } catch (err) {
-          return `Falló la generación: ${err instanceof Error ? err.message : String(err)}`;
+          return `Generation failed: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     });
     return true;
   } catch {
-    // El navegador puede exponer `modelContext` y rechazar el registro, por
-    // ejemplo por la Permissions Policy. No es un error de la app.
+    // The browser can expose `modelContext` and refuse the registration, for
+    // example because of a Permissions Policy. It is not an error of the app.
     return false;
   }
 }
 
-/** Texto para el pie de la UI. */
+/** Text for the footer of the UI. */
 export function webmcpStatusText(registered: boolean): string {
   return registered
-    ? 'WebMCP activo: un agente de IA puede generar placeholders desde esta página.'
+    ? 'WebMCP active: an AI agent can generate placeholders from this page.'
     : '';
 }

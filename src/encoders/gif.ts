@@ -1,17 +1,17 @@
 /**
- * Exportador de GIF animado.
+ * Animated GIF exporter.
  *
- * Mediabunny no tiene salida GIF, así que el archivo se arma a mano. La
- * estructura es la de siempre:
+ * Mediabunny has no GIF output, so the file is assembled by hand. The
+ * structure follows the usual layout:
  *
  *   "GIF89a" · Logical Screen Descriptor · Global Color Table
  *   · Application Extension (NETSCAPP2.0, bucle infinito)
- *   · Comment Extension (la metadata del producto)
- *   · por frame: Graphic Control Extension + Image Descriptor + datos LZW
+ *   · Comment Extension (product metadata)
+ *   · per frame: Graphic Control Extension + Image Descriptor + LZW data
  *   · 0x3B
  *
- * La paleta es global y compartida por todos los frames (ver `quantize.ts`),
- * así que acá no hay nada que cuantizar: sólo indexar, comprimir y concatenar.
+ * The palette is global and shared by all frames (see `quantize.ts`),
+ * so there is nothing to quantize here: only index, compress, and concatenate.
  */
 
 import { drawFrame } from '../core/draw-frame';
@@ -21,99 +21,99 @@ import type { ExportResult, ProgressCallback, Spec } from '../core/types';
 import { ByteWriter, lzwCompress, pushUint16, writeSubBlocks, type Bytes } from './lzw';
 import { buildPalette, createPaletteMapper, type Palette } from './quantize';
 
-// ── Estructura del archivo ────────────────────────────────────────────────
+// ── File structure ────────────────────────────────────────────────────────
 
 const SIGNATURE = new TextEncoder().encode('GIF89a');
 const NETSCAPE_APP = new TextEncoder().encode('NETSCAPP2.0');
 
-/** La GCT es una potencia de 2 entre 2 y 256 entradas. */
+/** The GCT is a power of 2 between 2 and 256 entries. */
 const MAX_GCT_ENTRIES = 256;
 
 /**
- * Se piden 255 colores y no 256 porque el último índice de la tabla queda
- * reservado para el canal alfa: sin ese slot libre no hay dónde mandar los
- * píxeles transparentes. La tabla sigue siendo de 256 entradas.
+ * Request 255 colors, not 256, because the last table index is reserved for
+ * the alpha channel: without that free slot, transparent pixels have nowhere
+ * to go. The table still has 256 entries.
  */
 const MAX_PALETTE_COLORS = 255;
 
-/** Tope de muestras por frame para la paleta. A 4 colores sobra y sobra. */
+/** Per-frame sample limit for the palette. Four colors need far less. */
 const MAX_SAMPLES_PER_FRAME = 65_536;
 
-/** Cualquier lienzo en el que se pueda dibujar. */
+/** Any drawable canvas. */
 type Surface = HTMLCanvasElement | OffscreenCanvas;
 
 export interface GifHeader {
   width: number;
   height: number;
-  /** Tripletas RGB de la paleta global, de a 3 bytes. */
+  /** RGB triples from the global palette, 3 bytes each. */
   palette: Uint8Array;
-  /** Texto del Comment Extension. */
+  /** Comment Extension text. */
   comment: string;
-  /** Repeticiones del bucle. `0` es infinito, que es lo que se usa. */
+  /** Loop count. `0` means infinite, which is what we use. */
   loop: number;
 }
 
-/** Lo que hay que derivar de la paleta antes de escribir cualquier byte. */
+/** Values derived from the palette before writing any bytes. */
 interface Layout {
-  /** Índice de la GCT reservado para los píxeles transparentes. */
+  /** GCT index reserved for transparent pixels. */
   transparentIndex: number;
-  /** Entradas reales de la GCT. */
+  /** Actual GCT entries. */
   gctSize: number;
-  /** Los 3 bits bajos del descriptor: `log2(gctSize) - 1`. */
+  /** The descriptor's 3 low bits: `log2(gctSize) - 1`. */
   sizeBits: number;
-  /** Bits por índice en los datos LZW. */
+  /** Bits per index in the LZW data. */
   minCodeSize: number;
 }
 
 function layoutOf(header: GifHeader): Layout {
   const colors = header.palette.length / 3;
   if (!Number.isInteger(colors) || colors < 1) {
-    throw new Error('La paleta del GIF está vacía.');
+    throw new Error('The GIF palette is empty.');
   }
-  // El primer índice libre de la paleta es el que se reserva para transparencia.
-  // Ningún píxel opaco puede caer ahí, así que la transparencia no pisa un color.
+  // Reserve the first free palette index for transparency.
+  // No opaque pixel can use it, so transparency cannot overwrite a color.
   const transparentIndex = colors;
   let gctSize = 2;
   while (gctSize < transparentIndex + 1) gctSize *= 2;
   if (gctSize > MAX_GCT_ENTRIES) {
-    throw new Error(`La paleta no entra en una GCT: ${colors} colores.`);
+    throw new Error(`The palette does not fit in a GCT: ${colors} colors.`);
   }
   const sizeBits = Math.round(Math.log2(gctSize)) - 1;
-  // La spec no admite un código inicial de un bit: con tablas chicas el mínimo
-  // sigue siendo 2, sobrando un par de códigos que el LZW no usa para datos.
+  // The spec does not allow a one-bit initial code: small tables still need
+  // at least 2 bits, leaving a couple of codes unused by LZW data.
   const minCodeSize = Math.max(2, sizeBits + 1);
   return { transparentIndex, gctSize, sizeBits, minCodeSize };
 }
 
-/** Cabecera + GCT + bucle + comentario. Deja el archivo listo para los frames. */
+/** Header + GCT + loop + comment. Leaves the file ready for frames. */
 export function writeGifHeader(out: ByteWriter, header: GifHeader): void {
   const { width, height, palette, comment, loop } = header;
   if (width > 0xffff || height > 0xffff) {
-    throw new Error(`Dimensiones fuera del rango del GIF: ${width}x${height}.`);
+    throw new Error(`GIF dimensions out of range: ${width}x${height}.`);
   }
   const layout = layoutOf(header);
   const colors = palette.length / 3;
 
   out.pushBytes(SIGNATURE);
-  // Logical Screen Descriptor: el tamaño lógico del lienzo, en little-endian.
+  // Logical Screen Descriptor: the canvas's logical size, in little-endian.
   pushUint16(out, width);
   pushUint16(out, height);
-  // Bit 7: hay GCT. Bits 6-4: 8 bits por color primario. Bit 3: sin ordenar.
-  // Bits 2-0: log2(entradas) - 1.
+  // Bit 7: GCT present. Bits 6-4: 8 bits per primary color. Bit 3: unsorted.
+  // Bits 2-0: log2(entries) - 1.
   out.push(0x80 | 0x70 | layout.sizeBits);
-  // El fondo apunta al índice transparente: en el frame 0 los píxeles sin
-  // dibujar se ven como el fondo del visor, no como un negro inventado.
+  // Point the background to the transparent index: in frame 0, undrawn pixels
+  // show the viewer's background instead of an invented black.
   out.push(layout.transparentIndex);
-  out.push(0x00); // aspecto del píxel: sin información
+  out.push(0x00); // pixel aspect ratio: no information
 
   out.pushBytes(palette);
-  // Las entradas sobrantes de la tabla se completan en negro. Da igual cuál sea
-  // su color: ninguna se indexa, salvo la reservada para transparencia.
+  // Fill unused table entries with black. Their color does not matter: none
+  // are indexed, except for the one reserved for transparency.
   for (let i = colors * 3; i < layout.gctSize * 3; i++) out.push(0x00);
 
-  // Application Extension: NETSCAPP2.0 es el pedido de bucle que respetan todos
-  // los visores. El bloque tiene largo fijo (0x0B), el sub-bloque 0x03, y el
-  // conteo va en little-endian. `0` = infinito.
+  // Application Extension: NETSCAPP2.0 is the loop request honored by all
+  // viewers. The block has a fixed length (0x0B), the sub-block is 0x03, and
+  // the count is little-endian. `0` = infinite.
   out.push(0x21);
   out.push(0xff);
   out.push(0x0b);
@@ -123,40 +123,40 @@ export function writeGifHeader(out: ByteWriter, header: GifHeader): void {
   pushUint16(out, loop);
   out.push(0x00);
 
-  // Comment Extension: la metadata vive dentro del archivo, no en el nombre.
+  // Comment Extension: metadata lives in the file, not the filename.
   out.push(0x21);
   out.push(0xfe);
   writeSubBlocks(out, new TextEncoder().encode(comment));
 }
 
 /**
- * Un frame: Graphic Control Extension, Image Descriptor y datos LZW.
+ * One frame: Graphic Control Extension, Image Descriptor, and LZW data.
  *
- * @param indices `width * height` índices contra la paleta de la cabecera.
- * @param delayCs Duración en centésimas de segundo.
+ * @param indices `width * height` indices into the header palette.
+ * @param delayCs Duration in hundredths of a second.
  */
 export function writeGifFrame(out: ByteWriter, header: GifHeader, indices: Uint8Array, delayCs: number): void {
   const { width, height } = header;
   const layout = layoutOf(header);
   if (indices.length !== width * height) {
-    throw new Error(`El frame tiene ${indices.length} píxeles y el lienzo pide ${width * height}.`);
+    throw new Error(`The frame has ${indices.length} pixels, but the canvas requires ${width * height}.`);
   }
 
   // Graphic Control Extension.
   out.push(0x21);
   out.push(0xf9);
   out.push(0x04);
-  // Disposal 1 = "dejar el frame en pantalla". Cada frame ocupa el lienzo entero
-  // y es opaco salvo por el alfa, así que no hay nada que limpiar entre frames
-  // y dibujar encima del anterior no deja bordes. El bit bajo es el flag de
-  // transparencia.
+  // Disposal 1 = "leave the frame on screen." Each frame fills the canvas
+  // and is opaque except for alpha, so nothing needs clearing between frames
+  // and drawing over the previous one leaves no edges. The low bit is the
+  // transparency flag.
   out.push((1 << 2) | 0x01);
   pushUint16(out, delayCs);
   out.push(layout.transparentIndex);
   out.push(0x00);
 
-  // Image Descriptor: en (0,0), a tamaño completo, sin tabla local y sin
-  // interlazado. Los píxeles salen todos de la GCT.
+  // Image Descriptor: at (0,0), full size, with no local table or interlacing.
+  // All pixels come from the GCT.
   out.push(0x2c);
   pushUint16(out, 0);
   pushUint16(out, 0);
@@ -165,35 +165,34 @@ export function writeGifFrame(out: ByteWriter, header: GifHeader, indices: Uint8
   out.push(0x00);
 
   out.push(layout.minCodeSize);
-  // El LZW ya devuelve la cadena de sub-blocales con su terminador, así que acá
-  // no se vuelve a enrollar: hacerlo produciría un terminador de más.
+  // LZW already returns the sub-block chain with its terminator, so do not wrap
+  // it again here: that would add an extra terminator.
   out.pushBytes(lzwCompress(indices, layout.minCodeSize));
 }
 
-/** Cierra el archivo. */
+/** Closes the file. */
 export function writeGifTrailer(out: ByteWriter): void {
   out.push(0x3b);
 }
 
-// ── Tiempos ───────────────────────────────────────────────────────────────
+// ── Timing ────────────────────────────────────────────────────────────────
 
 export interface GifTiming {
   totalFrames: number;
-  /** Duración de cada frame en centésimas de segundo, que es la unidad del GIF. */
+  /** Duration of each frame in hundredths of a second, the GIF unit. */
   delayCs: number;
-  /** FPS que realmente sale del delay, que no suele ser el pedido. */
+  /** FPS implied by the delay, which often differs from the requested value. */
   effectiveFps: number;
 }
 
 /**
- * Traduce duración y FPS pedidos a los tiempos del GIF.
+ * Converts the requested duration and FPS to GIF timing.
  *
- * El delay va en centésimas de segundo, así que el FPS queda cuantizado a
- * `100 / delayCs`: pedir 30fps produce 3cs y el archivo se reproduce a
- * 33.33fps. No es un bug, es lo que el formato permite, pero como el archivo no
- * guarda el FPS hay que al menos decirlo en el nombre y en el progreso. Un
- * delay de 0 significa "reproducir lo más rápido posible" en varios visores, así
- * que por encima de 100fps se fuerza 1cs.
+ * The delay is in hundredths of a second, so FPS is quantized to
+ * `100 / delayCs`: requesting 30fps gives 3cs and the file plays at
+ * 33.33fps. This is a format limitation, not a bug, but since the file does not
+ * store FPS, at least report it in the filename and progress. A delay of 0
+ * means "play as fast as possible" in some viewers, so values above 100fps use 1cs.
  */
 export function gifTiming(fps: number, duration: number): GifTiming {
   const totalFrames = Math.max(1, Math.round(duration * fps));
@@ -201,10 +200,10 @@ export function gifTiming(fps: number, duration: number): GifTiming {
   return { totalFrames, delayCs, effectiveFps: 100 / delayCs };
 }
 
-// ── Lienzo ────────────────────────────────────────────────────────────────
+// ── Canvas ────────────────────────────────────────────────────────────────
 
 function abortError(): DOMException {
-  return new DOMException('Exportación cancelada', 'AbortError');
+  return new DOMException('Export canceled', 'AbortError');
 }
 
 function checkAbort(signal?: AbortSignal): void {
@@ -219,39 +218,38 @@ function createSurface(width: number, height: number): Surface {
     canvas.height = height;
     return canvas;
   }
-  throw new Error('No hay canvas disponible: se necesita OffscreenCanvas o un documento.');
+  throw new Error('No canvas is available: OffscreenCanvas or a document is required.');
 }
 
 function context2d(surface: Surface): CanvasRenderingContext2D {
   const ctx = surface.getContext('2d');
-  if (!ctx) throw new Error('El navegador no entregó un contexto 2D para el canvas.');
-  // `OffscreenCanvasRenderingContext2D` no es `CanvasRenderingContext2D` en los
-  // tipos (le faltan `reset`, `isContextLost`, `drawFocusIfNeeded`), pero trae
-  // el mismo subconjunto de dibujo y medición que usa el core, así que para
-  // `drawFrame` son intercambiables.
+  if (!ctx) throw new Error('The browser did not provide a 2D canvas context.');
+  // In the types, `OffscreenCanvasRenderingContext2D` is not a
+  // `CanvasRenderingContext2D` (it lacks `reset`, `isContextLost`, and
+  // `drawFocusIfNeeded`), but it has the same drawing and measurement methods
+  // used by the core, so they are interchangeable for `drawFrame`.
   return ctx as CanvasRenderingContext2D;
 }
 
 function releaseSurface(surface: Surface): void {
-  // Dejar la superficie en cero suelta el backing store en el acto. Sin esto,
-  // exportar un GIF de 1080p deja varios MB de memoria de GPU vivos hasta que
-  // corra el GC.
+  // Zeroing the surface immediately releases its backing store. Otherwise,
+  // exporting a 1080p GIF leaves several MB of GPU memory alive until the GC runs.
   surface.width = 0;
   surface.height = 0;
 }
 
-/** Cede el control al event loop. Sin esto el `AbortSignal` no se dispara nunca. */
+/** Yields to the event loop; otherwise the `AbortSignal` never fires. */
 function yieldToEventLoop(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 /**
- * Muestrea unos pocos frames para construir la paleta global.
+ * Samples a few frames to build the global palette.
  *
- * Se toman el primero, uno del medio y el último: en un placeholder animado lo
- * único que cambia entre frames es la barra de progreso y el reloj, así que con
- * esos tres ya están todos los colores que van a aparecer. Muestrear todos los
- * frames para la paleta sería trabajo tirado: la paleta es la misma.
+ * Take the first, middle, and last frames: in an animated placeholder, only the
+ * progress bar and clock change between frames, so these three contain every
+ * color that will appear. Sampling every frame for the palette would be wasted
+ * work because the palette is the same.
  */
 function samplePalette(ctx: CanvasRenderingContext2D, spec: Spec, totalFrames: number): Uint8Array {
   const picks = [...new Set([0, Math.floor(totalFrames / 2), totalFrames - 1])];
@@ -265,8 +263,8 @@ function samplePalette(ctx: CanvasRenderingContext2D, spec: Spec, totalFrames: n
     const { data } = ctx.getImageData(0, 0, spec.width, spec.height);
     for (let p = 0; p < pixels; p += stride) {
       const o = p * 4;
-      // El RGB de un píxel totalmente transparente no es un color que exista en
-      // la imagen, así que no entra a la paleta.
+      // A fully transparent pixel's RGB is not a color in the image, so it does
+      // not belong in the palette.
       if ((data[o + 3] ?? 0) === 0) continue;
       out[at++] = data[o]!;
       out[at++] = data[o + 1]!;
@@ -276,13 +274,13 @@ function samplePalette(ctx: CanvasRenderingContext2D, spec: Spec, totalFrames: n
   return out.subarray(0, at);
 }
 
-// ── Exportación ───────────────────────────────────────────────────────────
+// ── Export ────────────────────────────────────────────────────────────────
 
 /**
- * Exporta el placeholder como GIF animado.
+ * Exports the placeholder as an animated GIF.
  *
- * @param onProgress Recibe el avance por frame.
- * @param signal Cancelación. Lanza una `DOMException` `AbortError`.
+ * @param onProgress Receives per-frame progress.
+ * @param signal Cancellation. Throws a `DOMException` `AbortError`.
  */
 export async function exportGif(
   spec: Spec,
@@ -297,13 +295,12 @@ export async function exportGif(
     width: spec.width,
     height: spec.height,
     format: 'gif',
-    // Con duración 0 el GIF es un loop de un solo frame, que es un caso
-    // legítimo: el archivo tiene que nombrarse sin un `-0s` que parece un
-    // video mal configurado.
+    // With duration 0, the GIF is a valid one-frame loop. Omit `-0s` from the
+    // filename so it does not look like a misconfigured video.
     fps: spec.duration > 0 ? spec.fps : undefined,
     duration: spec.duration > 0 ? spec.duration : undefined,
-    // El nombre lleva el FPS real cuando difiere del pedido: es el único lugar
-    // del archivo donde queda anotado a qué velocidad se reproduce.
+    // Include actual FPS in the filename when it differs from the requested
+    // value: it is the only place in the file that records playback speed.
     effectiveFps: spec.duration > 0 ? effectiveFps : undefined,
   });
   const pixels = spec.width * spec.height;
@@ -314,7 +311,7 @@ export async function exportGif(
   try {
     const ctx = context2d(surface);
 
-    onProgress?.({ progress: 0, message: 'Midiendo los colores…' });
+    onProgress?.({ progress: 0, message: 'Sampling colors…' });
     const palette: Palette = buildPalette(samplePalette(ctx, spec, totalFrames), MAX_PALETTE_COLORS);
     checkAbort(signal);
 
@@ -325,8 +322,8 @@ export async function exportGif(
       comment: metadataAsText(buildMetadata(spec)),
       loop: 0,
     };
-    // `writeGifHeader` reserva el índice `palette.size` para transparencia, que
-    // es el primer slot que ningún color opaco puede ocupar.
+    // `writeGifHeader` reserves index `palette.size` for transparency, the first
+    // slot that no opaque color can use.
     const toIndex = createPaletteMapper(palette);
     const transparentIndex = palette.size;
     const indices = new Uint8Array(pixels);
@@ -349,10 +346,10 @@ export async function exportGif(
         progress: (frame + 1) / totalFrames,
         frame: frame + 1,
         totalFrames,
-        message: `Codificando ${frame + 1}/${totalFrames}`,
+        message: `Encoding ${frame + 1}/${totalFrames}`,
       });
-      // Sin ceder el event loop el bucle de frames bloquea la interfaz y la
-      // cancelación no llega a dispararse nunca.
+      // Without yielding to the event loop, the frame loop blocks the UI and
+      // cancellation never fires.
       await yieldToEventLoop();
     }
 
@@ -366,7 +363,7 @@ export async function exportGif(
   const blob = new Blob([bytes], { type: mimeType });
   onProgress?.({
     progress: 1,
-    message: `Listo: ${trimNumber(effectiveFps)} fps reales (delay de ${delayCs} cs)`,
+    message: `Done: ${trimNumber(effectiveFps)} actual fps (${delayCs} cs delay)`,
   });
   return { blob, filename, mimeType, size: blob.size };
 }

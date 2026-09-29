@@ -2,13 +2,13 @@ import { cssColor, hexToRgba } from './color';
 import { applyFont, clampMaxFont, layoutDimensions, layoutLine, paddingFor, type TextLayout } from './fit-text';
 import { FONT_WEIGHT, type Spec } from './types';
 
-/** Franja reservada al pie para la barra de progreso y el reloj. */
+/** Strip reserved at the bottom for the progress bar and the clock. */
 export interface FrameGeometry {
-  /** Alto de la barra, en px. */
+  /** Height of the bar, in px. */
   barHeight: number;
-  /** Tamaño de fuente del reloj, en px. */
+  /** Font size of the clock, in px. */
   timeFontSize: number;
-  /** Alto total reservado al pie, en px. Cero si no hay barra. */
+  /** Total height reserved at the bottom, in px. Zero when there is no bar. */
   stripHeight: number;
 }
 
@@ -18,12 +18,12 @@ const BAR_MAX = 12;
 const TIME_RATIO = 0.035;
 const TIME_MIN = 9;
 const TIME_MAX = 22;
-/** Opacidad de la guía de la barra, para que se lea sin competir. */
+/** Opacity of the bar track, so it reads without competing. */
 const TRACK_ALPHA = 0.16;
 
 /**
- * Geometría de la franja inferior. No depende del tamaño de las dimensiones,
- * así que no hay circularidad al calcular el centro del texto.
+ * Geometry of the bottom strip. It does not depend on the size of the
+ * dimensions, so there is no circularity when centering the text.
  */
 export function frameGeometry(spec: Spec): FrameGeometry {
   const showBar = spec.showProgressBar;
@@ -35,12 +35,12 @@ export function frameGeometry(spec: Spec): FrameGeometry {
   const timeFontSize = showTime
     ? Math.round(Math.max(TIME_MIN, Math.min(TIME_MAX, Math.min(spec.width, spec.height) * TIME_RATIO)))
     : 0;
-  // El reloj necesita su alto de línea más un pequeño respiro sobre la barra.
+  // The clock needs its line height plus a small breather over the bar.
   const timeBlock = timeFontSize > 0 ? timeFontSize * 1.5 : 0;
   return { barHeight, timeFontSize, stripHeight: barHeight + timeBlock };
 }
 
-/** `0:03`, con los minutos sin cero inicial y los segundos siempre con dos. */
+/** `0:03`, with minutes without a leading zero and seconds always with two. */
 export function formatClock(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));
   const m = Math.floor(s / 60);
@@ -52,7 +52,7 @@ export function timecode(current: number, total: number): string {
   return `${formatClock(current)} / ${formatClock(total)}`;
 }
 
-/** Centra un bloque de texto ya medido dentro de un área vertical. */
+/** Centers an already measured text block inside a vertical area. */
 function paintText(
   ctx: CanvasRenderingContext2D,
   layout: TextLayout,
@@ -73,11 +73,11 @@ function paintText(
 }
 
 /**
- * Dibuja un frame completo. Es el único camino de render del proyecto: lo
- * usan el preview en vivo, los exportadores de imagen, el GIF, el MJPEG y el
- * video. Si esto cambia, cambia todo junto.
+ * Draws a full frame. It is the only render path of the project: the live
+ * preview, the image exporters, the GIF, the MJPEG and the video all use it.
+ * If this changes, everything changes with it.
  *
- * @param progress avance 0..1 de la barra. `undefined` la deja vacía.
+ * @param progress bar progress 0..1. `undefined` leaves it empty.
  */
 export function drawFrame(ctx: CanvasRenderingContext2D, spec: Spec, progress?: number): void {
   const { width, height } = spec;
@@ -91,7 +91,7 @@ export function drawFrame(ctx: CanvasRenderingContext2D, spec: Spec, progress?: 
   const contentHeight = height - geo.stripHeight;
   const pad = paddingFor(width, height);
 
-  // Dimensiones, centradas en el área que sobra arriba de la franja.
+  // Dimensions, centered in the area left above the strip.
   const dims = layoutDimensions(
     ctx,
     spec,
@@ -123,7 +123,7 @@ export function drawFrame(ctx: CanvasRenderingContext2D, spec: Spec, progress?: 
     }
 
     if (spec.showProgressBar && geo.barHeight > 0) {
-      // Guía: presente pero discreta, para que la barra se lea como progreso.
+      // Track: present but discreet, so the bar reads as progress.
       ctx.fillStyle = hexToRgba(spec.fg, TRACK_ALPHA);
       ctx.fillRect(0, barTop, width, geo.barHeight);
       const filled = Math.round(width * Math.max(0, Math.min(1, progress ?? 0)));
@@ -138,9 +138,9 @@ export function drawFrame(ctx: CanvasRenderingContext2D, spec: Spec, progress?: 
 }
 
 /**
- * Precalcula el layout de las dimensiones una sola vez por exportación.
- * Los exportadores de video generan cientos de frames con el mismo texto y
- * sin esto se estaría midiendo texto miles de veces.
+ * Precomputes the layout of the dimensions once per export. The video
+ * exporters generate hundreds of frames with the same text, and without this
+ * the text would be measured thousands of times.
  */
 export function makeFrameRenderer(spec: Spec): (ctx: CanvasRenderingContext2D, progress?: number) => void {
   return (ctx, progress) => drawFrame(ctx, spec, progress);

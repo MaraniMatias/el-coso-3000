@@ -1,13 +1,12 @@
 /**
- * Montserrat SemiBold embebida.
+ * Embedded Montserrat SemiBold.
  *
- * El archivo se genera desde `fonts/Montserrat-SemiBold-latin.woff2` con
- * `bun run build` y queda en `src/core/font-data.ts`. No editar a mano.
+ * The file is generated from `fonts/Montserrat-SemiBold-latin.woff2` by
+ * `bun run build` and ends up in `src/core/font-data.ts`. Do not edit by hand.
  *
- * Va embebida y no enlazada a Google Fonts a propósito: la app tiene que
- * abrir sin red, y además el SVG exportado lleva la fuente dentro así que
- * sigue siendo legible aunque lo abras en un editor que no tenga la fuente
- * instalada.
+ * It is embedded rather than linked to Google Fonts on purpose: the app must
+ * open without a network connection, and the exported SVG includes the font so
+ * it remains readable in an editor without the font installed.
  */
 
 import { FONT_FAMILY, FONT_WEIGHT } from './types';
@@ -16,10 +15,10 @@ import { FONT_BASE64 } from './font-data';
 export const FONT_MIME = 'font/woff2';
 export const FONT_STACK = `"${FONT_FAMILY}", system-ui, -apple-system, "Segoe UI", sans-serif`;
 
-/** Data URL lista para un `@font-face`. */
+/** Data URL ready for an `@font-face`. */
 export const FONT_DATA_URL = `data:${FONT_MIME};base64,${FONT_BASE64}`;
 
-/** El CSS del `@font-face`. Se inyecta en la página y también en el SVG. */
+/** The `@font-face` CSS, injected into the page and the SVG. */
 export const FONT_FACE_CSS = `@font-face {
   font-family: "${FONT_FAMILY}";
   font-style: normal;
@@ -29,17 +28,16 @@ export const FONT_FACE_CSS = `@font-face {
 }`;
 
 /**
- * Registra la fuente y espera a que esté lista.
+ * Registers the font and waits for it to be ready.
  *
- * Importante: sin esto, `measureText` mide con la tipografía de respaldo y
- * todos los cálculos de auto-ajuste dan un tamaño equivocado. Hay que llamar
- * a esto una vez, antes del primer render.
+ * Without this, `measureText` uses the fallback font and all auto-fit
+ * calculations get the wrong size. Call this once, before the first render.
  */
 export async function ensureFontLoaded(): Promise<void> {
   if (typeof document === 'undefined' || !('fonts' in document)) return;
   const faces = document.fonts as FontFaceSet;
-  // `block` en font-display hace que el documento espere en vez de pintar con
-  // el fallback, que es justo lo que queremos para no medir dos veces.
+  // `block` in font-display makes the document wait instead of painting with
+  // the fallback, avoiding a second measurement.
   await faces.load(`${FONT_WEIGHT} 100px "${FONT_FAMILY}"`);
   await faces.ready;
 }

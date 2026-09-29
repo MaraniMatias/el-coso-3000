@@ -1,6 +1,6 @@
-/* el-coso-3000 — hoja de estilos única, sin framework.
-   Todo depende de custom properties para que el tema claro y oscuro
-   compartan la misma estructura. */
+/* el-coso-3000 — one single stylesheet, no framework.
+   Everything goes through custom properties, so the light and the dark themes
+   share the same structure. */
 
 :root {
   /* Tono y saturación de la paleta elegida. La app los pisa sobre el `:root`
@@ -46,10 +46,10 @@
 
 * { box-sizing: border-box; }
 
-/* `.group`, `.field` y `.choices label` llevan `display: flex` o `grid`, que
-   pisa al `[hidden] { display: none }` que viene por defecto en el navegador.
-   Sin esto, ocultar una sección con `el.hidden = true` no la oculta: se sigue
-   viendo. El `!important` es la forma canónica de arreglarlo. */
+/* `.group`, `.field` and `.choices label` set `display: flex` or `grid`, which
+   overrides the `[hidden] { display: none }` the browser ships with. Without
+   this, hiding a section with `el.hidden = true` does not hide it: it stays
+   visible. The `!important` is the canonical fix. */
 [hidden] { display: none !important; }
 
 body {
@@ -273,24 +273,6 @@ button:focus-visible {
   align-items: end;
 }
 .times { color: var(--ink-faint); padding-bottom: 9px; }
-
-.presets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-.presets button {
-  font: inherit;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  padding: 4px 9px;
-  color: var(--ink-soft);
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  cursor: pointer;
-}
-.presets button:hover { color: var(--ink); border-color: var(--ink-faint); }
 
 .checkboxes { display: flex; flex-direction: column; gap: 6px; }
 .checkboxes label { display: flex; align-items: center; gap: 8px; font-size: 13px; }

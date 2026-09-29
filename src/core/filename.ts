@@ -28,11 +28,11 @@ const MIME: Record<ImageFormat | VideoFormat, string> = {
   mkv: 'video/x-matroska',
 };
 
-/** MIME del contenedor para WebM, que sí distingue el códec interno. */
+/** Container MIME for WebM, which does distinguish the inner codec. */
 export function mimeFor(format: ImageFormat | VideoFormat, isVideo = false): string {
   if (isVideo) {
-    // Matroska no tiene un MIME registrado. `video/x-matroska` es el que
-    // acepta la gente de la web, y es lo que entienden Chrome y ffmpeg.
+    // Matroska has no registered MIME. `video/x-matroska` is the one people on
+    // the web accept, and the one Chrome and ffmpeg understand.
     if (format === 'mp4') return 'video/mp4';
     if (format === 'mov') return 'video/quicktime';
     if (format === 'mkv') return 'video/x-matroska';
@@ -42,9 +42,9 @@ export function mimeFor(format: ImageFormat | VideoFormat, isVideo = false): str
 }
 
 /**
- * H.264 exige dimensiones pares para el muestreo 4:2:0. Redondear hacia arriba
- * es preferible a recortar: el placeholder se declara con el tamaño que
- * realmente tiene, así que el nombre no miente.
+ * H.264 requires even dimensions for 4:2:0 chroma subsampling. Rounding up is
+ * preferable to cropping: the placeholder declares the size it really has, so
+ * the name does not lie.
  */
 export function evenDimensions(width: number, height: number): { width: number; height: number; changed: boolean } {
   const w = width % 2 === 0 ? width : width + 1;
@@ -56,17 +56,17 @@ export interface NameParts {
   width: number;
   height: number;
   format: ImageFormat | VideoFormat;
-  /** Sólo para video y formatos animados. */
+  /** Only for video and the animated formats. */
   fps?: number;
   duration?: number;
-  /** FPS real tras cuantizar al delay del GIF, en centésimas. */
+  /** Real FPS after quantizing to the GIF delay, in hundredths. */
   effectiveFps?: number;
 }
 
 /**
- * El nombre siempre arranca por las dimensiones, que es lo primero que uno
- * quiere saber de un placeholder. Después van los parámetros que no se
- * deducen del archivo.
+ * The name always starts with the dimensions, which is the first thing anyone
+ * wants to know about a placeholder. After that go the parameters that cannot
+ * be inferred from the file.
  *
  *   `1920x1080.png`
  *   `1920x1080-15fps.gif`
@@ -78,8 +78,9 @@ export function buildFilename(parts: NameParts): string {
   const segments: string[] = [dims];
 
   if (parts.effectiveFps !== undefined && parts.effectiveFps !== parts.fps) {
-    // El GIF sólo admite delay en centésimas, así que el FPS pedido casi nunca
-    // es el que sale. Se anota el real, que es el que vale.
+    // The GIF only takes hundredth delays, so the requested FPS is almost never
+    // the one that comes out. The real one is annotated, because that is the
+    // one that counts.
     segments.push(`${trimNumber(parts.effectiveFps)}fps`);
   } else if (parts.fps !== undefined) {
     segments.push(`${trimNumber(parts.fps)}fps`);
@@ -93,10 +94,10 @@ export function buildFilename(parts: NameParts): string {
 }
 
 /**
- * Sólo los formatos con una línea de tiempo llevan fps y duración en el
- * nombre. Una imagen fija tiene `duration: 0` y `fps` de relleno, así que
- * ponerlos produce nombres como `320x240-15fps-0s.png`, que son ruido: el
- * `0s` además confunde, porque parece un video de duración cero.
+ * Only the formats with a timeline carry the fps and the duration in the name.
+ * A still image has `duration: 0` and a filler fps, so putting them in produces
+ * names like `320x240-15fps-0s.png`, which is noise: the `0s` also confuses,
+ * because it looks like a video of zero length.
  */
 const TIMED_FORMATS: ReadonlySet<ImageFormat | VideoFormat> = new Set<ImageFormat | VideoFormat>([
   'gif',
@@ -108,7 +109,7 @@ const TIMED_FORMATS: ReadonlySet<ImageFormat | VideoFormat> = new Set<ImageForma
   'mkv',
 ]);
 
-/** Nombre a partir de un `Spec`. Los encoders pasan las dimensiones reales. */
+/** Name out of a `Spec`. The encoders pass the real dimensions. */
 export function filenameForSpec(
   spec: Spec,
   format: ImageFormat | VideoFormat,
@@ -124,7 +125,7 @@ export function filenameForSpec(
   });
 }
 
-/** `10` en vez de `10.0`, `2.5` en vez de `2.50`. */
+/** `10` instead of `10.0`, `2.5` instead of `2.50`. */
 export function trimNumber(n: number): string {
   return String(Math.round(n * 100) / 100);
 }

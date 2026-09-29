@@ -1,11 +1,11 @@
 /**
- * Verificación de la convención de nombres de archivo.
+ * Verification of the file naming convention.
  *
- * Corre: `bun run check:filename`
+ * Runs: `bun run check:filename`
  *
- * El nombre es lo primero que uno ve de un placeholder, y se encontró que las
- * imágenes fijas salían como `320x240-15fps-0s.png`: fps de relleno y una
- * duración cero que parece un video mal configurado.
+ * The name is the first thing anyone sees of a placeholder, and it was found
+ * that still images came out as `320x240-15fps-0s.png`: a filler fps and a
+ * zero duration that looks like a misconfigured video.
  */
 import { buildFilename, filenameForSpec, evenDimensions, trimNumber, mimeFor } from '../src/core/filename';
 import type { Spec } from '../src/core/types';
@@ -34,38 +34,38 @@ function spec(over: Partial<Spec> = {}): Spec {
   };
 }
 
-console.log('imágenes fijas (no llevan fps ni duración):');
+console.log('still images (they carry neither fps nor duration):');
 for (const format of ['png', 'jpeg', 'webp', 'svg'] as const) {
   const name = filenameForSpec(spec(), format);
   console.log(`  ${name}`);
-  check(`no dice 0s en ${format}`, !name.includes('0s'), name);
-  check(`no dice fps en ${format}`, !name.includes('fps'), name);
-  check(`${format} arranca con las dimensiones`, name.startsWith('1920x1080.'), name);
+  check(`it does not say 0s in ${format}`, !name.includes('0s'), name);
+  check(`it does not say fps in ${format}`, !name.includes('fps'), name);
+  check(`${format} starts with the dimensions`, name.startsWith('1920x1080.'), name);
 }
 
-console.log('\nformatos con línea de tiempo:');
+console.log('\nformats with a timeline:');
 for (const format of ['gif', 'mjpeg-avi', 'jpeg-zip', 'mp4', 'webm', 'mov', 'mkv'] as const) {
   const name = filenameForSpec(spec({ duration: 5 }), format);
   console.log(`  ${name}`);
-  check(`${format} lleva la duración`, name.includes('-5s'), name);
+  check(`${format} carries the duration`, name.includes('-5s'), name);
 }
 
-console.log('\nel GIF reporta el FPS efectivo, no el pedido:');
-// 15 fps → delay de 7 centésimas (redondeo) → 14,29 fps reales.
+console.log('\nthe GIF reports the effective FPS, not the requested one:');
+// 15 fps → a delay of 7 hundredths (rounded) → 14.29 real fps.
 const gif = buildFilename({
   width: 320, height: 240, format: 'gif', fps: 15, duration: 0, effectiveFps: 100 / 7,
 });
 console.log(`  ${gif}`);
-check('usa el FPS efectivo cuando difiere', gif.includes('14.29'), gif);
-check('no duplica el FPS pedido', !gif.includes('15fps'), gif);
+check('it uses the effective FPS when it differs', gif.includes('14.29'), gif);
+check('it does not repeat the requested FPS', !gif.includes('15fps'), gif);
 
-console.log('\ndimensiones pares tras el redondeo de H.264:');
+console.log('\neven dimensions after the H.264 rounding:');
 const even = evenDimensions(1079, 481);
 const real = filenameForSpec(spec({ width: 1079, height: 481, duration: 5 }), 'mp4', even);
-console.log(`  pedido 1079x481 → ${real}`);
-check('el nombre usa las dimensiones reales', real.startsWith('1080x482'), real);
-check('marca que se redondeó', even.changed);
-check('los pares no cambian', !evenDimensions(1080, 482).changed);
+console.log(`  requested 1079x481 → ${real}`);
+check('the name uses the real dimensions', real.startsWith('1080x482'), real);
+check('it reports that it rounded up', even.changed);
+check('even numbers do not change', !evenDimensions(1080, 482).changed);
 
 console.log('\nMIME:');
 const cases: Array<[Parameters<typeof mimeFor>[0], Parameters<typeof mimeFor>[1], string]> = [
@@ -80,10 +80,10 @@ const cases: Array<[Parameters<typeof mimeFor>[0], Parameters<typeof mimeFor>[1]
 ];
 for (const [format, isVideo, expected] of cases) {
   const got = mimeFor(format, isVideo);
-  check(`MIME de ${format}`, got === expected, `${got} ≠ ${expected}`);
+  check(`MIME of ${format}`, got === expected, `${got} ≠ ${expected}`);
 }
 
-check('trimNumber quita ceros inútiles', trimNumber(10) === '10' && trimNumber(2.5) === '2.5');
+check('trimNumber drops useless zeros', trimNumber(10) === '10' && trimNumber(2.5) === '2.5');
 
-console.log(fails === 0 ? '\n✔ nombres OK' : `\n✘ ${fails} fallo(s)`);
+console.log(fails === 0 ? '\n✔ names OK' : `\n✘ ${fails} failure(s)`);
 process.exit(fails === 0 ? 0 : 1);

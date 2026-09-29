@@ -1,212 +1,388 @@
 <!doctype html>
-<html lang="es">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>el-coso-3000 · generador de placeholders</title>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>El Coso 3000</title>
 
-<!-- Metadata de la herramienta. Se mantiene en sync con REPO_URL en src/core/types.ts -->
-<meta name="description" content="Generador de placeholders de imagen y video. Imágenes PNG, JPEG, WebP, SVG, GIF animado; video MP4, WebM, MOV y MKV. Funciona entero en el navegador, sin servidor y sin conexión.">
-<meta name="generator" content="el-coso-3000">
-<meta name="author" content="el-coso-3000">
-<meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#F2DEE2">
-<link rel="canonical" href="https://maranimatias.github.io/el-coso-3000/">
+    <!-- Tool metadata. The canonical URL is the GitHub Pages one; the repo URL
+         lives in REPO_URL, in src/core/types.ts, and reaches the generated files. -->
+    <meta
+      name="description"
+      content="Image and video placeholder generator. PNG, JPEG, WebP and SVG images, animated GIF, AVI and ZIP sequences, and MP4, WebM, MOV and MKV video. Runs entirely in the browser, no server and no connection needed."
+    />
+    <meta name="generator" content="El Coso 3000" />
+    <meta name="author" content="Matias Ezequiel Marani" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#F2DEE2" />
+    <link rel="canonical" href="https://maranimatias.github.io/el-coso-3000/" />
 
-<meta property="og:type" content="website">
-<meta property="og:title" content="el-coso-3000 · generador de placeholders">
-<meta property="og:description" content="Placeholders de imagen y video, offline, sin servidor y con contraste garantizado.">
-<meta property="og:url" content="https://maranimatias.github.io/el-coso-3000/">
-<meta name="twitter:card" content="summary">
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="El Coso 3000" />
+    <meta
+      property="og:description"
+      content="Image and video placeholders, offline, no server, with guaranteed contrast."
+    />
+    <meta property="og:url" content="https://maranimatias.github.io/el-coso-3000/" />
+    <meta name="twitter:card" content="summary" />
 
-<style>/*__STYLES__*/</style>
-</head>
-<body>
+    <style>
+      /*__STYLES__*/
+    </style>
+  </head>
+  <body>
+    <a class="skip" href="#panel">Skip to the controls</a>
 
-<a class="skip" href="#panel">Ir a los controles</a>
+    <header class="topbar">
+      <h1>El Coso 3000</h1>
+    </header>
 
-<header class="topbar">
-  <h1>el-coso-3000</h1>
-  <p class="tagline">Placeholders de imagen y video, sin servidor y sin conexión.</p>
-</header>
-
-<main class="layout">
-
-  <!--
-    Los atributos toolname / tooldescription / toolparamdescription son la API
-    declarativa de WebMCP: convierten este formulario en una herramienta que
-    un agente de IA puede operar sin adivinar. Es una mejora progresiva: si el
-    navegador no soporta WebMCP, el formulario sigue siendo un formulario.
+    <main class="layout">
+      <!--
+    The toolname / tooldescription / toolparamdescription attributes are the
+    declarative WebMCP API: they turn this form into a tool an AI agent can
+    operate without guessing. It is progressive enhancement: if the browser
+    does not support WebMCP, the form stays a form.
   -->
-  <form id="panel" class="panel" toolname="generate_placeholder"
-        tooldescription="Configura y genera un placeholder de imagen o video en el navegador. Ajusta dimensiones, paleta pastel y contraste, y devuelve el archivo descargado.">
+      <form
+        id="panel"
+        class="panel"
+        toolname="generate_placeholder"
+        tooldescription="Configures and generates an image or video placeholder in the browser. Adjusts dimensions, pastel palette and contrast, and returns the downloaded file."
+      >
+        <fieldset class="tabs">
+          <legend class="visually-hidden">Output type</legend>
+          <label class="tab">
+            <input
+              type="radio"
+              name="kind"
+              value="image"
+              checked
+              toolparamtitle="Output type"
+              toolparamdescription="What to generate. Use 'image' for a still image, or 'video' for a looping output with a timeline: the four video containers plus the animated ones (gif, mjpeg-avi, jpeg-zip)."
+            />
+            <span>Image</span>
+          </label>
+          <label class="tab">
+            <input
+              type="radio"
+              name="kind"
+              value="video"
+              toolparamtitle="Output type"
+              toolparamdescription="What to generate. Use 'image' for a still image, or 'video' for a looping output with a timeline: the four video containers plus the animated ones (gif, mjpeg-avi, jpeg-zip)."
+            />
+            <span>Video</span>
+          </label>
+        </fieldset>
 
-    <fieldset class="tabs">
-      <legend class="visually-hidden">Tipo de salida</legend>
-      <label class="tab">
-        <input type="radio" name="kind" value="image" checked
-               toolparamtitle="Tipo de salida"
-               toolparamdescription="Qué se genera. Usa 'image' para una imagen fija, o 'video' para un video en bucle con barra de progreso. Los formatos animados (gif, mjpeg-avi, jpeg-zip) son imágenes pero también tienen duración.">
-        <span>Imagen</span>
-      </label>
-      <label class="tab">
-        <input type="radio" name="kind" value="video"
-               toolparamtitle="Tipo de salida"
-               toolparamdescription="Qué se genera. Usa 'image' para una imagen fija, o 'video' para un video en bucle con barra de progreso. Los formatos animados (gif, mjpeg-avi, jpeg-zip) son imágenes pero también tienen duración.">
-        <span>Video</span>
-      </label>
-    </fieldset>
+        <section class="group" data-kind="image">
+          <h2>Format</h2>
+          <div class="choices" role="radiogroup" aria-label="Image format">
+            <label
+              ><input
+                type="radio"
+                name="imageFormat"
+                value="png"
+                checked
+                toolparamtitle="Image format"
+                toolparamdescription="PNG. Lossless with transparency. The most versatile."
+              /><span>PNG</span></label
+            >
+            <label
+              ><input
+                type="radio"
+                name="imageFormat"
+                value="jpeg"
+                toolparamtitle="Image format"
+                toolparamdescription="JPEG. No transparency, small size. For photos."
+              /><span>JPEG</span></label
+            >
+            <label
+              ><input
+                type="radio"
+                name="imageFormat"
+                value="webp"
+                toolparamtitle="Image format"
+                toolparamdescription="WebP. Transparency and smaller than PNG."
+              /><span>WebP</span></label
+            >
+            <label
+              ><input
+                type="radio"
+                name="imageFormat"
+                value="svg"
+                toolparamtitle="Image format"
+                toolparamdescription="SVG. Vector, weighs kilobytes. For icons and diagrams."
+              /><span>SVG</span></label
+            >
+          </div>
+        </section>
 
-    <section class="group" data-kind="image">
-      <h2>Formato</h2>
-      <div class="choices" role="radiogroup" aria-label="Formato de imagen">
-        <label><input type="radio" name="imageFormat" value="png" checked toolparamtitle="Formato de imagen" toolparamdescription="PNG. Sin pérdida y con transparencia. El más versátil."><span>PNG</span></label>
-        <label><input type="radio" name="imageFormat" value="jpeg" toolparamtitle="Formato de imagen" toolparamdescription="JPEG. Sin transparencia, tamaño chico. Para fotos."><span>JPEG</span></label>
-        <label><input type="radio" name="imageFormat" value="webp" toolparamtitle="Formato de imagen" toolparamdescription="WebP. Con transparencia y más chico que PNG."><span>WebP</span></label>
-        <label><input type="radio" name="imageFormat" value="svg" toolparamtitle="Formato de imagen" toolparamdescription="SVG. Vectorial, pesa kilobytes. Para íconos y diagramas."><span>SVG</span></label>
-        <label><input type="radio" name="imageFormat" value="gif" toolparamtitle="Formato de imagen" toolparamdescription="GIF animado. El delay se cuantiza a centésimas, así que el FPS real puede diferir del pedido."><span>GIF</span></label>
-        <label><input type="radio" name="imageFormat" value="mjpeg-avi" toolparamtitle="Formato de imagen" toolparamdescription="AVI con Motion-JPEG. Ningún navegador lo reproduce; va a un editor o a Photoshop."><span>AVI</span></label>
-        <label><input type="radio" name="imageFormat" value="jpeg-zip" toolparamtitle="Formato de imagen" toolparamdescription="ZIP con una secuencia de JPEG numerados, para pipelines de render."><span>ZIP</span></label>
-      </div>
+        <section class="group" data-kind="video" hidden>
+          <h2>Format</h2>
+          <div class="choices" role="radiogroup" aria-label="Output format">
+            <label
+              ><input
+                type="radio"
+                name="videoFormat"
+                value="mp4"
+                checked
+                toolparamtitle="Video format"
+                toolparamdescription="MP4 with H.264. The best compatibility possible."
+              /><span>MP4</span></label
+            >
+            <label
+              ><input
+                type="radio"
+                name="videoFormat"
+                value="webm"
+                toolparamtitle="Video format"
+                toolparamdescription="WebM with VP9. Better compression, less compatibility."
+              /><span>WebM</span></label
+            >
+            <label
+              ><input
+                type="radio"
+                name="videoFormat"
+                value="mov"
+                toolparamtitle="Video format"
+                toolparamdescription="QuickTime. Useful for an edit chain."
+              /><span>MOV</span></label
+            >
+            <label
+              ><input
+                type="radio"
+                name="videoFormat"
+                value="mkv"
+                toolparamtitle="Video format"
+                toolparamdescription="Matroska. A file container, it does not play in the browser."
+              /><span>MKV</span></label
+            >
+            <label
+              ><input
+                type="radio"
+                name="videoFormat"
+                value="gif"
+                toolparamtitle="Video format"
+                toolparamdescription="Animated GIF. The delay is quantized to hundredths, so the real FPS can differ from the requested one."
+              /><span>GIF</span></label
+            >
+            <label
+              ><input
+                type="radio"
+                name="videoFormat"
+                value="mjpeg-avi"
+                toolparamtitle="Video format"
+                toolparamdescription="AVI with Motion-JPEG. No browser plays it; it goes to an editor or to Photoshop."
+              /><span>AVI</span></label
+            >
+            <label
+              ><input
+                type="radio"
+                name="videoFormat"
+                value="jpeg-zip"
+                toolparamtitle="Video format"
+                toolparamdescription="ZIP with a numbered sequence of JPEG frames, for render pipelines."
+              /><span>ZIP</span></label
+            >
+          </div>
+          <p class="note warning" id="videoUnsupported" hidden></p>
+        </section>
 
-      <div class="field quality">
-        <label for="quality">Calidad <output id="qualityOut">90%</output></label>
-        <input type="range" id="quality" name="quality" min="30" max="100" step="5" value="90"
-               toolparamtitle="Calidad"
-               toolparamdescription="Calidad de compresión, de 30 a 100. Sólo afecta a los formatos con pérdida.">
-      </div>
-    </section>
+        <div class="field quality" hidden>
+          <label for="quality">Quality <output id="qualityOut">90%</output></label>
+          <input
+            type="range"
+            id="quality"
+            name="quality"
+            min="30"
+            max="100"
+            step="5"
+            value="90"
+            toolparamtitle="Quality"
+            toolparamdescription="Compression quality, from 30 to 100. It only affects the lossy formats."
+          />
+        </div>
 
-    <section class="group" data-kind="video" hidden>
-      <h2>Formato</h2>
-      <div class="choices" role="radiogroup" aria-label="Formato de video">
-        <label><input type="radio" name="videoFormat" value="mp4" checked toolparamtitle="Formato de video" toolparamdescription="MP4 con H.264. La mejor compatibilidad posible."><span>MP4</span></label>
-        <label><input type="radio" name="videoFormat" value="webm" toolparamtitle="Formato de video" toolparamdescription="WebM con VP9. Mejor compresión, menos compatibilidad."><span>WebM</span></label>
-        <label><input type="radio" name="videoFormat" value="mov" toolparamtitle="Formato de video" toolparamdescription="QuickTime. Útil para cadena de montaje."><span>MOV</span></label>
-        <label><input type="radio" name="videoFormat" value="mkv" toolparamtitle="Formato de video" toolparamdescription="Matroska. Contenedor de archivo, no se reproduce en el navegador."><span>MKV</span></label>
-      </div>
-      <p class="note warning" id="videoUnsupported" hidden></p>
-    </section>
-
-    <!--
-      Una sola sección de línea de tiempo, compartida por el video y los
-      formatos de imagen animados. Antes estaba dentro del tab de Video y el
-      GIF quedaba con un solo frame sin ninguna forma de animarlo, porque en
-      el tab de Imagen no había dónde tocar la duración.
+        <!--
+      One single timeline section, shared by the video tab and the animated
+      formats. It used to live inside the Video tab, which left the GIF with a
+      single frame and no way to animate it, because the Image tab had nowhere
+      to set the duration.
     -->
-    <section class="group" id="timeline" hidden>
-      <h2>Línea de tiempo</h2>
-      <div class="field">
-        <label for="duration">Duración <output id="durationOut">5s</output></label>
-        <input type="range" id="duration" name="duration" min="1" max="30" step="1" value="5"
-               toolparamtitle="Duración"
-               toolparamdescription="Duración en segundos, de 1 a 30.">
-      </div>
+        <section class="group" id="timeline" hidden>
+          <h2>Timeline</h2>
+          <div class="field">
+            <label for="duration">Duration <output id="durationOut">5s</output></label>
+            <input
+              type="range"
+              id="duration"
+              name="duration"
+              min="1"
+              max="30"
+              step="1"
+              value="5"
+              toolparamtitle="Duration"
+              toolparamdescription="Duration in seconds, from 1 to 30."
+            />
+          </div>
 
-      <div class="field">
-        <label for="fps">Cuadros por segundo <output id="fpsOut">15</output></label>
-        <input type="range" id="fps" name="fps" min="1" max="60" step="1" value="15"
-               toolparamtitle="Cuadros por segundo"
-               toolparamdescription="Fotogramas por segundo, de 1 a 60. El GIF sólo admite delay en centésimas, así que puede quedar en un valor distinto.">
-      </div>
+          <div class="field">
+            <label for="fps">Frames per second <output id="fpsOut">15</output></label>
+            <input
+              type="range"
+              id="fps"
+              name="fps"
+              min="1"
+              max="60"
+              step="1"
+              value="15"
+              toolparamtitle="Frames per second"
+              toolparamdescription="Frames per second, from 1 to 60. The GIF only takes hundredth delays, so it can land on a different value."
+            />
+          </div>
 
-      <p class="note" id="fpsEffective" hidden></p>
+          <p class="note" id="fpsEffective" hidden></p>
 
-      <div class="checkboxes">
-        <label><input type="checkbox" name="showProgressBar" checked
-                      toolparamtitle="Barra de progreso"
-                      toolparamdescription="Dibuja una barra de progreso al pie del placeholder. Sólo tiene efecto si la salida tiene más de un frame."> <span>Barra de progreso</span></label>
-        <label><input type="checkbox" name="showTime" checked
-                      toolparamtitle="Mostrar el tiempo"
-                      toolparamdescription="Dibuja el reloj 0:03 / 0:10 sobre la barra de progreso. Sólo tiene efecto si la salida tiene más de un frame."> <span>Mostrar el tiempo</span></label>
-      </div>
-    </section>
+          <div class="checkboxes">
+            <label
+              ><input
+                type="checkbox"
+                name="showProgressBar"
+                checked
+                toolparamtitle="Progress bar"
+                toolparamdescription="Draws a progress bar at the bottom of the placeholder. It only has an effect if the output has more than one frame."
+              />
+              <span>Progress bar</span></label
+            >
+            <label
+              ><input
+                type="checkbox"
+                name="showTime"
+                checked
+                toolparamtitle="Show the time"
+                toolparamdescription="Draws the 0:03 / 0:10 clock over the progress bar. It only has an effect if the output has more than one frame."
+              />
+              <span>Show the time</span></label
+            >
+          </div>
+        </section>
 
-    <section class="group">
-      <h2>Tamaño</h2>
-      <div class="presets" role="group" aria-label="Tamaños frecuentes">
-        <button type="button" data-w="1920" data-h="1080">1920×1080</button>
-        <button type="button" data-w="1280" data-h="720">1280×720</button>
-        <button type="button" data-w="1080" data-h="1080">1080×1080</button>
-        <button type="button" data-w="800" data-h="600">800×600</button>
-        <button type="button" data-w="400" data-h="300">400×300</button>
-        <button type="button" data-w="64" data-h="64">64×64</button>
-      </div>
-      <div class="dims">
-        <div class="field">
-          <label for="width">Ancho</label>
-          <input type="number" id="width" name="width" min="1" max="4096" step="1" value="1920"
-                 toolparamtitle="Ancho"
-                 toolparamdescription="Ancho en píxeles, de 1 a 4096.">
+        <section class="group">
+          <h2>Size</h2>
+          <div class="dims">
+            <div class="field">
+              <label for="width">Width</label>
+              <input
+                type="number"
+                id="width"
+                name="width"
+                min="1"
+                max="4096"
+                step="1"
+                value="1920"
+                toolparamtitle="Width"
+                toolparamdescription="Width in pixels, from 1 to 4096."
+              />
+            </div>
+            <span class="times" aria-hidden="true">×</span>
+            <div class="field">
+              <label for="height">Height</label>
+              <input
+                type="number"
+                id="height"
+                name="height"
+                min="1"
+                max="4096"
+                step="1"
+                value="1080"
+                toolparamtitle="Height"
+                toolparamdescription="Height in pixels, from 1 to 4096."
+              />
+            </div>
+            <button
+              type="button"
+              id="swap"
+              class="ghost"
+              title="Swap width and height"
+              aria-label="Swap width and height"
+            >
+              ⇅
+            </button>
+          </div>
+          <p class="note warning" id="evenWarning" hidden></p>
+        </section>
+
+        <section class="group">
+          <h2>Color</h2>
+          <div class="swatches" id="swatches" role="group" aria-label="Pastel palette"></div>
+          <div class="colors">
+            <div class="field">
+              <label for="bg">Background</label>
+              <input
+                type="color"
+                id="bg"
+                name="bg"
+                value="#F2DEE2"
+                toolparamtitle="Background color"
+                toolparamdescription="Background color, in hex. The text is computed from it to guarantee contrast."
+              />
+            </div>
+            <div class="field derived">
+              <label for="fg">Text <span class="hint">automatic</span></label>
+              <!-- Readonly on purpose: legibility cannot be broken by hand. -->
+              <input
+                type="color"
+                id="fg"
+                name="fg"
+                value="#962C41"
+                readonly
+                title="Derived from the background to guarantee the contrast"
+                toolparamtitle="Text color"
+                toolparamdescription="Derived automatically from the background color to guarantee WCAG contrast. It is not edited: changing the background recomputes this value. The text of the placeholder is the dimensions."
+              />
+            </div>
+            <button type="button" id="random" class="ghost">Random</button>
+          </div>
+
+          <div class="contrast" id="contrast" role="status" aria-live="polite">
+            <span class="ratio" id="ratio">5.97:1</span>
+            <span class="level" id="level">AA</span>
+            <span class="levelnote" id="levelNote">meets WCAG AA</span>
+          </div>
+        </section>
+
+        <div class="actions">
+          <button type="submit" class="primary" id="generate">Download</button>
+          <button type="button" class="ghost" id="cancel" hidden>Cancel</button>
         </div>
-        <span class="times" aria-hidden="true">×</span>
-        <div class="field">
-          <label for="height">Alto</label>
-          <input type="number" id="height" name="height" min="1" max="4096" step="1" value="1080"
-                 toolparamtitle="Alto"
-                 toolparamdescription="Alto en píxeles, de 1 a 4096.">
+
+        <div class="progress" id="progress" hidden>
+          <div class="bar"><div class="fill" id="progressFill"></div></div>
+          <p class="progressText" id="progressText">Preparing…</p>
         </div>
-        <button type="button" id="swap" class="ghost" title="Invertir ancho y alto" aria-label="Invertir ancho y alto">⇅</button>
-      </div>
-      <p class="note warning" id="evenWarning" hidden></p>
-    </section>
 
-    <section class="group">
-      <h2>Color</h2>
-      <div class="swatches" id="swatches" role="group" aria-label="Paleta pastel"></div>
-      <div class="colors">
-        <div class="field">
-          <label for="bg">Fondo</label>
-          <input type="color" id="bg" name="bg" value="#F2DEE2"
-                 toolparamtitle="Color de fondo"
-                 toolparamdescription="Color de fondo, en hex. El texto se calcula solo para garantizar contraste.">
+        <p class="message" id="message" role="alert" hidden></p>
+      </form>
+
+      <section class="preview" aria-label="Preview">
+        <div class="stage" id="stage">
+          <canvas id="canvas" role="img" aria-label="Preview of the placeholder"></canvas>
         </div>
-        <div class="field derived">
-          <label for="fg">Texto <span class="hint">automático</span></label>
-          <!-- Es readonly a propósito: la legibilidad no se puede tocar a mano. -->
-          <input type="color" id="fg" name="fg" value="#962C41" readonly
-                 title="Se deriva del fondo para garantizar el contraste"
-                 toolparamtitle="Color del texto"
-                 toolparamdescription="Derivado automáticamente del color de fondo para garantizar contraste WCAG. No se edita: cambiar el fondo recalcula este valor. El texto del placeholder son las dimensiones.">
-        </div>
-        <button type="button" id="random" class="ghost">Aleatorio</button>
-      </div>
+        <p class="dims-label" id="dimsLabel">1920 × 1080</p>
+        <p class="meta-line" id="metaLine"></p>
+      </section>
+    </main>
 
-      <div class="contrast" id="contrast" role="status" aria-live="polite">
-        <span class="ratio" id="ratio">5.97:1</span>
-        <span class="level" id="level">AA</span>
-        <span class="levelnote" id="levelNote">cumple WCAG AA</span>
-      </div>
-    </section>
+    <footer class="footer">
+      <p>
+        <a href="https://github.com/MaraniMatias/el-coso-3000" id="repoLink" rel="noopener">El Coso 3000</a>
+      </p>
+      <p class="sub" id="webmcpStatus" hidden></p>
+    </footer>
 
-    <div class="actions">
-      <button type="submit" class="primary" id="generate">Descargar</button>
-      <button type="button" class="ghost" id="cancel" hidden>Cancelar</button>
-    </div>
-
-    <div class="progress" id="progress" hidden>
-      <div class="bar"><div class="fill" id="progressFill"></div></div>
-      <p class="progressText" id="progressText">Preparando…</p>
-    </div>
-
-    <p class="message" id="message" role="alert" hidden></p>
-  </form>
-
-  <section class="preview" aria-label="Vista previa">
-    <div class="stage" id="stage">
-      <canvas id="canvas" role="img" aria-label="Vista previa del placeholder"></canvas>
-    </div>
-    <p class="dims-label" id="dimsLabel">1920 × 1080</p>
-    <p class="meta-line" id="metaLine"></p>
-  </section>
-
-</main>
-
-<footer class="footer">
-  <p>Generado por <a href="https://github.com/MaraniMatias/el-coso-3000" id="repoLink" rel="noopener">el-coso-3000</a></p>
-  <p class="sub" id="webmcpStatus" hidden></p>
-</footer>
-
-<script>/*__BUNDLE__*/</script>
-</body>
+    <script>
+      /*__BUNDLE__*/
+    </script>
+  </body>
 </html>
