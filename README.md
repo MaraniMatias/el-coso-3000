@@ -1,45 +1,40 @@
 # El Coso 3000
 
-Generador de placeholders de imagen y video que corre **100% en el navegador**.  
-Sin servidor, sin subir nada, sin conexión. El resultado es **un solo archivo HTML** que se abre con doble clic.
+Image and video placeholder generator that runs **entirely in the browser**.  
+No server, no connection, nothing uploaded. The result is **a single HTML file** you can open with a double-click.
+
+[![Demo](https://img.shields.io/badge/Demo-online-blue?style=flat-square)](https://maranimatias.github.io/el-coso-3000/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![License](https://img.shields.io/badge/License-MPL--2.0-yellow?style=flat-square)](LICENSE)
 
 ```
-dist/index.html         ← este es todo. Abrilo y usalo.
-dist/placeholder.html   ← el mismo archivo, con nombre más fácil de compartir.
+dist/index.html         ← this is everything. Open it and use it.
+dist/placeholder.html   ← the same file, with a name easier to share.
 ```
 
-**Demo online:** [https://maranimatias.github.io/el-coso-3000/](https://maranimatias.github.io/el-coso-3000/)
+**Demo:** [https://maranimatias.github.io/el-coso-3000/](https://maranimatias.github.io/el-coso-3000/)
 
 ---
 
-## Qué hace
+## What it does
 
-Genera placeholders listos para usar en:
+Generates ready-to-use placeholders for wireframes, mockups, prototypes, and temporary assets.
 
-- Wireframes y mockups
-- Prototipos de UI
-- Videos y animaciones de prueba
-- Assets temporales en diseño o desarrollo
+| Kind | Formats | Notes |
+|------|---------|-------|
+| Image | PNG · JPEG · WebP · SVG | PNG and WebP with transparency. SVG embeds the font. |
+| Animated GIF | GIF | Infinite loop, global 256-color palette. |
+| Animated JPEG | AVI (Motion-JPEG) · ZIP of `.jpg` | Meant for editors (Photoshop, etc.). |
+| Video | MP4 · WebM · MOV · MKV | Encoded with the browser engine. |
 
-Todo se genera localmente. No se sube nada a ningún lado.
+Placeholder text is **only the dimensions**. It never takes more than 60% of the shortest side. Animated and video outputs also include a progress bar and clock (`0:03 / 0:10`).
 
-### Formatos disponibles
+### Colors with guaranteed contrast
 
-| Tipo | Formatos | Notas |
-|------|----------|-------|
-| Imagen | PNG · JPEG · WebP · SVG | PNG y WebP con transparencia. SVG incluye la fuente. |
-| GIF animado | GIF | Loop infinito, paleta de 256 colores. |
-| JPEG animado | AVI (Motion-JPEG) · ZIP de .jpg | Pensado para editores (Photoshop, etc.). |
-| Video | MP4 · WebM · MOV · MKV | Se encodea con el motor del navegador. |
+Not random. Nine pre-measured pairs with **WCAG AA** contrast (≥ 4.5:1):
 
-El texto del placeholder es **solo las dimensiones**. Nunca ocupa más del 60% del lado más corto. En animaciones y video también muestra barra de progreso y reloj (`0:03 / 0:10`).
-
-### Colores con contraste garantizado
-
-No son colores al azar. Hay 9 pares pre-medidos con contraste **WCAG AA** (≥ 4.5:1):
-
-| Nombre | Fondo | Texto | Contraste |
-|--------|-------|-------|-----------|
+| Name | Background | Text | Contrast |
+|------|------------|------|----------|
 | gray | `#E5E7EB` | `#374151` | 8.33:1 |
 | red | `#FEE2E2` | `#991B1B` | 6.80:1 |
 | orange | `#FFEDD5` | `#9A3412` | 6.38:1 |
@@ -50,13 +45,13 @@ No son colores al azar. Hay 9 pares pre-medidos con contraste **WCAG AA** (≥ 4
 | violet | `#EDE9FE` | `#5B21B6` | 7.57:1 |
 | rose | `#FCE7F3` | `#9D174D` | 6.71:1 |
 
-Si elegís un color de fondo a mano, el texto se calcula automáticamente para mantener el contraste. El campo de texto es de solo lectura a propósito: no se puede romper la legibilidad por accidente.
+If you pick a custom background color, the text color is computed automatically to keep contrast. The text field is read-only on purpose.
 
-Hay un botón **Random** que solo elige combinaciones ya verificadas.
+A **Random** button only picks already verified combinations.
 
-### Nombres de archivo claros
+### File names
 
-Siempre empiezan con las dimensiones:
+Always start with the dimensions:
 
 ```
 1920x1080.png
@@ -64,36 +59,40 @@ Siempre empiezan con las dimensiones:
 1920x1080-30fps-10s.mp4
 ```
 
-### Metadatos
-
-Cada archivo generado incluye información de origen (Software, Comment, Source, Title) según el formato lo permita.
+Every generated file includes origin metadata (Software, Comment, Source, Title) when the format allows it.
 
 ---
 
-## Para quién es
+## Who it's for
 
-**Diseñadores**  
-Placeholders legibles, con buen contraste y fuente embebida. Sirven para mockups, wireframes y assets temporales que no se vean rotos.
+**Designers**  
+Readable placeholders with solid contrast and an embedded font. Good for mockups, wireframes, and temporary assets that shouldn't look broken.
 
 **Developers**  
-Imágenes y videos de prueba listos para pegar en prototipos, tests visuales o demos. Todo corre en el navegador, sin dependencias de servidor.
+Test images and videos ready for prototypes, visual tests, or demos. Everything runs in the browser, no server required.
 
-**Cualquiera**  
-Abrís el HTML, elegís tamaño y formato, descargás. Listo.
-
----
-
-## Límites conocidos
-
-- H.264 necesita dimensiones pares → se redondean hacia arriba.
-- GIF quantiza el delay (30 fps termina siendo ~33.3).
-- Máximo 3600 frames por export.
-- WebCodecs no está en Firefox Android → pestaña Video deshabilitada ahí.
-- AVI y MKV no se reproducen en Firefox/Safari (se generan igual, para editores).
-- JPEG / MJPEG / ZIP no tienen canal alpha.
+**Anyone**  
+Open the HTML, pick size and format, download.
 
 ---
 
-## License
+## How to use
 
-MPL-2.0
+1. Download `dist/placeholder.html` (or open the [online demo](https://maranimatias.github.io/el-coso-3000/)).
+2. Open it in a browser (double-click is enough).
+3. Choose size, format, and color.
+4. Download the generated file.
+
+> [!NOTE]
+> Everything is generated locally. Nothing is uploaded anywhere.
+
+---
+
+## Known limits
+
+- H.264 requires even dimensions → they are rounded up.
+- GIF delay is quantized (30 fps ends up as ~33.3).
+- Maximum 3600 frames per export.
+- WebCodecs is missing in Firefox Android → Video tab is disabled there.
+- AVI and MKV do not play in Firefox/Safari (they are still generated for editors).
+- JPEG / MJPEG / ZIP have no alpha channel.
