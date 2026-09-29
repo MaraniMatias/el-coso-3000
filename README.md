@@ -60,17 +60,20 @@ so every visit opens with a different color.
 
 ### The palette
 
-Six swatches: a soft background and a dark text of the same family. The name is
+Nine swatches: a soft background and a dark text of the same family. The name is
 what ends up in the file name and in the metadata of the image.
 
-| Swatch | Name | Background | Text |
-| --- | --- | --- | --- |
-| Gray | `gray` | `#E5E7EB` | `#374151` |
-| Blue | `blue` | `#DBEAFE` | `#1E40AF` |
-| Green | `green` | `#D1FAE5` | `#065F46` |
-| Yellow | `yellow` | `#FEF3C7` | `#92400E` |
-| Rose | `rose` | `#FCE7F3` | `#9D174D` |
-| Violet | `violet` | `#EDE9FE` | `#5B21B6` |
+| Swatch | Name | Background | Text | Contrast |
+| --- | --- | --- | --- | --- |
+| Gray | `gray` | `#E5E7EB` | `#374151` | 8.33:1 |
+| Red | `red` | `#FEE2E2` | `#991B1B` | 6.80:1 |
+| Orange | `orange` | `#FFEDD5` | `#9A3412` | 6.38:1 |
+| Yellow | `yellow` | `#FEF9C3` | `#854D0E` | 6.38:1 |
+| Green | `green` | `#DCFCE7` | `#166534` | 6.49:1 |
+| Teal | `teal` | `#CCFBF1` | `#115E59` | 6.73:1 |
+| Blue | `blue` | `#DBEAFE` | `#1E40AF` | 7.15:1 |
+| Violet | `violet` | `#EDE9FE` | `#5B21B6` | 7.57:1 |
+| Rose | `rose` | `#FCE7F3` | `#9D174D` | 6.71:1 |
 
 ## Metadata inside the files
 

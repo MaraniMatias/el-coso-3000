@@ -133,11 +133,15 @@ function refreshContrast(): void {
 
 function applyColors(bg: string, entry: PaletteEntry | null): void {
   const clean = normalizeHex(bg);
-  const fg = deriveForeground(clean);
+  // A palette swatch carries the text that was measured with it, so it is used
+  // as declared. Only a background the user typed has no pair, and there the
+  // text is derived. Deriving it always would silently replace the measured
+  // pairs with different colors and different ratios.
+  const fg = entry ? entry.fg : deriveForeground(clean);
   ($<HTMLInputElement>('#bg')).value = `#${clean}`;
-  // The text is never picked by hand: it comes from the background. That is
-  // the whole legibility guarantee of the app, which is why the input is
-  // readonly.
+  // The text is never picked by hand: it comes from the background or from the
+  // pair of the swatch. That is the whole legibility guarantee of the app,
+  // which is why the input is readonly.
   ($<HTMLInputElement>('#fg')).value = `#${fg}`;
   applyPageTheme(clean);
   selectedPalette = entry;

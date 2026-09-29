@@ -180,7 +180,7 @@ try {
     return { ...read(), before: JSON.stringify(before), count: String(swatches.length), name: last.dataset.name };
   })()`);
   const themeBefore = JSON.parse(theme.before ?? '{}') as Record<string, string>;
-  check('the grid shows the whole palette', Number(theme.count) === 6, `${theme.count} colors`);
+  check('the grid shows the whole palette', Number(theme.count) === 9, `${theme.count} colors`);
   check('picking another palette changes the placeholder color', theme.bg !== themeBefore.bg, `${themeBefore.bg} → ${theme.bg} (${theme.name})`);
   check('the page gets re-tinted with the palette', theme.tint !== themeBefore.tint && theme.body !== themeBefore.body, `hue ${themeBefore.tint} → ${theme.tint}°`);
   check('the panel and the accent follow the palette', theme.panel !== themeBefore.panel && theme.accent !== themeBefore.accent, theme.accent);

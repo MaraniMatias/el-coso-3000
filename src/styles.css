@@ -44,26 +44,36 @@
   }
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
 /* `.group`, `.field` and `.choices label` set `display: flex` or `grid`, which
    overrides the `[hidden] { display: none }` the browser ships with. Without
    this, hiding a section with `el.hidden = true` does not hide it: it stays
    visible. The `!important` is the canonical fix. */
-[hidden] { display: none !important; }
+[hidden] {
+  display: none !important;
+}
 
 body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font:
+    15px/1.5 system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
 .visually-hidden {
   position: absolute;
-  width: 1px; height: 1px;
-  margin: -1px; padding: 0;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
@@ -74,7 +84,8 @@ body {
   left: -9999px;
 }
 .skip:focus {
-  left: 8px; top: 8px;
+  left: 8px;
+  top: 8px;
   z-index: 10;
   background: var(--surface);
   color: var(--ink);
@@ -111,7 +122,9 @@ body {
 }
 
 @media (max-width: 860px) {
-  .layout { grid-template-columns: 1fr; }
+  .layout {
+    grid-template-columns: 1fr;
+  }
 }
 
 .panel {
@@ -129,7 +142,10 @@ body {
 }
 
 @media (max-width: 860px) {
-  .panel { position: static; max-height: none; }
+  .panel {
+    position: static;
+    max-height: none;
+  }
 }
 
 /* ── Secciones ──────────────────────────────────────────────────── */
@@ -161,8 +177,14 @@ body {
   border-radius: var(--radius);
   border: 0;
 }
-.tab { flex: 1; }
-.tab input { position: absolute; opacity: 0; pointer-events: none; }
+.tab {
+  flex: 1;
+}
+.tab input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
 .tab span {
   display: block;
   text-align: center;
@@ -190,8 +212,14 @@ body {
   flex-wrap: wrap;
   gap: 6px;
 }
-.choices label { position: relative; }
-.choices input { position: absolute; opacity: 0; pointer-events: none; }
+.choices label {
+  position: relative;
+}
+.choices input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
 .choices span {
   display: block;
   padding: 6px 11px;
@@ -208,12 +236,22 @@ body {
   color: var(--ink);
   font-weight: 500;
 }
-.choices input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
-.choices input:disabled + span { opacity: 0.35; cursor: not-allowed; }
+.choices input:focus-visible + span {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.choices input:disabled + span {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
 
 /* ── Campos ─────────────────────────────────────────────────────── */
 
-.field { display: flex; flex-direction: column; gap: 5px; }
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
 .field > label {
   display: flex;
   justify-content: space-between;
@@ -252,7 +290,10 @@ input[type="color"] {
   border-radius: 7px;
   cursor: pointer;
 }
-input[readonly] { cursor: not-allowed; opacity: 0.85; }
+input[readonly] {
+  cursor: not-allowed;
+  opacity: 0.85;
+}
 
 input[type="range"] {
   width: 100%;
@@ -266,7 +307,9 @@ button:focus-visible {
   outline-offset: 1px;
 }
 
-.derived { opacity: 0.9; }
+.derived {
+  opacity: 0.9;
+}
 
 .dims {
   display: grid;
@@ -274,20 +317,36 @@ button:focus-visible {
   gap: 8px;
   align-items: end;
 }
-.times { color: var(--ink-faint); padding-bottom: 9px; }
+.times {
+  color: var(--ink-faint);
+  padding-bottom: 9px;
+}
 /* The preset fills the whole row: its labels do not fit in a column of the
    grid without being cut. */
-.preset { grid-column: 1 / -1; }
+.preset {
+  grid-column: 1 / -1;
+}
 
-.checkboxes { display: flex; flex-direction: column; gap: 6px; }
-.checkboxes label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-.checkboxes input { accent-color: var(--accent); }
+.checkboxes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.checkboxes label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.checkboxes input {
+  accent-color: var(--accent);
+}
 
 /* ── Color y contraste ──────────────────────────────────────────── */
 
 .swatches {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(9, 1fr);
   gap: 5px;
 }
 .swatch {
@@ -333,15 +392,31 @@ button:focus-visible {
   background: color-mix(in srgb, var(--ok) 20%, transparent);
   color: var(--ok);
 }
-.level[data-level="AAA"] { background: color-mix(in srgb, var(--ok) 28%, transparent); }
-.level[data-level="AA"] { background: color-mix(in srgb, var(--ok) 20%, transparent); }
-.level[data-level="AA-large"] { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
-.level[data-level="fail"] { background: color-mix(in srgb, var(--bad) 22%, transparent); color: var(--bad); }
-.levelnote { color: var(--ink-soft); font-size: 12px; }
+.level[data-level="AAA"] {
+  background: color-mix(in srgb, var(--ok) 28%, transparent);
+}
+.level[data-level="AA"] {
+  background: color-mix(in srgb, var(--ok) 20%, transparent);
+}
+.level[data-level="AA-large"] {
+  background: color-mix(in srgb, var(--warn) 20%, transparent);
+  color: var(--warn);
+}
+.level[data-level="fail"] {
+  background: color-mix(in srgb, var(--bad) 22%, transparent);
+  color: var(--bad);
+}
+.levelnote {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
 
 /* ── Botones ────────────────────────────────────────────────────── */
 
-.actions { display: flex; gap: 8px; }
+.actions {
+  display: flex;
+  gap: 8px;
+}
 
 button.primary {
   flex: 1;
@@ -354,8 +429,13 @@ button.primary {
   border-radius: 8px;
   cursor: pointer;
 }
-button.primary:hover { filter: brightness(1.08); }
-button.primary:disabled { opacity: 0.5; cursor: progress; }
+button.primary:hover {
+  filter: brightness(1.08);
+}
+button.primary:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
 
 button.ghost {
   font: inherit;
@@ -368,11 +448,17 @@ button.ghost {
   cursor: pointer;
   white-space: nowrap;
 }
-button.ghost:hover { color: var(--ink); }
+button.ghost:hover {
+  color: var(--ink);
+}
 
 /* ── Progreso y mensajes ────────────────────────────────────────── */
 
-.progress { display: flex; flex-direction: column; gap: 6px; }
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 .progress .bar {
   height: 6px;
   background: var(--surface-2);
@@ -413,7 +499,9 @@ button.ghost:hover { color: var(--ink); }
   font-size: 12px;
   color: var(--ink-soft);
 }
-.note.warning { color: var(--warn); }
+.note.warning {
+  color: var(--warn);
+}
 
 /* ── Vista previa ───────────────────────────────────────────────── */
 
@@ -431,8 +519,7 @@ button.ghost:hover { color: var(--ink); }
   display: grid;
   place-items: center;
   padding: 20px;
-  background:
-    repeating-conic-gradient(var(--surface-2) 0% 25%, var(--surface) 0% 50%) 50% / 20px 20px;
+  background: repeating-conic-gradient(var(--surface-2) 0% 25%, var(--surface) 0% 50%) 50% / 20px 20px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
 }
@@ -468,10 +555,20 @@ button.ghost:hover { color: var(--ink); }
   font-size: 13px;
   text-align: center;
 }
-.footer p { margin: 0; }
-.footer .sub { color: var(--ink-faint); font-size: 12px; margin-top: 4px; }
-.footer a { color: var(--accent); }
+.footer p {
+  margin: 0;
+}
+.footer .sub {
+  color: var(--ink-faint);
+  font-size: 12px;
+  margin-top: 4px;
+}
+.footer a {
+  color: var(--accent);
+}
 
 @media (prefers-reduced-motion: reduce) {
-  * { transition: none !important; }
+  * {
+    transition: none !important;
+  }
 }
