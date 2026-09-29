@@ -5,7 +5,8 @@ Sin servidor, sin conexión, sin subir nada a ningún lado. El resultado es **un
 archivo HTML** que se abre con doble click.
 
 ```
-dist/placeholder.html   ← esto es todo. Abrilo y usalo.
+dist/index.html         ← esto es todo. Abrilo y usalo.
+dist/placeholder.html   ← el mismo archivo, con nombre de archivo suelto.
 ```
 
 ## Qué genera
@@ -115,6 +116,38 @@ Las dimensiones van primero, que es lo primero que uno quiere saber:
 ```
 
 Para GIF, si el FPS real difiere del pedido va el real, no el teórico.
+
+## Publicar en GitHub Pages
+
+`dist/` tiene dos archivos idénticos: `index.html` (la entrada que GitHub Pages
+sirve por defecto) y `placeholder.html` (el mismo contenido, con nombre de
+archivo para mandarlo o abrirlo local).
+
+**Opción 1 — rama `gh-pages` (recomendada).** Mantiene el HTML fuera de la rama
+principal:
+
+```bash
+bun run build
+cd dist
+git init -b gh-pages
+git add -A
+git commit -m "build: placeholder"
+git push -f https://github.com/<usuario>/<repo>.git gh-pages
+```
+
+Después en **Settings → Pages**, elegí *Deploy from a branch*, rama
+`gh-pages`, carpeta `/ (root)`. Tu URL queda en
+`https://<usuario>.github.io/<repo>/`.
+
+**Opción 2 — desde la rama principal.** Subí `dist/` al repo y en
+**Settings → Pages** elegí *Deploy from a branch*, rama `main`, carpeta `/dist`.
+
+Por eso `dist` **no** está en el `.gitignore` a propósito: GitHub Pages sirve
+el contenido de esa carpeta, así que tiene que estar versionada.
+
+> Cuando se sirve por HTTP, la parte de WebMCP **sí se activa** si el navegador
+> cumple los requisitos, porque hay aislamiento de origen. Con doble click
+> (`file://`) no se activa, pero el resto de la app funciona igual en los dos casos.
 
 ## Desarmar y armar
 

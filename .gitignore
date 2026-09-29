@@ -3,8 +3,11 @@ node_modules
 
 # output
 out
-dist
 *.tgz
+
+# `dist` NO se ignora a propósito: GitHub Pages sirve el contenido de esa
+# carpeta, así que tiene que estar versionada. Es un solo archivo HTML
+# autocontenido de ~300 KB.
 
 # code coverage
 coverage

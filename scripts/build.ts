@@ -142,9 +142,17 @@ if (html.includes('/*__STYLES__*/') || html.includes('/*__BUNDLE__*/')) {
 
 auditOffline(html);
 
-await Bun.write(OUT, html);
-
 const outBytes = new TextEncoder().encode(html).length;
+
+// El mismo HTML en dos formas de abrirlo:
+//   - `placeholder.html`, con el nombre que ya se conoce, para el doble click.
+//   - `index.html`, que es la entrada por defecto que sirve GitHub Pages.
+await Bun.write(OUT, html);
+await Bun.write(join(OUT_DIR, 'index.html'), html);
+
 console.log(`\n✔ ${OUT}`);
-console.log(`  ${kb(outBytes)} en total, autocontenido.`);
-console.log('  Abrilo con doble click. No necesita servidor ni conexión.');
+console.log(`✔ ${join(OUT_DIR, 'index.html')}   ← para GitHub Pages`);
+console.log(`  ${kb(outBytes)} cada uno, autocontenido.`);
+console.log('  Doble click en cualquiera de los dos. No necesita servidor ni conexión.');
+console.log('\n  GitHub Pages: subí el contenido de dist/ a la rama gh-pages, o');
+console.log('  publicá dist/ desde Settings → Pages. El repo tiene que versionar dist/.');
