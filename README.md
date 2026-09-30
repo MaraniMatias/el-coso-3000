@@ -4,13 +4,8 @@ Image and video placeholder generator that runs **entirely in the browser**.
 No server, no connection, nothing uploaded. The result is **a single HTML file** you can open with a double-click.
 
 [![Demo](https://img.shields.io/badge/Demo-online-blue?style=flat-square)](https://maranimatias.github.io/el-coso-3000/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![License](https://img.shields.io/badge/License-MPL--2.0-yellow?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT?style=flat-square)](LICENSE)
 
-```
-dist/index.html         ← this is everything. Open it and use it.
-dist/placeholder.html   ← the same file, with a name easier to share.
-```
 
 **Demo:** [https://maranimatias.github.io/el-coso-3000/](https://maranimatias.github.io/el-coso-3000/)
 
