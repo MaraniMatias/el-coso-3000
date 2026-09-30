@@ -1,0 +1,23 @@
+# El Coso 3000
+
+> El Coso 3000 is a free, browser-based placeholder generator for images and video. It runs entirely on the client: nothing is uploaded, no server is involved, and it works offline once loaded. Text color is chosen automatically to meet WCAG AA contrast against the selected background.
+
+The tool is a single page with controls for output type, size, color and format. Author: Matias Ezequiel Marani.
+
+## Main
+
+- [El Coso 3000](https://maranimatias.github.io/el-coso-3000/): The generator itself. Choose Image or Video, set width and height (or pick a preset), pick a background color, and download.
+- [Source code](https://github.com/MaraniMatias/el-coso-3000): Repository with the full source.
+
+## Capabilities
+
+- Image formats: PNG, JPEG, WebP and SVG.
+- Animated and sequence formats: GIF, AVI and ZIP image sequences.
+- Video formats: MP4, WebM, MOV and MKV.
+- Size presets for common ad and display formats, grouped as Standard display (e.g. Medium Rectangle 300x250, Leaderboard 728x90, Half Page 300x600), Mobile (e.g. 320x50, 320x100, 320x480) and High impact (e.g. Billboard 970x250, Portrait 300x1050), plus fully custom dimensions.
+- Automatic text color with a displayed contrast ratio and WCAG AA pass indicator.
+- Privacy: all rendering happens locally in the browser, with no uploads.
+
+## Optional
+
+- [Page metadata and canonical URL](https://maranimatias.github.io/el-coso-3000/): Canonical address of the tool, for citation and linking.
