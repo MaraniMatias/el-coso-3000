@@ -89,7 +89,9 @@ export function writeSubBlocks(out: ByteWriter, data: Uint8Array): void {
  */
 export function lzwCompress(indices: Uint8Array, minCodeSize: number): Bytes {
   if (!Number.isInteger(minCodeSize) || minCodeSize < 2 || minCodeSize > 8) {
-    throw new RangeError(`minCodeSize out of range: ${minCodeSize} (expected 2..8)`);
+    throw new RangeError(
+      `minCodeSize out of range: ${minCodeSize} (expected 2..8)`,
+    );
   }
 
   const out = new ByteWriter(Math.max(1024, indices.length >> 1));

@@ -102,8 +102,11 @@ function auditOffline(html: string): void {
 
   for (const rel of LOADING_LINK_RELS) {
     const pattern = new RegExp(`<link[^>]*\\brel\\s*=\\s*["'][^"']*\\b${rel}\\b[^"']*["'][^>]*>`, 'i');
-    const match = pattern.exec(html);
-    if (match && /https?:/i.test(match[0])) {
+    const tag = pattern.exec(html)?.[0];
+    // Only the href decides. A `data:` URI is inline, so it stays offline even
+    // when its payload names a namespace, as the SVG favicon does.
+    const href = tag && /\bhref\s*=\s*["']([^"']*)["']/i.exec(tag)?.[1];
+    if (href && /^(?:https?:)?\/\//i.test(href.trim())) {
       problems.push(`a <link rel="${rel}"> pointing to a remote resource`);
     }
   }

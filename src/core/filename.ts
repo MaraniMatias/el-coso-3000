@@ -1,41 +1,44 @@
-import type { ImageFormat, Spec, VideoFormat } from './types';
+import type { ImageFormat, Spec, VideoFormat } from "./types";
 
 const EXT: Record<ImageFormat | VideoFormat, string> = {
-  png: 'png',
-  jpeg: 'jpg',
-  webp: 'webp',
-  svg: 'svg',
-  gif: 'gif',
-  'mjpeg-avi': 'avi',
-  'jpeg-zip': 'zip',
-  mp4: 'mp4',
-  webm: 'webm',
-  mov: 'mov',
-  mkv: 'mkv',
+  png: "png",
+  jpeg: "jpg",
+  webp: "webp",
+  svg: "svg",
+  gif: "gif",
+  "mjpeg-avi": "avi",
+  "jpeg-zip": "zip",
+  mp4: "mp4",
+  webm: "webm",
+  mov: "mov",
+  mkv: "mkv",
 };
 
 const MIME: Record<ImageFormat | VideoFormat, string> = {
-  png: 'image/png',
-  jpeg: 'image/jpeg',
-  webp: 'image/webp',
-  svg: 'image/svg+xml',
-  gif: 'image/gif',
-  'mjpeg-avi': 'video/x-msvideo',
-  'jpeg-zip': 'application/zip',
-  mp4: 'video/mp4',
-  webm: 'video/webm',
-  mov: 'video/quicktime',
-  mkv: 'video/x-matroska',
+  png: "image/png",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+  svg: "image/svg+xml",
+  gif: "image/gif",
+  "mjpeg-avi": "video/x-msvideo",
+  "jpeg-zip": "application/zip",
+  mp4: "video/mp4",
+  webm: "video/webm",
+  mov: "video/quicktime",
+  mkv: "video/x-matroska",
 };
 
 /** Container MIME for WebM, which does distinguish the inner codec. */
-export function mimeFor(format: ImageFormat | VideoFormat, isVideo = false): string {
+export function mimeFor(
+  format: ImageFormat | VideoFormat,
+  isVideo = false,
+): string {
   if (isVideo) {
     // Matroska has no registered MIME. `video/x-matroska` is the one people on
     // the web accept, and the one Chrome and ffmpeg understand.
-    if (format === 'mp4') return 'video/mp4';
-    if (format === 'mov') return 'video/quicktime';
-    if (format === 'mkv') return 'video/x-matroska';
+    if (format === "mp4") return "video/mp4";
+    if (format === "mov") return "video/quicktime";
+    if (format === "mkv") return "video/x-matroska";
     return `video/${format}`;
   }
   return MIME[format];
@@ -46,7 +49,10 @@ export function mimeFor(format: ImageFormat | VideoFormat, isVideo = false): str
  * preferable to cropping: the placeholder declares the size it really has, so
  * the name does not lie.
  */
-export function evenDimensions(width: number, height: number): { width: number; height: number; changed: boolean } {
+export function evenDimensions(
+  width: number,
+  height: number,
+): { width: number; height: number; changed: boolean } {
   const w = width % 2 === 0 ? width : width + 1;
   const h = height % 2 === 0 ? height : height + 1;
   return { width: w, height: h, changed: w !== width || h !== height };
@@ -90,7 +96,7 @@ export function buildFilename(parts: NameParts): string {
     segments.push(`${trimNumber(parts.duration)}s`);
   }
 
-  return `${segments.join('-')}.${ext}`;
+  return `${segments.join("-")}.${ext}`;
 }
 
 /**
@@ -99,15 +105,9 @@ export function buildFilename(parts: NameParts): string {
  * names like `320x240-15fps-0s.png`, which is noise: the `0s` also confuses,
  * because it looks like a video of zero length.
  */
-const TIMED_FORMATS: ReadonlySet<ImageFormat | VideoFormat> = new Set<ImageFormat | VideoFormat>([
-  'gif',
-  'mjpeg-avi',
-  'jpeg-zip',
-  'mp4',
-  'webm',
-  'mov',
-  'mkv',
-]);
+const TIMED_FORMATS: ReadonlySet<ImageFormat | VideoFormat> = new Set<
+  ImageFormat | VideoFormat
+>(["gif", "mjpeg-avi", "jpeg-zip", "mp4", "webm", "mov", "mkv"]);
 
 /** Name out of a `Spec`. The encoders pass the real dimensions. */
 export function filenameForSpec(

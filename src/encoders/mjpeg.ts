@@ -16,11 +16,16 @@
  * pure and can be tested without a canvas.
  */
 
-import { drawFrame } from '../core/draw-frame';
-import { filenameForSpec, mimeFor } from '../core/filename';
-import { buildMetadata, metadataAsPairs, metadataAsText, type FileMetadata } from '../core/metadata';
-import type { ExportResult, ProgressCallback, Spec } from '../core/types';
-import { crc32 } from './image';
+import { drawFrame } from "../core/draw-frame";
+import { filenameForSpec, mimeFor } from "../core/filename";
+import {
+  buildMetadata,
+  metadataAsPairs,
+  metadataAsText,
+  type FileMetadata,
+} from "../core/metadata";
+import type { ExportResult, ProgressCallback, Spec } from "../core/types";
+import { crc32 } from "./image";
 
 /**
  * Newly allocated bytes. The generic matters: `Blob` only accepts views over
@@ -32,7 +37,7 @@ type Bytes = Uint8Array<ArrayBuffer>;
 /** Any drawable canvas. */
 type Surface = HTMLCanvasElement | OffscreenCanvas;
 
-const JPEG_MIME = 'image/jpeg';
+const JPEG_MIME = "image/jpeg";
 const UTF8 = new TextEncoder();
 
 // ── Byte utilities ────────────────────────────────────────────────────────
@@ -68,7 +73,7 @@ function tagBytes(tag: string): Bytes {
 // ── Canvas ────────────────────────────────────────────────────────────────
 
 function abortError(): DOMException {
-  return new DOMException('Export canceled', 'AbortError');
+  return new DOMException("Export canceled", "AbortError");
 }
 
 function checkAbort(signal?: AbortSignal): void {
@@ -76,19 +81,22 @@ function checkAbort(signal?: AbortSignal): void {
 }
 
 function createSurface(width: number, height: number): Surface {
-  if (typeof OffscreenCanvas === 'function') return new OffscreenCanvas(width, height);
-  if (typeof document !== 'undefined') {
-    const canvas = document.createElement('canvas');
+  if (typeof OffscreenCanvas === "function")
+    return new OffscreenCanvas(width, height);
+  if (typeof document !== "undefined") {
+    const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
     return canvas;
   }
-  throw new Error('No canvas is available: OffscreenCanvas or a document is required.');
+  throw new Error(
+    "No canvas is available: OffscreenCanvas or a document is required.",
+  );
 }
 
 function context2d(surface: Surface): CanvasRenderingContext2D {
-  const ctx = surface.getContext('2d');
-  if (!ctx) throw new Error('The browser did not provide a 2D canvas context.');
+  const ctx = surface.getContext("2d");
+  if (!ctx) throw new Error("The browser did not provide a 2D canvas context.");
   // In the types, `OffscreenCanvasRenderingContext2D` is not a
   // `CanvasRenderingContext2D`, but it has the same drawing and measurement
   // methods used by the core.
@@ -105,17 +113,25 @@ function releaseSurface(surface: Surface): void {
 function encodeJpegBlob(surface: Surface, quality: number): Promise<Blob> {
   // `OffscreenCanvas` has no `toBlob`; it exposes `convertToBlob`, the same
   // concept using promises instead of a callback.
-  if ('convertToBlob' in surface) return surface.convertToBlob({ type: JPEG_MIME, quality });
+  if ("convertToBlob" in surface)
+    return surface.convertToBlob({ type: JPEG_MIME, quality });
   return new Promise<Blob>((resolve, reject) => {
     surface.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error('This browser cannot export JPEG.'))),
+      (blob) =>
+        blob
+          ? resolve(blob)
+          : reject(new Error("This browser cannot export JPEG.")),
       JPEG_MIME,
       quality,
     );
   });
 }
 
-async function encodeJpeg(surface: Surface, quality: number, signal?: AbortSignal): Promise<Bytes> {
+async function encodeJpeg(
+  surface: Surface,
+  quality: number,
+  signal?: AbortSignal,
+): Promise<Bytes> {
   const blob = await encodeJpegBlob(surface, quality);
   // `toBlob`/`convertToBlob` do not observe the `AbortSignal`, so check the
   // flag manually when they return.
@@ -187,10 +203,10 @@ const AVIF_HASINDEX = 0x10;
 /** `dwFlags` for each `idx1` entry: a complete JPEG is always a keyframe. */
 const AVIIF_KEYFRAME = 0x10;
 /** `fccType`/`biCompression` for the codec: Motion-JPEG. */
-const FCC_VIDS = 'vids';
-const FCC_MJPG = 'MJPG';
+const FCC_VIDS = "vids";
+const FCC_MJPG = "MJPG";
 /** Fourcc of the video chunk in `movi`: stream 0, compressed data. */
-const MOVI_CHUNK = '00dc';
+const MOVI_CHUNK = "00dc";
 
 export interface MjpegAviParams {
   width: number;
@@ -212,7 +228,7 @@ function riffChunk(tag: string, payload: Bytes): Bytes {
 
 /** `LIST`: a 'LIST' chunk whose payload starts with the list type. */
 function riffList(type: string, payload: Bytes): Bytes {
-  return riffChunk('LIST', concatBytes([tagBytes(type), payload]));
+  return riffChunk("LIST", concatBytes([tagBytes(type), payload]));
 }
 
 /**
@@ -221,7 +237,11 @@ function riffList(type: string, payload: Bytes): Bytes {
  * `dwMicroSecPerFrame` and the `strh` pair `dwScale`/`dwRate` must agree: here
  * they come from 1/fps, and in `strh` from 1 and fps.
  */
-function avihHeader(p: MjpegAviParams, frames: number, maxFrame: number): Bytes {
+function avihHeader(
+  p: MjpegAviParams,
+  frames: number,
+  maxFrame: number,
+): Bytes {
   const out = new Uint8Array(56);
   const view = viewOf(out);
   view.setUint32(0, Math.round(1_000_000 / p.fps), true); // dwMicroSecPerFrame
@@ -239,7 +259,11 @@ function avihHeader(p: MjpegAviParams, frames: number, maxFrame: number): Bytes 
 }
 
 /** `AVIStreamHeader` (56 bytes): describes the stream, not the pixels. */
-function streamHeader(p: MjpegAviParams, frames: number, maxFrame: number): Bytes {
+function streamHeader(
+  p: MjpegAviParams,
+  frames: number,
+  maxFrame: number,
+): Bytes {
   const out = new Uint8Array(56);
   const view = viewOf(out);
   out.set(tagBytes(FCC_VIDS), 0); // fccType
@@ -288,16 +312,16 @@ function bitmapInfoHeader(p: MjpegAviParams): Bytes {
 
 /** Standard RIFF `INFO` tags for metadata pairs that have one. */
 const INFO_TAG: Record<string, string> = {
-  Software: 'ISFT',
-  Comment: 'ICMT',
-  Source: 'ISBJ',
-  Title: 'INAM',
-  Description: 'IDSC',
+  Software: "ISFT",
+  Comment: "ICMT",
+  Source: "ISBJ",
+  Title: "INAM",
+  Description: "IDSC",
 };
 
 /** Tag fourCC: the standard one if available, otherwise the key truncated to 4. */
 function infoTag(key: string): string {
-  return INFO_TAG[key] ?? key.toUpperCase().padEnd(4, ' ').slice(0, 4);
+  return INFO_TAG[key] ?? key.toUpperCase().padEnd(4, " ").slice(0, 4);
 }
 
 /**
@@ -308,8 +332,10 @@ function infoTag(key: string): string {
  * instead of being discarded.
  */
 function infoList(meta: FileMetadata): Bytes {
-  const chunks = metadataAsPairs(meta).map(([key, value]) => riffChunk(infoTag(key), UTF8.encode(value)));
-  return riffList('INFO', concatBytes(chunks));
+  const chunks = metadataAsPairs(meta).map(([key, value]) =>
+    riffChunk(infoTag(key), UTF8.encode(value)),
+  );
+  return riffList("INFO", concatBytes(chunks));
 }
 
 /**
@@ -335,7 +361,7 @@ function indexChunk(frames: Bytes[]): Bytes {
     view.setUint32(base + 12, size, true);
     at += 8 + size + (size % 2);
   }
-  return riffChunk('idx1', out);
+  return riffChunk("idx1", out);
 }
 
 /**
@@ -347,28 +373,36 @@ function indexChunk(frames: Bytes[]): Bytes {
 export function buildMjpegAvi(frames: Bytes[], params: MjpegAviParams): Bytes {
   const maxFrame = frames.reduce((n, f) => Math.max(n, f.length), 0);
   const hdrl = riffList(
-    'hdrl',
+    "hdrl",
     concatBytes([
-      riffChunk('avih', avihHeader(params, frames.length, maxFrame)),
+      riffChunk("avih", avihHeader(params, frames.length, maxFrame)),
       riffList(
-        'strl',
+        "strl",
         concatBytes([
-          riffChunk('strh', streamHeader(params, frames.length, maxFrame)),
-          riffChunk('strf', bitmapInfoHeader(params)),
+          riffChunk("strh", streamHeader(params, frames.length, maxFrame)),
+          riffChunk("strf", bitmapInfoHeader(params)),
         ]),
       ),
     ]),
   );
-  const movi = riffList('movi', concatBytes(frames.map((frame) => riffChunk(MOVI_CHUNK, frame))));
-  const body = concatBytes([hdrl, infoList(params.meta), movi, indexChunk(frames)]);
+  const movi = riffList(
+    "movi",
+    concatBytes(frames.map((frame) => riffChunk(MOVI_CHUNK, frame))),
+  );
+  const body = concatBytes([
+    hdrl,
+    infoList(params.meta),
+    movi,
+    indexChunk(frames),
+  ]);
 
   // The header is 12 bytes: 'RIFF', the size, and the 'AVI ' type.
   const out = new Uint8Array(12 + body.length);
   const view = viewOf(out);
-  out.set(tagBytes('RIFF'), 0);
+  out.set(tagBytes("RIFF"), 0);
   // The RIFF size excludes its own 8-byte header.
   view.setUint32(4, out.length - 8, true);
-  out.set(tagBytes('AVI '), 8);
+  out.set(tagBytes("AVI "), 8);
   out.set(body, 12);
   return out;
 }
@@ -432,7 +466,7 @@ async function deflateRaw(data: Bytes): Promise<Bytes> {
       controller.close();
     },
   });
-  const deflated = source.pipeThrough(new CompressionStream('deflate-raw'));
+  const deflated = source.pipeThrough(new CompressionStream("deflate-raw"));
   return new Uint8Array(await new Response(deflated).arrayBuffer());
 }
 
@@ -490,7 +524,12 @@ function centralHeader(f: ZipFields): Bytes {
   return out;
 }
 
-function endOfCentralDirectory(count: number, cdSize: number, cdOffset: number, comment: Bytes): Bytes {
+function endOfCentralDirectory(
+  count: number,
+  cdSize: number,
+  cdOffset: number,
+  comment: Bytes,
+): Bytes {
   const out = new Uint8Array(22 + comment.length);
   const view = viewOf(out);
   view.setUint32(0, SIG_EOCD, true);
@@ -516,9 +555,15 @@ function hasNonAscii(bytes: Bytes): boolean {
  * @param comment Goes in the EOCD comment field, where a quick reader looks
  * before opening the central directory.
  */
-export async function buildJpegZip(entries: JpegZipEntry[], comment = '', signal?: AbortSignal): Promise<Bytes> {
+export async function buildJpegZip(
+  entries: JpegZipEntry[],
+  comment = "",
+  signal?: AbortSignal,
+): Promise<Bytes> {
   if (entries.length > MAX_ENTRIES) {
-    throw new Error(`A ZIP supports ${MAX_ENTRIES} entries, but ${entries.length} were requested.`);
+    throw new Error(
+      `A ZIP supports ${MAX_ENTRIES} entries, but ${entries.length} were requested.`,
+    );
   }
 
   const locals: Bytes[] = [];
@@ -529,7 +574,9 @@ export async function buildJpegZip(entries: JpegZipEntry[], comment = '', signal
     checkAbort(signal);
     const name = UTF8.encode(entry.name);
     if (name.length > MAX_NAME_BYTES) {
-      throw new Error(`Filename too long for a ZIP (${name.length} bytes, maximum ${MAX_NAME_BYTES}).`);
+      throw new Error(
+        `Filename too long for a ZIP (${name.length} bytes, maximum ${MAX_NAME_BYTES}).`,
+      );
     }
     const deflated = await deflateRaw(entry.data);
     // JPEG (and PNG) are already compressed: if deflate does not save a byte,
@@ -556,7 +603,16 @@ export async function buildJpegZip(entries: JpegZipEntry[], comment = '', signal
   // The central directory starts just where the local headers end, which is
   // what the EOCD declares: if `offset` does not match `directory`, the file
   // cannot be opened even if the headers look perfect.
-  return concatBytes([...locals, directory, endOfCentralDirectory(entries.length, directory.length, offset, fitComment(comment))]);
+  return concatBytes([
+    ...locals,
+    directory,
+    endOfCentralDirectory(
+      entries.length,
+      directory.length,
+      offset,
+      fitComment(comment),
+    ),
+  ]);
 }
 
 // ── Exporters ─────────────────────────────────────────────────────────────
@@ -574,10 +630,16 @@ export async function exportMjpegAvi(
 ): Promise<ExportResult> {
   checkAbort(signal);
   const totalFrames = frameCount(spec);
-  const frames = await renderJpegFrames(spec, totalFrames, onProgress, signal, [0, 0.85]);
+  const frames = await renderJpegFrames(
+    spec,
+    totalFrames,
+    onProgress,
+    signal,
+    [0, 0.85],
+  );
   checkAbort(signal);
 
-  onProgress?.({ progress: 0.9, message: 'Writing AVI…' });
+  onProgress?.({ progress: 0.9, message: "Writing AVI…" });
   const avi = buildMjpegAvi(frames, {
     width: spec.width,
     height: spec.height,
@@ -585,10 +647,15 @@ export async function exportMjpegAvi(
     meta: buildMetadata(spec),
   });
 
-  const mimeType = mimeFor('mjpeg-avi');
+  const mimeType = mimeFor("mjpeg-avi");
   const blob = new Blob([avi], { type: mimeType });
-  onProgress?.({ progress: 1, message: 'Done' });
-  return { blob, filename: filenameForSpec(spec, 'mjpeg-avi'), mimeType, size: blob.size };
+  onProgress?.({ progress: 1, message: "Done" });
+  return {
+    blob,
+    filename: filenameForSpec(spec, "mjpeg-avi"),
+    mimeType,
+    size: blob.size,
+  };
 }
 
 /** JPEG sequence in a ZIP, with metadata inside and in the comment. */
@@ -599,19 +666,33 @@ export async function exportJpegZip(
 ): Promise<ExportResult> {
   checkAbort(signal);
   const totalFrames = frameCount(spec);
-  const frames = await renderJpegFrames(spec, totalFrames, onProgress, signal, [0, 0.8]);
+  const frames = await renderJpegFrames(
+    spec,
+    totalFrames,
+    onProgress,
+    signal,
+    [0, 0.8],
+  );
   checkAbort(signal);
 
-  onProgress?.({ progress: 0.85, message: 'Packing ZIP…' });
+  onProgress?.({ progress: 0.85, message: "Packing ZIP…" });
   const meta = buildMetadata(spec);
   const entries: JpegZipEntry[] = [
-    { name: 'metadata.json', data: UTF8.encode(JSON.stringify(meta, null, 2)) },
-    ...frames.map((data, i) => ({ name: `frame_${String(i + 1).padStart(5, '0')}.jpg`, data })),
+    { name: "metadata.json", data: UTF8.encode(JSON.stringify(meta, null, 2)) },
+    ...frames.map((data, i) => ({
+      name: `frame_${String(i + 1).padStart(5, "0")}.jpg`,
+      data,
+    })),
   ];
   const zip = await buildJpegZip(entries, metadataAsText(meta), signal);
 
-  const mimeType = mimeFor('jpeg-zip');
+  const mimeType = mimeFor("jpeg-zip");
   const blob = new Blob([zip], { type: mimeType });
-  onProgress?.({ progress: 1, message: 'Done' });
-  return { blob, filename: filenameForSpec(spec, 'jpeg-zip'), mimeType, size: blob.size };
+  onProgress?.({ progress: 1, message: "Done" });
+  return {
+    blob,
+    filename: filenameForSpec(spec, "jpeg-zip"),
+    mimeType,
+    size: blob.size,
+  };
 }

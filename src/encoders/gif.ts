@@ -14,17 +14,23 @@
  * so there is nothing to quantize here: only index, compress, and concatenate.
  */
 
-import { drawFrame } from '../core/draw-frame';
-import { buildFilename, mimeFor, trimNumber } from '../core/filename';
-import { buildMetadata, metadataAsText } from '../core/metadata';
-import type { ExportResult, ProgressCallback, Spec } from '../core/types';
-import { ByteWriter, lzwCompress, pushUint16, writeSubBlocks, type Bytes } from './lzw';
-import { buildPalette, createPaletteMapper, type Palette } from './quantize';
+import { drawFrame } from "../core/draw-frame";
+import { buildFilename, mimeFor, trimNumber } from "../core/filename";
+import { buildMetadata, metadataAsText } from "../core/metadata";
+import type { ExportResult, ProgressCallback, Spec } from "../core/types";
+import {
+  ByteWriter,
+  lzwCompress,
+  pushUint16,
+  writeSubBlocks,
+  type Bytes,
+} from "./lzw";
+import { buildPalette, createPaletteMapper, type Palette } from "./quantize";
 
 // ── File structure ────────────────────────────────────────────────────────
 
-const SIGNATURE = new TextEncoder().encode('GIF89a');
-const NETSCAPE_APP = new TextEncoder().encode('NETSCAPP2.0');
+const SIGNATURE = new TextEncoder().encode("GIF89a");
+const NETSCAPE_APP = new TextEncoder().encode("NETSCAPP2.0");
 
 /** The GCT is a power of 2 between 2 and 256 entries. */
 const MAX_GCT_ENTRIES = 256;
@@ -68,7 +74,7 @@ interface Layout {
 function layoutOf(header: GifHeader): Layout {
   const colors = header.palette.length / 3;
   if (!Number.isInteger(colors) || colors < 1) {
-    throw new Error('The GIF palette is empty.');
+    throw new Error("The GIF palette is empty.");
   }
   // Reserve the first free palette index for transparency.
   // No opaque pixel can use it, so transparency cannot overwrite a color.
@@ -135,11 +141,18 @@ export function writeGifHeader(out: ByteWriter, header: GifHeader): void {
  * @param indices `width * height` indices into the header palette.
  * @param delayCs Duration in hundredths of a second.
  */
-export function writeGifFrame(out: ByteWriter, header: GifHeader, indices: Uint8Array, delayCs: number): void {
+export function writeGifFrame(
+  out: ByteWriter,
+  header: GifHeader,
+  indices: Uint8Array,
+  delayCs: number,
+): void {
   const { width, height } = header;
   const layout = layoutOf(header);
   if (indices.length !== width * height) {
-    throw new Error(`The frame has ${indices.length} pixels, but the canvas requires ${width * height}.`);
+    throw new Error(
+      `The frame has ${indices.length} pixels, but the canvas requires ${width * height}.`,
+    );
   }
 
   // Graphic Control Extension.
@@ -203,7 +216,7 @@ export function gifTiming(fps: number, duration: number): GifTiming {
 // ── Canvas ────────────────────────────────────────────────────────────────
 
 function abortError(): DOMException {
-  return new DOMException('Export canceled', 'AbortError');
+  return new DOMException("Export canceled", "AbortError");
 }
 
 function checkAbort(signal?: AbortSignal): void {
@@ -211,19 +224,22 @@ function checkAbort(signal?: AbortSignal): void {
 }
 
 function createSurface(width: number, height: number): Surface {
-  if (typeof OffscreenCanvas === 'function') return new OffscreenCanvas(width, height);
-  if (typeof document !== 'undefined') {
-    const canvas = document.createElement('canvas');
+  if (typeof OffscreenCanvas === "function")
+    return new OffscreenCanvas(width, height);
+  if (typeof document !== "undefined") {
+    const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
     return canvas;
   }
-  throw new Error('No canvas is available: OffscreenCanvas or a document is required.');
+  throw new Error(
+    "No canvas is available: OffscreenCanvas or a document is required.",
+  );
 }
 
 function context2d(surface: Surface): CanvasRenderingContext2D {
-  const ctx = surface.getContext('2d');
-  if (!ctx) throw new Error('The browser did not provide a 2D canvas context.');
+  const ctx = surface.getContext("2d");
+  if (!ctx) throw new Error("The browser did not provide a 2D canvas context.");
   // In the types, `OffscreenCanvasRenderingContext2D` is not a
   // `CanvasRenderingContext2D` (it lacks `reset`, `isContextLost`, and
   // `drawFocusIfNeeded`), but it has the same drawing and measurement methods
@@ -251,12 +267,18 @@ function yieldToEventLoop(): Promise<void> {
  * color that will appear. Sampling every frame for the palette would be wasted
  * work because the palette is the same.
  */
-function samplePalette(ctx: CanvasRenderingContext2D, spec: Spec, totalFrames: number): Uint8Array {
+function samplePalette(
+  ctx: CanvasRenderingContext2D,
+  spec: Spec,
+  totalFrames: number,
+): Uint8Array {
   const picks = [...new Set([0, Math.floor(totalFrames / 2), totalFrames - 1])];
   const pixels = spec.width * spec.height;
   const stride = Math.max(1, Math.ceil(pixels / MAX_SAMPLES_PER_FRAME));
 
-  const out = new Uint8Array(picks.length * Math.min(pixels, MAX_SAMPLES_PER_FRAME) * 3);
+  const out = new Uint8Array(
+    picks.length * Math.min(pixels, MAX_SAMPLES_PER_FRAME) * 3,
+  );
   let at = 0;
   for (const frame of picks) {
     drawFrame(ctx, spec, frame / totalFrames);
@@ -289,12 +311,15 @@ export async function exportGif(
 ): Promise<ExportResult> {
   checkAbort(signal);
 
-  const { totalFrames, delayCs, effectiveFps } = gifTiming(spec.fps, spec.duration);
-  const mimeType = mimeFor('gif');
+  const { totalFrames, delayCs, effectiveFps } = gifTiming(
+    spec.fps,
+    spec.duration,
+  );
+  const mimeType = mimeFor("gif");
   const filename = buildFilename({
     width: spec.width,
     height: spec.height,
-    format: 'gif',
+    format: "gif",
     // With duration 0, the GIF is a valid one-frame loop. Omit `-0s` from the
     // filename so it does not look like a misconfigured video.
     fps: spec.duration > 0 ? spec.fps : undefined,
@@ -311,8 +336,11 @@ export async function exportGif(
   try {
     const ctx = context2d(surface);
 
-    onProgress?.({ progress: 0, message: 'Sampling colors…' });
-    const palette: Palette = buildPalette(samplePalette(ctx, spec, totalFrames), MAX_PALETTE_COLORS);
+    onProgress?.({ progress: 0, message: "Sampling colors…" });
+    const palette: Palette = buildPalette(
+      samplePalette(ctx, spec, totalFrames),
+      MAX_PALETTE_COLORS,
+    );
     checkAbort(signal);
 
     const header: GifHeader = {
@@ -336,9 +364,10 @@ export async function exportGif(
       const { data } = ctx.getImageData(0, 0, spec.width, spec.height);
       for (let p = 0, o = 0; p < pixels; p++, o += 4) {
         const alpha = data[o + 3]!;
-        indices[p] = alpha === 0
-          ? transparentIndex
-          : toIndex((data[o]! << 16) | (data[o + 1]! << 8) | data[o + 2]!);
+        indices[p] =
+          alpha === 0
+            ? transparentIndex
+            : toIndex((data[o]! << 16) | (data[o + 1]! << 8) | data[o + 2]!);
       }
       writeGifFrame(out, header, indices, delayCs);
 

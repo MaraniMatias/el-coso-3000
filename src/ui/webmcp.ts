@@ -14,8 +14,8 @@
  * keeps working exactly the same. That is why everything sits behind feature
  * detection and there is no error on the normal path.
  */
-import { palette } from '../core/color';
-import { TIMELINE_FORMATS } from '../core/types';
+import { palette } from "../core/color";
+import { TIMELINE_FORMATS } from "../core/types";
 
 /** The subset of the API we use. It is not in the DOM types yet. */
 interface ModelContext {
@@ -31,7 +31,9 @@ interface ModelContext {
 /** What the app hands over to the tool so it can really drive it. */
 export interface WebMcpHost {
   /** Applies a full configuration to the controls. */
-  applySettings(input: Record<string, unknown>): { ok: true } | { ok: false; error: string };
+  applySettings(
+    input: Record<string, unknown>,
+  ): { ok: true } | { ok: false; error: string };
   /** Triggers the generation with the current configuration. */
   generate(): Promise<string>;
   /** Reads the current configuration, so the agent knows the state. */
@@ -39,8 +41,9 @@ export interface WebMcpHost {
 }
 
 function modelContext(): ModelContext | null {
-  const ctx = (document as unknown as { modelContext?: ModelContext }).modelContext;
-  if (!ctx || typeof ctx.registerTool !== 'function') return null;
+  const ctx = (document as unknown as { modelContext?: ModelContext })
+    .modelContext;
+  if (!ctx || typeof ctx.registerTool !== "function") return null;
   return ctx;
 }
 
@@ -49,51 +52,82 @@ export function isWebMcpSupported(): boolean {
 }
 
 const SCHEMA = {
-  type: 'object',
+  type: "object",
   properties: {
-    width: { type: 'integer', minimum: 1, maximum: 4096, description: 'Width in pixels.' },
-    height: { type: 'integer', minimum: 1, maximum: 4096, description: 'Height in pixels.' },
+    width: {
+      type: "integer",
+      minimum: 1,
+      maximum: 4096,
+      description: "Width in pixels.",
+    },
+    height: {
+      type: "integer",
+      minimum: 1,
+      maximum: 4096,
+      description: "Height in pixels.",
+    },
     kind: {
-      type: 'string',
-      enum: ['image', 'video'],
-      description: 'Generate a still image or a looping output.',
+      type: "string",
+      enum: ["image", "video"],
+      description: "Generate a still image or a looping output.",
     },
     imageFormat: {
-      type: 'string',
-      enum: ['png', 'jpeg', 'webp', 'svg'],
-      description: 'Output format for kind=image. Defaults to png.',
+      type: "string",
+      enum: ["png", "jpeg", "webp", "svg"],
+      description: "Output format for kind=image. Defaults to png.",
     },
     videoFormat: {
-      type: 'string',
+      type: "string",
       enum: [...TIMELINE_FORMATS],
       description:
-        'Output format for kind=video, including the animated image containers. Defaults to mp4.',
+        "Output format for kind=video, including the animated image containers. Defaults to mp4.",
     },
     palette: {
-      type: 'string',
-      description: 'Name of the pastel palette, for example "azure" or "sage". If background is passed too, background wins.',
+      type: "string",
+      description:
+        'Name of the pastel palette, for example "azure" or "sage". If background is passed too, background wins.',
     },
     background: {
-      type: 'string',
-      description: 'Background color as 6 hex digits, for example "E0E0E0", without #. The text is derived from it.',
+      type: "string",
+      description:
+        'Background color as 6 hex digits, for example "E0E0E0", without #. The text is derived from it.',
     },
-    duration: { type: 'number', minimum: 1, maximum: 120, description: 'Seconds. Video only.' },
-    fps: { type: 'integer', minimum: 1, maximum: 60, description: 'Frames per second. Video only.' },
-    showProgressBar: { type: 'boolean', description: 'Draw a progress bar at the bottom. Video only.' },
-    showTime: { type: 'boolean', description: 'Draw the 0:03 / 0:10 clock. Video only.' },
+    duration: {
+      type: "number",
+      minimum: 1,
+      maximum: 120,
+      description: "Seconds. Video only.",
+    },
+    fps: {
+      type: "integer",
+      minimum: 1,
+      maximum: 60,
+      description: "Frames per second. Video only.",
+    },
+    showProgressBar: {
+      type: "boolean",
+      description: "Draw a progress bar at the bottom. Video only.",
+    },
+    showTime: {
+      type: "boolean",
+      description: "Draw the 0:03 / 0:10 clock. Video only.",
+    },
     download: {
-      type: 'boolean',
-      description: 'If false, it only configures and returns the preview without downloading. Defaults to true.',
+      type: "boolean",
+      description:
+        "If false, it only configures and returns the preview without downloading. Defaults to true.",
     },
   },
 } as const;
 
 const DESCRIPTION = [
-  'Generates an image or video placeholder with the text color derived automatically',
-  'to guarantee WCAG contrast. The text of the placeholder is the dimensions.',
+  "Generates an image or video placeholder with the text color derived automatically",
+  "to guarantee WCAG contrast. The text of the placeholder is the dimensions.",
   // The list comes from the real palette, so it cannot go stale.
-  `Pastel palettes available: ${palette().map((p) => p.label.toLowerCase()).join(', ')}.`,
-].join(' ');
+  `Pastel palettes available: ${palette()
+    .map((p) => p.label.toLowerCase())
+    .join(", ")}.`,
+].join(" ");
 
 /**
  * Registers the imperative tool. Returns `true` if it ended up registered.
@@ -107,7 +141,7 @@ export async function setupWebMcp(host: WebMcpHost): Promise<boolean> {
 
   try {
     await ctx.registerTool({
-      name: 'generate_placeholder',
+      name: "generate_placeholder",
       description: DESCRIPTION,
       inputSchema: SCHEMA as unknown as Record<string, unknown>,
       annotations: {
@@ -118,7 +152,8 @@ export async function setupWebMcp(host: WebMcpHost): Promise<boolean> {
       },
       async execute(input) {
         const applied = host.applySettings(input);
-        if (!applied.ok) return `Could not apply the configuration: ${applied.error}`;
+        if (!applied.ok)
+          return `Could not apply the configuration: ${applied.error}`;
         if (input.download === false) {
           return `Configured without downloading: ${JSON.stringify(host.describe())}`;
         }
@@ -140,6 +175,6 @@ export async function setupWebMcp(host: WebMcpHost): Promise<boolean> {
 /** Text for the footer of the UI. */
 export function webmcpStatusText(registered: boolean): string {
   return registered
-    ? 'WebMCP active: an AI agent can generate placeholders from this page.'
-    : '';
+    ? "WebMCP active: an AI agent can generate placeholders from this page."
+    : "";
 }

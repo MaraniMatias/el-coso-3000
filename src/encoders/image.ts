@@ -13,25 +13,40 @@
  * contain its metadata.
  */
 
-import { hexToRgba } from '../core/color';
-import { drawFrame, frameGeometry, timecode } from '../core/draw-frame';
-import { filenameForSpec, mimeFor } from '../core/filename';
-import { FONT_FACE_CSS, FONT_STACK } from '../core/font';
-import { layoutDimensions, layoutLine, paddingFor, type TextLayout } from '../core/fit-text';
-import { buildMetadata, metadataAsPairs, metadataAsText, type FileMetadata } from '../core/metadata';
-import { FONT_WEIGHT, type ExportResult, type ProgressCallback, type Spec } from '../core/types';
+import { hexToRgba } from "../core/color";
+import { drawFrame, frameGeometry, timecode } from "../core/draw-frame";
+import { filenameForSpec, mimeFor } from "../core/filename";
+import { FONT_FACE_CSS, FONT_STACK } from "../core/font";
+import {
+  layoutDimensions,
+  layoutLine,
+  paddingFor,
+  type TextLayout,
+} from "../core/fit-text";
+import {
+  buildMetadata,
+  metadataAsPairs,
+  metadataAsText,
+  type FileMetadata,
+} from "../core/metadata";
+import {
+  FONT_WEIGHT,
+  type ExportResult,
+  type ProgressCallback,
+  type Spec,
+} from "../core/types";
 
-export type StillImageFormat = 'png' | 'jpeg' | 'webp' | 'svg';
+export type StillImageFormat = "png" | "jpeg" | "webp" | "svg";
 
 /** Formats where `quality` has an effect. It does nothing in PNG. */
-const QUALITY_FORMATS = new Set<StillImageFormat>(['jpeg', 'webp']);
+const QUALITY_FORMATS = new Set<StillImageFormat>(["jpeg", "webp"]);
 
 /** Human-readable label for error messages. */
 const FORMAT_LABEL: Record<StillImageFormat, string> = {
-  png: 'PNG',
-  jpeg: 'JPEG',
-  webp: 'WebP',
-  svg: 'SVG',
+  png: "PNG",
+  jpeg: "JPEG",
+  webp: "WebP",
+  svg: "SVG",
 };
 
 /**
@@ -53,7 +68,7 @@ type Bytes = Uint8Array<ArrayBuffer>;
 // ── Canvas ────────────────────────────────────────────────────────────────
 
 function abortError(): DOMException {
-  return new DOMException('Export canceled', 'AbortError');
+  return new DOMException("Export canceled", "AbortError");
 }
 
 function checkAbort(signal?: AbortSignal): void {
@@ -61,19 +76,22 @@ function checkAbort(signal?: AbortSignal): void {
 }
 
 function createSurface(width: number, height: number): Surface {
-  if (typeof OffscreenCanvas === 'function') return new OffscreenCanvas(width, height);
-  if (typeof document !== 'undefined') {
-    const canvas = document.createElement('canvas');
+  if (typeof OffscreenCanvas === "function")
+    return new OffscreenCanvas(width, height);
+  if (typeof document !== "undefined") {
+    const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
     return canvas;
   }
-  throw new Error('No canvas is available: OffscreenCanvas or a document is required.');
+  throw new Error(
+    "No canvas is available: OffscreenCanvas or a document is required.",
+  );
 }
 
 function context2d(surface: Surface): CanvasRenderingContext2D {
-  const ctx = surface.getContext('2d');
-  if (!ctx) throw new Error('The browser did not provide a 2D canvas context.');
+  const ctx = surface.getContext("2d");
+  if (!ctx) throw new Error("The browser did not provide a 2D canvas context.");
   // In the types, `OffscreenCanvasRenderingContext2D` is not a
   // `CanvasRenderingContext2D` (it lacks `reset`, `isContextLost`, and
   // `drawFocusIfNeeded`), but it has the same drawing and measurement methods
@@ -95,11 +113,14 @@ function encodeCanvas(
   signal?: AbortSignal,
 ): Promise<Blob> {
   const type = mimeFor(format);
-  const unsupported = () => new Error(`This browser cannot export ${FORMAT_LABEL[format]}. Try another format.`);
+  const unsupported = () =>
+    new Error(
+      `This browser cannot export ${FORMAT_LABEL[format]}. Try another format.`,
+    );
 
   // `OffscreenCanvas` has no `toBlob`; it exposes `convertToBlob`, the same
   // concept using promises instead of a callback.
-  if ('convertToBlob' in surface) {
+  if ("convertToBlob" in surface) {
     return surface
       .convertToBlob(QUALITY_FORMATS.has(format) ? { type, quality } : { type })
       .then((blob) => {
@@ -112,11 +133,15 @@ function encodeCanvas(
   }
 
   return new Promise<Blob>((resolve, reject) => {
-    surface.toBlob((blob) => {
-      if (signal?.aborted) return reject(abortError());
-      if (!blob) return reject(unsupported());
-      resolve(blob);
-    }, type, quality);
+    surface.toBlob(
+      (blob) => {
+        if (signal?.aborted) return reject(abortError());
+        if (!blob) return reject(unsupported());
+        resolve(blob);
+      },
+      type,
+      quality,
+    );
   });
 }
 
@@ -127,7 +152,8 @@ const CRC_TABLE = ((): Uint32Array => {
   const table = new Uint32Array(256);
   for (let i = 0; i < 256; i++) {
     let c = i;
-    for (let bit = 0; bit < 8; bit++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    for (let bit = 0; bit < 8; bit++)
+      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
     table[i] = c >>> 0;
   }
   return table;
@@ -136,21 +162,31 @@ const CRC_TABLE = ((): Uint32Array => {
 /** CRC32 (polynomial 0xEDB88320), as required by the PNG spec. */
 export function crc32(bytes: Uint8Array): number {
   let c = 0xffffffff;
-  for (let i = 0; i < bytes.length; i++) c = (CRC_TABLE[(c ^ bytes[i]!) & 0xff] ?? 0) ^ (c >>> 8);
+  for (let i = 0; i < bytes.length; i++)
+    c = (CRC_TABLE[(c ^ bytes[i]!) & 0xff] ?? 0) ^ (c >>> 8);
   return (c ^ 0xffffffff) >>> 0;
 }
 
 // ── Byte utilities ────────────────────────────────────────────────────────
 
 function fourCC(bytes: Uint8Array, offset: number): string {
-  return String.fromCharCode(bytes[offset] ?? 0, bytes[offset + 1] ?? 0, bytes[offset + 2] ?? 0, bytes[offset + 3] ?? 0);
+  return String.fromCharCode(
+    bytes[offset] ?? 0,
+    bytes[offset + 1] ?? 0,
+    bytes[offset + 2] ?? 0,
+    bytes[offset + 3] ?? 0,
+  );
 }
 
 function viewOf(bytes: Uint8Array): DataView {
   return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 }
 
-function matchesAt(bytes: Uint8Array, offset: number, expected: readonly number[]): boolean {
+function matchesAt(
+  bytes: Uint8Array,
+  offset: number,
+  expected: readonly number[],
+): boolean {
   return expected.every((b, i) => bytes[offset + i] === b);
 }
 
@@ -178,19 +214,20 @@ export function pngChunk(type: string, data: Uint8Array): Bytes {
  * assuming it is at the end.
  */
 export function insertPngChunks(png: Uint8Array, chunks: Bytes[]): Bytes {
-  if (!matchesAt(png, 0, PNG_SIGNATURE)) throw new Error('Not a PNG: signature mismatch.');
+  if (!matchesAt(png, 0, PNG_SIGNATURE))
+    throw new Error("Not a PNG: signature mismatch.");
 
   const view = viewOf(png);
   let offset = 8;
   let iend = -1;
   while (offset + 8 <= png.length) {
-    if (fourCC(png, offset + 4) === 'IEND') {
+    if (fourCC(png, offset + 4) === "IEND") {
       iend = offset;
       break;
     }
     offset += 12 + view.getUint32(offset);
   }
-  if (iend < 0) throw new Error('Invalid PNG: IEND chunk not found.');
+  if (iend < 0) throw new Error("Invalid PNG: IEND chunk not found.");
 
   const extra = chunks.reduce((n, c) => n + c.length, 0);
   const out = new Uint8Array(png.length + extra);
@@ -218,7 +255,7 @@ export function pngTextChunks(pairs: Array<[string, string]>): Bytes[] {
       const code = value.charCodeAt(i);
       data[key.length + 1 + i] = code <= 0xff ? code : 0x3f;
     }
-    return pngChunk('tEXt', data);
+    return pngChunk("tEXt", data);
   });
 }
 
@@ -232,7 +269,8 @@ export function pngTextChunks(pairs: Array<[string, string]>): Bytes[] {
  * `COM` first because `SOI` is the only thing the parser requires before it.
  */
 export function insertJpegComment(jpeg: Uint8Array, text: string): Bytes {
-  if (!matchesAt(jpeg, 0, [0xff, 0xd8])) throw new Error('Not a JPEG: SOI marker missing.');
+  if (!matchesAt(jpeg, 0, [0xff, 0xd8]))
+    throw new Error("Not a JPEG: SOI marker missing.");
 
   // `COM` does not specify a charset, so use UTF-8, which inspection tools
   // read today.
@@ -260,7 +298,7 @@ export function insertJpegComment(jpeg: Uint8Array, text: string): Bytes {
 // ── WebP ──────────────────────────────────────────────────────────────────
 
 /** Pixel chunks: EXIF/XMP go before the first of these. */
-const WEBP_IMAGE_CHUNKS = new Set(['VP8 ', 'VP8L', 'ANMF']);
+const WEBP_IMAGE_CHUNKS = new Set(["VP8 ", "VP8L", "ANMF"]);
 
 /**
  * Inserts an `XMP ` chunk into the RIFF container.
@@ -271,8 +309,8 @@ const WEBP_IMAGE_CHUNKS = new Set(['VP8 ', 'VP8L', 'ANMF']);
  * the order required by the WebP spec.
  */
 export function insertWebpXmp(webp: Uint8Array, payload: Uint8Array): Bytes {
-  if (fourCC(webp, 0) !== 'RIFF' || fourCC(webp, 8) !== 'WEBP') {
-    throw new Error('Not a WebP: RIFF/WEBP header missing.');
+  if (fourCC(webp, 0) !== "RIFF" || fourCC(webp, 8) !== "WEBP") {
+    throw new Error("Not a WebP: RIFF/WEBP header missing.");
   }
 
   const view = viewOf(webp);
@@ -320,20 +358,20 @@ function xmpPayload(meta: FileMetadata): Bytes {
     `<dc:title>${esc(meta.title)}</dc:title>`,
     `<dc:description>${esc(meta.description)}</dc:description>`,
     `<dc:rights>${esc(meta.source)}</dc:rights>`,
-    '</rdf:Description></rdf:RDF></x:xmpmeta>',
+    "</rdf:Description></rdf:RDF></x:xmpmeta>",
     '<?xpacket end="w"?>',
-  ].join('\n');
+  ].join("\n");
   return new TextEncoder().encode(packet);
 }
 
 // ── XML ───────────────────────────────────────────────────────────────────
 
 const XML_ENTITIES: Record<string, string> = {
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;',
-  '"': '&quot;',
-  "'": '&apos;',
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&apos;",
 };
 
 /** Escapes anything that could break a text node or attribute. */
@@ -354,7 +392,13 @@ function num(n: number): string {
  * `text-anchor: start` and an alphabetic baseline, so canvas `center` becomes
  * `text-anchor="middle"` and `y` is the baseline.
  */
-function svgTextLines(layout: TextLayout, centerX: number, top: number, areaHeight: number, fill: string): string[] {
+function svgTextLines(
+  layout: TextLayout,
+  centerX: number,
+  top: number,
+  areaHeight: number,
+  fill: string,
+): string[] {
   const blockTop = top + (areaHeight - layout.height) / 2;
   let baseline = blockTop + layout.ascent;
   const out: string[] = [];
@@ -375,13 +419,18 @@ function svgTextLines(layout: TextLayout, centerX: number, top: number, areaHeig
  * comes entirely from the core with the same parameters as `drawFrame`, so the
  * SVG and PNG say exactly the same thing.
  */
-export function buildSvg(spec: Spec, measure: CanvasRenderingContext2D): string {
+export function buildSvg(
+  spec: Spec,
+  measure: CanvasRenderingContext2D,
+): string {
   const { width, height } = spec;
   const geo = frameGeometry(spec);
   const contentHeight = height - geo.stripHeight;
   const pad = paddingFor(width, height);
 
-  const body: string[] = [`<rect width="${num(width)}" height="${num(height)}" fill="#${esc(spec.bg)}"/>`];
+  const body: string[] = [
+    `<rect width="${num(width)}" height="${num(height)}" fill="#${esc(spec.bg)}"/>`,
+  ];
 
   const dims = layoutDimensions(
     measure,
@@ -403,10 +452,22 @@ export function buildSvg(spec: Spec, measure: CanvasRenderingContext2D): string 
         timecode(0, spec.duration),
         width - pad,
         geo.timeFontSize * 1.5,
-        { fontWeight: FONT_WEIGHT, minFontSize: 7, maxFontSize: geo.timeFontSize },
+        {
+          fontWeight: FONT_WEIGHT,
+          minFontSize: 7,
+          maxFontSize: geo.timeFontSize,
+        },
       );
       if (clock) {
-        body.push(...svgTextLines(clock, width / 2, barTop - geo.timeFontSize * 1.5, geo.timeFontSize * 1.5, spec.fg));
+        body.push(
+          ...svgTextLines(
+            clock,
+            width / 2,
+            barTop - geo.timeFontSize * 1.5,
+            geo.timeFontSize * 1.5,
+            spec.fg,
+          ),
+        );
       }
     }
     if (spec.showProgressBar && geo.barHeight > 0) {
@@ -427,8 +488,8 @@ export function buildSvg(spec: Spec, measure: CanvasRenderingContext2D): string 
     // without Montserrat. CDATA avoids having to escape the CSS.
     `<defs><style type="text/css"><![CDATA[${FONT_FACE_CSS}]]></style></defs>`,
     ...body,
-    '</svg>',
-  ].join('\n');
+    "</svg>",
+  ].join("\n");
 }
 
 // ── Export ────────────────────────────────────────────────────────────────
@@ -450,12 +511,12 @@ export async function exportImage(
 
   const finish = (bytes: Bytes | string): ExportResult => {
     const blob = new Blob([bytes], { type: mimeType });
-    onProgress?.({ progress: 1, message: 'Done' });
+    onProgress?.({ progress: 1, message: "Done" });
     return { blob, filename, mimeType, size: blob.size };
   };
 
-  if (format === 'svg') {
-    onProgress?.({ progress: 0, message: 'Measuring text…' });
+  if (format === "svg") {
+    onProgress?.({ progress: 0, message: "Measuring text…" });
     // The SVG canvas only provides a context for measuring.
     const surface = createSurface(spec.width, spec.height);
     let svg: string;
@@ -465,17 +526,20 @@ export async function exportImage(
       releaseSurface(surface);
     }
     checkAbort(signal);
-    onProgress?.({ progress: 0.3, message: 'Writing SVG…' });
+    onProgress?.({ progress: 0.3, message: "Writing SVG…" });
     return finish(svg);
   }
 
   const surface = createSurface(spec.width, spec.height);
   let blob: Blob;
   try {
-    onProgress?.({ progress: 0, message: 'Drawing…' });
+    onProgress?.({ progress: 0, message: "Drawing…" });
     drawFrame(context2d(surface), spec);
     checkAbort(signal);
-    onProgress?.({ progress: 0.3, message: `Encoding ${FORMAT_LABEL[format]}…` });
+    onProgress?.({
+      progress: 0.3,
+      message: `Encoding ${FORMAT_LABEL[format]}…`,
+    });
     blob = await encodeCanvas(surface, format, spec.quality, signal);
   } finally {
     releaseSurface(surface);
@@ -486,11 +550,11 @@ export async function exportImage(
   // Metadata is needed here; SVG emits it in `buildSvg`.
   const meta = buildMetadata(spec);
   switch (format) {
-    case 'png':
+    case "png":
       return finish(insertPngChunks(raw, pngTextChunks(metadataAsPairs(meta))));
-    case 'jpeg':
+    case "jpeg":
       return finish(insertJpegComment(raw, metadataAsText(meta)));
-    case 'webp':
+    case "webp":
       return finish(insertWebpXmp(raw, xmpPayload(meta)));
   }
 }

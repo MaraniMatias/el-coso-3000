@@ -1,27 +1,47 @@
-import type { ContrastLevel, ContrastResult, PaletteEntry } from './types';
+import type { ContrastLevel, ContrastResult, PaletteEntry } from "./types";
 
 /** ── Color conversion ────────────────────────────────────────────────── */
 
 export function hexToRgb(hex: string): { r: number; g: number; b: number } {
-  const h = hex.replace('#', '');
-  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const h = hex.replace("#", "");
+  const full =
+    h.length === 3
+      ? h
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : h;
   const n = Number.parseInt(full, 16);
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
 }
 
 export function rgbToHex(r: number, g: number, b: number): string {
-  const to = (v: number) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
+  const to = (v: number) =>
+    Math.max(0, Math.min(255, Math.round(v)))
+      .toString(16)
+      .padStart(2, "0");
   return `${to(r)}${to(g)}${to(b)}`;
 }
 
 /** Normalizes any valid hex to 6 uppercase digits, without `#`. */
 export function normalizeHex(hex: string): string {
-  return rgbToHex(hexToRgb(hex).r, hexToRgb(hex).g, hexToRgb(hex).b).toUpperCase();
+  return rgbToHex(
+    hexToRgb(hex).r,
+    hexToRgb(hex).g,
+    hexToRgb(hex).b,
+  ).toUpperCase();
 }
 
-export function rgbToHsl(r: number, g: number, b: number): { h: number; s: number; l: number } {
-  const rn = r / 255, gn = g / 255, bn = b / 255;
-  const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn);
+export function rgbToHsl(
+  r: number,
+  g: number,
+  b: number,
+): { h: number; s: number; l: number } {
+  const rn = r / 255,
+    gn = g / 255,
+    bn = b / 255;
+  const max = Math.max(rn, gn, bn),
+    min = Math.min(rn, gn, bn);
   const l = (max + min) / 2;
   const d = max - min;
   if (d === 0) return { h: 0, s: 0, l };
@@ -35,12 +55,18 @@ export function rgbToHsl(r: number, g: number, b: number): { h: number; s: numbe
   return { h, s, l };
 }
 
-export function hslToRgb(h: number, s: number, l: number): { r: number; g: number; b: number } {
+export function hslToRgb(
+  h: number,
+  s: number,
+  l: number,
+): { r: number; g: number; b: number } {
   const hn = ((h % 360) + 360) % 360;
   const c = (1 - Math.abs(2 * l - 1)) * s;
   const x = c * (1 - Math.abs(((hn / 60) % 2) - 1));
   const m = l - c / 2;
-  let rp = 0, gp = 0, bp = 0;
+  let rp = 0,
+    gp = 0,
+    bp = 0;
   if (hn < 60) [rp, gp, bp] = [c, x, 0];
   else if (hn < 120) [rp, gp, bp] = [x, c, 0];
   else if (hn < 180) [rp, gp, bp] = [0, c, x];
@@ -71,7 +97,7 @@ export function hexToRgba(hex: string, alpha: number): string {
  * instead of using the raw hex.
  */
 export function cssColor(hex: string): string {
-  return hex.startsWith('#') ? hex : `#${hex}`;
+  return hex.startsWith("#") ? hex : `#${hex}`;
 }
 
 /** ── WCAG 2.1 ────────────────────────────────────────────────────────── */
@@ -98,10 +124,10 @@ export function contrastRatio(a: string, b: string): number {
 }
 
 export function levelForRatio(ratio: number): ContrastLevel {
-  if (ratio >= 7) return 'AAA';
-  if (ratio >= 4.5) return 'AA';
-  if (ratio >= 3) return 'AA-large';
-  return 'fail';
+  if (ratio >= 7) return "AAA";
+  if (ratio >= 4.5) return "AA";
+  if (ratio >= 3) return "AA-large";
+  return "fail";
 }
 
 export function checkContrast(fg: string, bg: string): ContrastResult {
@@ -131,17 +157,18 @@ const FG_LIGHT_RANGE: [number, number] = [0.62, 0.97];
  * `name` is the stable identifier that reaches the file metadata; `label` is
  * what the UI shows.
  */
-const PALETTE: Array<{ name: string; label: string; bg: string; fg: string }> = [
-  { name: 'gray', label: 'Gray', bg: 'E5E7EB', fg: '374151' },
-  { name: 'red', label: 'Red', bg: 'FEE2E2', fg: '991B1B' },
-  { name: 'orange', label: 'Orange', bg: 'FFEDD5', fg: '9A3412' },
-  { name: 'yellow', label: 'Yellow', bg: 'FEF9C3', fg: '854D0E' },
-  { name: 'green', label: 'Green', bg: 'DCFCE7', fg: '166534' },
-  { name: 'teal', label: 'Teal', bg: 'CCFBF1', fg: '115E59' },
-  { name: 'blue', label: 'Blue', bg: 'DBEAFE', fg: '1E40AF' },
-  { name: 'violet', label: 'Violet', bg: 'EDE9FE', fg: '5B21B6' },
-  { name: 'rose', label: 'Rose', bg: 'FCE7F3', fg: '9D174D' },
-];
+const PALETTE: Array<{ name: string; label: string; bg: string; fg: string }> =
+  [
+    { name: "gray", label: "Gray", bg: "E5E7EB", fg: "374151" },
+    { name: "red", label: "Red", bg: "FEE2E2", fg: "991B1B" },
+    { name: "orange", label: "Orange", bg: "FFEDD5", fg: "9A3412" },
+    { name: "yellow", label: "Yellow", bg: "FEF9C3", fg: "854D0E" },
+    { name: "green", label: "Green", bg: "DCFCE7", fg: "166534" },
+    { name: "teal", label: "Teal", bg: "CCFBF1", fg: "115E59" },
+    { name: "blue", label: "Blue", bg: "DBEAFE", fg: "1E40AF" },
+    { name: "violet", label: "Violet", bg: "EDE9FE", fg: "5B21B6" },
+    { name: "rose", label: "Rose", bg: "FCE7F3", fg: "9D174D" },
+  ];
 
 /**
  * For a given background, looks for the text of the same hue with the highest
@@ -162,14 +189,16 @@ export function deriveForeground(bg: string, minRatio = 4.5): string {
   // `near` is the end CLOSEST to the background (least contrast) and `far` the
   // FURTHEST one (most contrast). With dark text it moves away by lowering L;
   // with light text, by raising it.
-  const [near, far] = bgIsLight ? [FG_DARK_RANGE[1], FG_DARK_RANGE[0]] : FG_LIGHT_RANGE;
+  const [near, far] = bgIsLight
+    ? [FG_DARK_RANGE[1], FG_DARK_RANGE[0]]
+    : FG_LIGHT_RANGE;
   const hue = hslToHex;
 
   // If not even the end with the most contrast reaches the minimum, the hue is
   // useless and it falls back to the absolute (black or white), which always
   // complies.
   if (contrastRatio(hue(h, FG_SATURATION, far), bg) < minRatio) {
-    return bgIsLight ? '000000' : 'FFFFFF';
+    return bgIsLight ? "000000" : "FFFFFF";
   }
 
   // Bisection on L, monotonic with respect to the contrast. It starts at `far`
@@ -194,7 +223,14 @@ export function deriveForeground(bg: string, minRatio = 4.5): string {
 export function buildPalette(): PaletteEntry[] {
   return PALETTE.map(({ name, label, bg, fg }) => {
     const { r, g, b } = hexToRgb(bg);
-    return { name, label, hue: rgbToHsl(r, g, b).h, bg, fg, contrast: checkContrast(fg, bg) };
+    return {
+      name,
+      label,
+      hue: rgbToHsl(r, g, b).h,
+      bg,
+      fg,
+      contrast: checkContrast(fg, bg),
+    };
   });
 }
 
@@ -208,6 +244,6 @@ export function palette(): PaletteEntry[] {
 export function randomPalette(): PaletteEntry {
   const p = palette();
   const pick = p[Math.floor(Math.random() * p.length)];
-  if (!pick) throw new Error('the palette is empty');
+  if (!pick) throw new Error("the palette is empty");
   return pick;
 }
