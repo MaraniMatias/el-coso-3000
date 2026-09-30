@@ -3,9 +3,6 @@
 Image and video placeholder generator that runs **entirely in the browser**.  
 No server, no connection, nothing uploaded. The result is **a single HTML file** you can open with a double-click.
 
-[![Demo](https://img.shields.io/badge/Demo-online-blue?style=flat-square)](https://maranimatias.github.io/el-coso-3000/)
-[![License](https://img.shields.io/badge/License-MIT?style=flat-square)](LICENSE)
-
 
 **Demo:** [https://maranimatias.github.io/el-coso-3000/](https://maranimatias.github.io/el-coso-3000/)
 
