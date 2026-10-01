@@ -43,12 +43,35 @@ export type VideoFormat = (typeof VIDEO_FORMATS)[number];
 export const TIMELINE_FORMATS = ['mp4', 'webm', 'mov', 'mkv', 'gif', 'mjpeg-avi', 'jpeg-zip'] as const;
 export type TimelineFormat = (typeof TIMELINE_FORMATS)[number];
 
-/** Formats where H.264 has no alpha channel, or that drop it on the way. */
+/**
+ * Test sounds a video can carry. They exist to prove the file has an audio
+ * track and that it stays in sync, not to be listened to: a soft beep every
+ * second, a quiet continuous tone, and white noise. A `Spec` without one is
+ * silent, which is the default.
+ */
+export const VIDEO_TONES = ['beep', 'tone', 'noise'] as const;
+export type VideoTone = (typeof VIDEO_TONES)[number];
+
+/**
+ * Formats that cannot carry an alpha channel: JPEG by definition, and the
+ * video containers, whose encoders (H.264, VP8/VP9, AV1 as configured here)
+ * are fed frames without alpha. The GIF is not in this list: it is binary
+ * transparent and the encoder already reserves an index for it.
+ */
 export const FORMATS_WITHOUT_ALPHA: ReadonlySet<ImageFormat | VideoFormat> = new Set<ImageFormat | VideoFormat>([
   'jpeg',
   'mjpeg-avi',
   'jpeg-zip',
+  'mp4',
+  'mov',
+  'mkv',
+  'webm',
 ]);
+
+/** True when the format can store transparent pixels. */
+export function supportsAlpha(format: ImageFormat | VideoFormat): boolean {
+  return !FORMATS_WITHOUT_ALPHA.has(format);
+}
 
 /** WCAG 2.1 conformance levels for normal-size text. */
 export type ContrastLevel = 'AAA' | 'AA' | 'AA-large' | 'fail';
@@ -104,6 +127,20 @@ export interface Spec {
   showProgressBar: boolean;
   /** Draws the `0:03 / 0:10` clock over the progress bar. */
   showTime: boolean;
+
+  /**
+   * Leaves the background unpainted, so the file carries an alpha channel.
+   *
+   * The background color still decides the text color: with no background to
+   * contrast against, `fg` is still derived from `bg` so the placeholder keeps
+   * a readable pairing wherever it lands. Only the fill is skipped.
+   */
+  transparent: boolean;
+  /**
+   * Test sound for a video export. Absent means silent: sound is opt-in, and
+   * only the video containers can take it.
+   */
+  tone?: VideoTone;
 
   // --- Still image ---
   /** JPEG/WebP quality 0..1. */

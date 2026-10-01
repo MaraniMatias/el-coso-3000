@@ -60,6 +60,7 @@ const SAMPLE: Spec = {
   fps: 24,
   showProgressBar: true,
   showTime: true,
+  transparent: false,
   quality: 0.85,
 };
 

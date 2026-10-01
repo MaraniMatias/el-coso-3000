@@ -317,6 +317,7 @@ const SPEC: Spec = {
   fps: 30,
   showProgressBar: true,
   showTime: true,
+  transparent: false,
   quality: 0.9,
 };
 

@@ -22,6 +22,11 @@
   --ok: #2f6f4e;
   --warn: #8a5a16;
   --bad: #a02b2b;
+  /* The checkerboard that stands in for transparency in the preview. Two
+     tints of the same surface, so it reads in either scheme without
+     introducing a color that does not belong to the chosen palette. */
+  --checker-a: hsl(var(--tint-h) calc(var(--tint-s) * 0.6) 88%);
+  --checker-b: hsl(var(--tint-h) calc(var(--tint-s) * 0.8) 96%);
   --radius: 10px;
   --gap: 16px;
   color-scheme: light dark;
@@ -41,6 +46,8 @@
     --ok: #7fc9a3;
     --warn: #e0b872;
     --bad: #f09a9a;
+    --checker-a: hsl(var(--tint-h) calc(var(--tint-s) * 0.3) 20%);
+    --checker-b: hsl(var(--tint-h) calc(var(--tint-s) * 0.25) 15%);
   }
 }
 
@@ -412,6 +419,19 @@ button:focus-visible {
 .checkboxes input {
   accent-color: var(--accent);
 }
+/* The sound picker shares its row with the checkbox, so it sizes to its own
+   text instead of filling the panel. */
+.sound {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sound select {
+  width: auto;
+  margin-left: auto;
+  padding: 4px 6px;
+  font-size: 12px;
+}
 
 /* ── Color y contraste ──────────────────────────────────────────── */
 
@@ -624,6 +644,14 @@ button.ghost:hover {
   display: block;
   box-shadow: 0 6px 24px rgb(0 0 0 / 0.12);
   border-radius: 2px;
+}
+/* The checkerboard is the background of the canvas itself, so the opaque
+   pixels cover it and only the transparent ones show it. The squares are sized
+   in CSS pixels, not canvas pixels: the checker keeps the same size on screen
+   whatever the placeholder measures. */
+#canvas[data-transparent="true"] {
+  background: conic-gradient(var(--checker-a) 25%, var(--checker-b) 0 50%, var(--checker-a) 0 75%, var(--checker-b) 0)
+    0 0 / 16px 16px;
 }
 
 .dims-label {

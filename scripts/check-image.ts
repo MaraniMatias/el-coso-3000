@@ -60,6 +60,7 @@ const spec = (over: Partial<Spec> = {}): Spec => ({
   fps: 30,
   showProgressBar: false,
   showTime: false,
+  transparent: false,
   quality: 0.92,
   ...over,
 });
@@ -737,6 +738,52 @@ check(xmlProblem(nasty) === null, 'SVG with a dangerous label remains valid XML'
 
 const ampersand = svgs.get('palette with &')!;
 check(ampersand.includes('palette a&amp;b'), 'palette & is escaped inside metadata');
+
+// ── Transparency ────────────────────────────────────────────────────────────
+
+section('SVG: a transparent background is the absence of the background rect');
+{
+  // Same spec as the opaque case, with only `transparent` flipped: any other
+  // difference in the output would mean the flag leaked into the layout.
+  const base = spec({ width: 640, height: 360, showProgressBar: true });
+  const opaqueSvg = buildSvg(base, measure);
+  const alphaSvg = buildSvg({ ...base, transparent: true }, measure);
+
+  check(!alphaSvg.includes('<rect width="640" height="360"'), 'the full-canvas background rect is not emitted');
+  check(
+    opaqueSvg.includes('<rect width="640" height="360"'),
+    'the same spec without the flag still paints the background',
+  );
+  // The strongest statement available without a canvas: take the opaque output
+  // and delete that one line, and what is left is the transparent output, byte
+  // for byte. If the flag reached the layout, this would not hold.
+  const withoutMeta = (svg: string) => svg.replace(/<metadata>[\s\S]*?<\/metadata>/, '');
+  const bgRect = /\n<rect width="640" height="360" fill="#FFE4E4"\/>/;
+  check(
+    withoutMeta(alphaSvg) === withoutMeta(opaqueSvg).replace(bgRect, ''),
+    'outside the metadata, the transparent SVG is the opaque one minus that rect',
+  );
+  check(emittedLines(alphaSvg).length === 1, 'the dimensions are still drawn');
+  check(
+    // `buildSvg` writes the text fill as the bare hex, without the `#` the
+    // background rect carries. Matched on the fill alone: the position belongs
+    // to the layout, which the line-by-line test above already covers.
+    alphaSvg.includes(`fill="${base.fg}" font-family=`),
+    'the text keeps the color derived from the background, so it stays readable',
+  );
+  check(
+    alphaSvg.includes(`<rect y="${round2(360 - frameGeometry(base).barHeight)}" width="640" height="${frameGeometry(base).barHeight}"`),
+    'the progress bar track is still there',
+  );
+  check(xmlProblem(alphaSvg) === null, 'the transparent SVG is still valid XML', String(xmlProblem(alphaSvg)));
+  // The metadata states the background color, which is what the text color was
+  // derived from. It is the honest thing to record: the color is chosen, only
+  // the fill is skipped.
+  check(
+    unescapeXml(/<metadata>([\s\S]*?)<\/metadata>/.exec(alphaSvg)?.[1] ?? '').includes(`Background: #${base.bg}`),
+    'the metadata still records the background color the text was derived from',
+  );
+}
 
 console.log(failures === 0 ? '\n✔ image encoder OK' : `\n✘ ${failures} failure(s)`);
 process.exit(failures === 0 ? 0 : 1);

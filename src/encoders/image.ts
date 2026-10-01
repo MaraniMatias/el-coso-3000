@@ -32,6 +32,7 @@ import {
 } from "../core/metadata";
 import {
   FONT_WEIGHT,
+  supportsAlpha,
   type ExportResult,
   type ProgressCallback,
   type Spec,
@@ -451,9 +452,11 @@ export function buildSvg(
   const contentHeight = height - geo.stripHeight;
   const pad = paddingFor(width, height);
 
-  const body: string[] = [
-    `<rect width="${num(width)}" height="${num(height)}" fill="#${esc(spec.bg)}"/>`,
-  ];
+  // No background rect when it is transparent: SVG has no alpha to fill, the
+  // absence of the rect IS the transparency.
+  const body: string[] = spec.transparent
+    ? []
+    : [`<rect width="${num(width)}" height="${num(height)}" fill="#${esc(spec.bg)}"/>`];
 
   const dims = layoutDimensions(
     measure,
@@ -529,8 +532,13 @@ export async function exportImage(
   signal?: AbortSignal,
 ): Promise<ExportResult> {
   checkAbort(signal);
+  // A format without alpha gets an opaque background, whatever the spec says.
+  // JPEG has no alpha to store, and `toBlob` would composite the transparent
+  // pixels over an undefined color (black in most browsers), so the file would
+  // come out with a background nobody chose.
+  const opaque: Spec = supportsAlpha(format) ? spec : { ...spec, transparent: false };
   const mimeType = mimeFor(format);
-  const filename = filenameForSpec(spec, format);
+  const filename = filenameForSpec(opaque, format);
 
   const finish = (bytes: Bytes | string): ExportResult => {
     const blob = new Blob([bytes], { type: mimeType });
@@ -541,10 +549,10 @@ export async function exportImage(
   if (format === "svg") {
     onProgress?.({ progress: 0, message: "Measuring text…" });
     // The SVG canvas only provides a context for measuring.
-    const surface = createSurface(spec.width, spec.height);
+    const surface = createSurface(opaque.width, opaque.height);
     let svg: string;
     try {
-      svg = buildSvg(spec, context2d(surface));
+      svg = buildSvg(opaque, context2d(surface));
     } finally {
       releaseSurface(surface);
     }
@@ -553,17 +561,17 @@ export async function exportImage(
     return finish(svg);
   }
 
-  const surface = createSurface(spec.width, spec.height);
+  const surface = createSurface(opaque.width, opaque.height);
   let blob: Blob;
   try {
     onProgress?.({ progress: 0, message: "Drawing…" });
-    drawFrame(context2d(surface), spec);
+    drawFrame(context2d(surface), opaque);
     checkAbort(signal);
     onProgress?.({
       progress: 0.3,
       message: `Encoding ${FORMAT_LABEL[format]}…`,
     });
-    blob = await encodeCanvas(surface, format, spec.quality, signal);
+    blob = await encodeCanvas(surface, format, opaque.quality, signal);
   } finally {
     releaseSurface(surface);
   }
@@ -574,8 +582,8 @@ export async function exportImage(
   // Both layers: flat keywords for tools that ignore XMP, XMP for the ones that
   // do not. `quality` only reaches the formats where it changes the bytes.
   const meta = buildMetadata(
-    spec,
-    QUALITY_FORMATS.has(format) ? { quality: spec.quality } : {},
+    opaque,
+    QUALITY_FORMATS.has(format) ? { quality: opaque.quality } : {},
   );
   switch (format) {
     case "png":

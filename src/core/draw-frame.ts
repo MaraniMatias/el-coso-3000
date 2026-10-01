@@ -118,8 +118,13 @@ export function drawFrame(ctx: CanvasRenderingContext2D, spec: Spec, progress?: 
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = cssColor(spec.bg);
-  ctx.fillRect(0, 0, width, height);
+  // The `clearRect` above is the whole background when it is transparent: the
+  // pixels stay at alpha 0 and the file carries a real alpha channel. The text
+  // color is still the one derived from `bg`, so the pairing stays readable.
+  if (!spec.transparent) {
+    ctx.fillStyle = cssColor(spec.bg);
+    ctx.fillRect(0, 0, width, height);
+  }
 
   const geo = frameGeometry(spec);
   const contentHeight = height - geo.stripHeight;

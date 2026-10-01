@@ -14,7 +14,7 @@ Generates ready-to-use placeholders for wireframes, mockups, prototypes, and tem
 
 | Kind | Formats | Notes |
 |------|---------|-------|
-| Image | PNG · JPEG · WebP · SVG | PNG and WebP with transparency. SVG embeds the font. |
+| Image | PNG · JPEG · WebP · SVG | Optional transparent background in PNG, WebP and SVG. SVG embeds the font. |
 | Animated GIF | GIF | Infinite loop, global 256-color palette. |
 | Animated JPEG | AVI (Motion-JPEG) · ZIP of `.jpg` | Meant for editors (Photoshop, etc.). |
 | Video | MP4 · WebM · MOV · MKV | Encoded with the browser engine. |
@@ -100,4 +100,4 @@ Open the HTML, pick size and format, download.
 - Maximum 3600 frames per export.
 - WebCodecs is missing in Firefox Android → Video tab is disabled there.
 - AVI and MKV do not play in Firefox/Safari (they are still generated for editors).
-- JPEG / MJPEG / ZIP have no alpha channel.
+- JPEG / MJPEG / ZIP and the video containers have no alpha channel, so the transparent background is only available for PNG, WebP, SVG and the GIF.

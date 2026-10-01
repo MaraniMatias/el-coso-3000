@@ -29,6 +29,7 @@ function spec(over: Partial<Spec> = {}): Spec {
     fps: 15,
     showProgressBar: false,
     showTime: false,
+    transparent: false,
     quality: 0.9,
     ...over,
   };

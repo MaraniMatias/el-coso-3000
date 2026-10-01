@@ -22,7 +22,9 @@ import type {
   Spec,
   TimelineFormat,
   VideoFormat,
+  VideoTone,
 } from "../core/types";
+import { supportsAlpha, VIDEO_TONES } from "../core/types";
 import { setupWebMcp, webmcpStatusText } from "./webmcp";
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string): T => {
@@ -35,9 +37,11 @@ const form = $<HTMLFormElement>("#panel");
 const canvas = $<HTMLCanvasElement>("#canvas");
 const stageEl = $<HTMLElement>("#stage");
 // The context is resolved once and asserted non-null. Narrowing with `throw`
-// does not survive the closures, so it is resolved here.
+// does not survive the closures, so it is resolved here. It keeps its alpha
+// channel (the default): the preview has to be able to show a transparent
+// background, which an opaque context would render as black.
 const ctx2d: CanvasRenderingContext2D = (() => {
-  const c = canvas.getContext("2d", { alpha: false });
+  const c = canvas.getContext("2d");
   if (!c) throw new Error("the browser does not support canvas 2D");
   return c;
 })();
@@ -85,10 +89,11 @@ function num(name: string, fallback: number): number {
 }
 
 /**
- * Reads a text field or the selected value of a radio group.
+ * Reads a text field, the selected value of a radio group, or the value of a
+ * select.
  *
- * Watch out for this one: for a radio group, `form.elements.namedItem` does
- * NOT return an input, it returns a `RadioNodeList`. An
+ * Watch out for the radio case: for a radio group, `form.elements.namedItem`
+ * does NOT return an input, it returns a `RadioNodeList`. An
  * `instanceof HTMLInputElement` check returns false and the value is lost
  * silently, so the form looks like it never changes. The `.value` of the
  * `RadioNodeList` is the one of the checked radio.
@@ -97,6 +102,7 @@ function str(name: string, fallback: string): string {
   const el = form.elements.namedItem(name);
   if (el instanceof RadioNodeList) return el.value || fallback;
   if (el instanceof HTMLInputElement && el.value) return el.value;
+  if (el instanceof HTMLSelectElement && el.value) return el.value;
   return fallback;
 }
 
@@ -116,6 +122,12 @@ function currentFormat(): ImageFormat | TimelineFormat {
     : (str("imageFormat", "png") as ImageFormat);
 }
 
+/** The test sound that was asked for, defaulting to the softest one. */
+function selectedTone(): VideoTone {
+  const value = str("soundTone", "beep");
+  return VIDEO_TONES.includes(value as VideoTone) ? (value as VideoTone) : "beep";
+}
+
 function readSpec(): Spec {
   const quality = num("quality", 90) / 100;
   // Only the video tab has a timeline now, so that is the only thing that
@@ -132,6 +144,13 @@ function readSpec(): Spec {
     // The bar and the clock only make sense with a real timeline.
     showProgressBar: timed && checked("showProgressBar"),
     showTime: timed && checked("showTime"),
+    // Sound is an extra that has to be turned on, and only the video
+    // containers can take it.
+    tone: timed && checked("sound") ? selectedTone() : undefined,
+    // Formats that cannot store alpha never get it, whatever the box says. The
+    // box stays checked so going back to PNG restores the choice, but the spec
+    // is what the encoders read.
+    transparent: checked("transparent") && supportsAlpha(currentFormat()),
     quality,
   };
 }
@@ -241,6 +260,9 @@ function renderPreview(progress?: number): void {
   canvas.width = spec.width;
   canvas.height = spec.height;
   drawFrame(ctx2d, spec, progress);
+  // The checkerboard lives in the CSS background of the canvas, so it only
+  // shows through the transparent pixels.
+  canvas.dataset.transparent = String(spec.transparent);
   $("#dimsLabel").textContent = `${spec.width} × ${spec.height}`;
   updateMetaLine(spec);
 }
@@ -252,6 +274,9 @@ function updateMetaLine(spec: Spec): void {
     `contrast ${checkContrast(spec.fg, spec.bg).label}`,
   ];
   if (spec.duration > 0) parts.push(`${spec.duration}s at ${spec.fps} fps`);
+  // The checkerboard alone can read as a texture, so the state is also said in
+  // words.
+  if (spec.transparent) parts.push("transparent background");
   $("#metaLine").textContent = parts.join(" · ");
 }
 
@@ -355,6 +380,15 @@ function refreshDependentUi(): void {
   const qualityField = form.querySelector<HTMLElement>(".quality");
   if (qualityField) qualityField.hidden = !LOSSY.has(format);
 
+  // The transparency box is the same deal: it belongs to the format, and only
+  // the formats that can store alpha show it. The note is only worth reading
+  // while the box is available.
+  const alphaBox = $("#alphaBox");
+  const canAlpha = supportsAlpha(format);
+  alphaBox.hidden = !canAlpha;
+  const alphaNote = $("#alphaNote");
+  alphaNote.hidden = !canAlpha || !checked("transparent");
+
   // Every format with a timeline lives in the video tab, so the section shows
   // up exactly there.
   const timeline = $("#timeline");
@@ -388,6 +422,15 @@ function refreshDependentUi(): void {
     const el = form.elements.namedItem(name);
     if (el instanceof HTMLInputElement) el.disabled = singleFrame;
   }
+
+  // Only the four containers can carry an audio track, the animated outputs
+  // have no room for one, and a single frame has no timeline to put it on. The
+  // picker follows its own checkbox, so a sound is never chosen by accident.
+  const sound = form.elements.namedItem("sound");
+  const soundTone = $<HTMLSelectElement>("#soundTone");
+  const canSound = !ANIMATED_IMAGE_FORMATS.has(format as ImageFormat) && !singleFrame;
+  if (sound instanceof HTMLInputElement) sound.disabled = !canSound;
+  soundTone.disabled = !canSound || !(sound instanceof HTMLInputElement) || !sound.checked;
 
   // The preview is animated for any format with a timeline, so the GIF shows
   // its bar moving.
@@ -530,6 +573,15 @@ function applySettings(
     if (typeof input.showTime === "boolean") {
       setCheckbox("showTime", input.showTime);
     }
+    if (typeof input.transparent === "boolean") {
+      setCheckbox("transparent", input.transparent);
+    }
+    if (typeof input.sound === "boolean") {
+      setCheckbox("sound", input.sound);
+    }
+    if (typeof input.soundTone === "string") {
+      setSelect("soundTone", input.soundTone);
+    }
 
     // The color is resolved last, so a `background` without a palette takes
     // precedence over the palette and not the other way around.
@@ -573,6 +625,10 @@ function setCheckbox(name: string, value: boolean): void {
   const el = form.elements.namedItem(name);
   if (el instanceof HTMLInputElement) el.checked = value;
 }
+function setSelect(name: string, value: string): void {
+  const el = form.elements.namedItem(name);
+  if (el instanceof HTMLSelectElement) el.value = value;
+}
 
 function describe(): Record<string, unknown> {
   const spec = readSpec();
@@ -586,6 +642,8 @@ function describe(): Record<string, unknown> {
     palette: spec.paletteName,
     contrast: checkContrast(spec.fg, spec.bg).label,
     ...(spec.duration > 0 ? { duration: spec.duration, fps: spec.fps } : {}),
+    ...(spec.tone ? { sound: spec.tone } : {}),
+    transparent: spec.transparent,
   };
 }
 

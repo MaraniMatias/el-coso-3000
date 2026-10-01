@@ -6,7 +6,7 @@
     <title>Placeholder Image & Video Generator | El Coso 3000</title>
     <meta
       name="description"
-      content="Offline placeholder generator for images and video. PNG, JPEG, WebP, SVG, GIF, MP4 and WebM at any size, with guaranteed contrast. Runs in your browser."
+      content="Offline placeholder generator for images and video. PNG, JPEG, WebP, SVG, GIF, MP4 and WebM at any size, with guaranteed contrast and an optional transparent background. Runs in your browser."
     />
     <meta name="generator" content="El Coso 3000" />
     <meta name="author" content="Matias Ezequiel Marani" />
@@ -221,7 +221,7 @@
                   value="png"
                   checked
                   toolparamtitle="Image format"
-                  toolparamdescription="PNG. Lossless with transparency. The most versatile."
+                  toolparamdescription="PNG. Lossless, and it can carry a transparent background. The most versatile."
                 /><span>PNG</span></label
               >
               <label
@@ -239,7 +239,7 @@
                   name="imageFormat"
                   value="webp"
                   toolparamtitle="Image format"
-                  toolparamdescription="WebP. Transparency and smaller than PNG."
+                  toolparamdescription="WebP. It can carry a transparent background and it is smaller than PNG."
                 /><span>WebP</span></label
               >
               <label
@@ -248,7 +248,7 @@
                   name="imageFormat"
                   value="svg"
                   toolparamtitle="Image format"
-                  toolparamdescription="SVG. Vector, weighs kilobytes. For icons and diagrams."
+                  toolparamdescription="SVG. Vector, weighs kilobytes, and it can carry a transparent background. For icons and diagrams."
                 /><span>SVG</span></label
               >
             </div>
@@ -327,6 +327,23 @@
             <p class="note warning" id="videoUnsupported" hidden></p>
           </section>
 
+          <div class="checkboxes" id="alphaBox" hidden>
+            <label
+              ><input
+                type="checkbox"
+                name="transparent"
+                id="transparent"
+                toolparamtitle="Transparent background"
+                toolparamdescription="Leaves the background unpainted so the file carries an alpha channel. The background color still decides the text color, to keep the contrast guarantee. Only PNG, WebP, SVG and the GIF can do this."
+              />
+              <span>Transparent background</span></label
+            >
+            <p class="note" id="alphaNote">
+              The background is not painted. The color above still picks the text
+              color, so the contrast guarantee is unchanged.
+            </p>
+          </div>
+
           <div class="field quality" hidden>
             <label for="quality">Quality <output id="qualityOut">90%</output></label>
             <input
@@ -398,6 +415,29 @@
                 />
                 <span>Show the time</span></label
               >
+              <div class="sound">
+                <label
+                  ><input
+                    type="checkbox"
+                    name="sound"
+                    toolparamtitle="Include sound"
+                    toolparamdescription="Adds a quiet test sound to MP4, MOV, WebM and MKV, to check that the file has an audio track. It is off by default, and the animated outputs (gif, mjpeg-avi, jpeg-zip) stay silent."
+                  />
+                  <span>Include sound</span></label
+                >
+                <select
+                  id="soundTone"
+                  name="soundTone"
+                  aria-label="Test sound"
+                  disabled
+                  toolparamtitle="Test sound"
+                  toolparamdescription="Which sound to add when Include sound is on. 'beep' is a soft 440 Hz beep every second and the default. 'tone' is the same pitch held quietly for the whole video. 'noise' is white noise."
+                >
+                  <option value="beep">Soft beep every second</option>
+                  <option value="tone">Continuous low tone</option>
+                  <option value="noise">White noise</option>
+                </select>
+              </div>
             </div>
           </section>
         </div>
@@ -439,7 +479,7 @@
         <h2 id="about-heading">Image and video placeholders for design and development</h2>
         <p>Make dimension-labeled placeholder assets for wireframes, mockups, prototypes, demos, visual tests, and temporary media. Set a custom size or choose a preset, pick a background color, then download the result.</p>
         <ul>
-          <li><strong>Still images:</strong> PNG, JPEG, WebP, and SVG.</li>
+          <li><strong>Still images:</strong> PNG, JPEG, WebP, and SVG. PNG, WebP, and SVG can carry a transparent background.</li>
           <li><strong>Animated and video outputs:</strong> GIF, Motion JPEG AVI, ZIP files of numbered JPEG frames, MP4, WebM, MOV, and MKV.</li>
         </ul>
         <p>The placeholder displays its dimensions. Choose a palette or custom background; the text color is calculated automatically for readable contrast.</p>
@@ -450,7 +490,8 @@
         <ol>
           <li>Choose Image or Video.</li>
           <li>Enter the width and height in pixels, or select a size preset, then choose a background color.</li>
-          <li>Select an output format. For animated and video outputs, set the duration, frame rate, and optional progress bar or clock.</li>
+          <li>Select an output format. Enable the transparent background for PNG, WebP, SVG, or GIF. For animated and video outputs, set the duration, frame rate, and optional progress bar or clock.</li>
+          <li>To give a video an audio track, tick Include sound and choose a test sound. MP4, MOV, WebM, and MKV support it; GIF, AVI, and ZIP stay silent.</li>
           <li>Select Download to save the generated file.</li>
         </ol>
       </section>

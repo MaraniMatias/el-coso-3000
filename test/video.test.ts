@@ -29,6 +29,7 @@ import {
   outputFormatFor,
   planExport,
   progressInfo,
+  resolveAudioCodec,
   totalFramesFor,
   videoMetadataTags,
   type FrameSink,
@@ -46,6 +47,7 @@ const spec = (over: Partial<Spec> = {}): Spec => ({
   fps: 30,
   showProgressBar: true,
   showTime: true,
+  transparent: false,
   quality: 0.92,
   ...over,
 });
@@ -125,6 +127,42 @@ describe('codec preference', () => {
   test('the filter has something to filter: webm rejects avc, mp4 accepts it', () => {
     expect(outputFormatFor('webm').getSupportedVideoCodecs()).not.toContain('avc');
     expect(outputFormatFor('mp4').getSupportedVideoCodecs()[0]).toBe('avc');
+  });
+});
+
+describe('audio codec preference', () => {
+  const expectedCodecs = {
+    mp4: 'aac,opus',
+    mov: 'aac,opus',
+    webm: 'opus,vorbis',
+    mkv: 'opus,aac,vorbis',
+  } as const;
+
+  test('the preference order matches the container', () => {
+    for (const format of VIDEO_FORMATS) {
+      expect(VIDEO_FORMATS_TABLE[format].audioCodecs.join()).toBe(expectedCodecs[format]);
+    }
+  });
+
+  // Same reason as the video codecs: a preferred audio codec the container
+  // rejects would be filtered out, leaving nothing to encode with.
+  test('no preferred audio codec is unsupported by its container', () => {
+    for (const format of VIDEO_FORMATS) {
+      const supported = outputFormatFor(format).getSupportedAudioCodecs();
+      expect(VIDEO_FORMATS_TABLE[format].audioCodecs.filter((codec) => !supported.includes(codec))).toEqual([]);
+    }
+  });
+
+  test('the filter has something to filter: webm rejects aac, mp4 accepts it', () => {
+    expect(outputFormatFor('webm').getSupportedAudioCodecs()).not.toContain('aac');
+    expect(outputFormatFor('mp4').getSupportedAudioCodecs()).toContain('aac');
+  });
+
+  // Without WebCodecs there is nothing to resolve, and the export has to say so
+  // before it starts drawing instead of failing once it is half encoded.
+  test('a browser with no AudioEncoder cannot resolve one', async () => {
+    expect(isVideoExportSupported()).toBe(false);
+    expect(await resolveAudioCodec('mp4')).toBeNull();
   });
 });
 

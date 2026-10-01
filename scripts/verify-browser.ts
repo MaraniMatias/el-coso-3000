@@ -485,6 +485,90 @@ try {
     (b) => new TextDecoder('latin1').decode(b.slice(0, 4)) === 'RIFF' && new TextDecoder('latin1').decode(b.slice(8, 12)) === 'WEBP',
   );
 
+  // ── The transparent background ────────────────────────────────────
+  // The only place this can be proven: Bun has no canvas, and the difference
+  // lives in the pixels the preview leaves at alpha 0 and in the color type the
+  // PNG declares.
+  console.log('\nthe transparent background:');
+  const alpha = await evaluate<{
+    boxVisible: boolean;
+    defaultOff: boolean;
+    corner: number;
+    flag: string;
+    checker: string;
+    noteVisible: boolean;
+  }>(`(() => {
+    const pick = (f) => document.querySelector('input[name="imageFormat"][value="' + f + '"]').click();
+    const box = document.querySelector('input[name="transparent"]');
+    pick('png');
+    const boxVisible = !document.querySelector('#alphaBox').hidden;
+    const defaultOff = !box.checked;
+    box.click();
+    const c = document.querySelector('#canvas');
+    const g = c.getContext('2d');
+    return {
+      boxVisible,
+      defaultOff,
+      corner: g.getImageData(0, 0, 1, 1).data[3],
+      flag: c.dataset.transparent,
+      checker: getComputedStyle(c).backgroundImage,
+      noteVisible: !document.querySelector('#alphaNote').hidden,
+    };
+  })()`);
+  check('the box is offered for PNG', alpha.boxVisible);
+  check('it is off by default', alpha.defaultOff);
+  // The corner is where the text never reaches, so anything but 0 means the
+  // background was painted anyway.
+  check('the preview really leaves the corner transparent', alpha.corner === 0, `alpha ${alpha.corner}`);
+  check('the canvas is told to show the checker', alpha.flag === 'true', `data-transparent="${alpha.flag}"`);
+  check('the checkerboard is a real gradient', alpha.checker.includes('conic-gradient'), alpha.checker.slice(0, 60));
+  check('the note explains what happens to the color', alpha.noteVisible);
+
+  // The IHDR color type is the fact: 6 is truecolor with alpha, 2 is
+  // truecolor without it. It sits after the 8-byte signature, the 4-byte
+  // length, "IHDR", and the two 4-byte dimensions. A width of its own, because
+  // Chrome overwrites a file whose name it has already used and the wait for a
+  // new download cannot tell that apart from nothing happening.
+  await exportAndCheck(
+    'PNG with a real alpha channel when the background is transparent',
+    `document.querySelector('input[name="imageFormat"][value="png"]').click();
+     const w = document.querySelector('#width'); w.value = '321'; w.dispatchEvent(new Event('input', { bubbles: true }));
+     const c = document.querySelector('input[name="transparent"]');
+     c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true }));`,
+    (b) => new TextDecoder('latin1').decode(b.slice(12, 16)) === 'IHDR' && b[25] === 6,
+  );
+
+  await exportAndCheck(
+    'SVG with no background rect when it is transparent',
+    `document.querySelector('input[name="imageFormat"][value="svg"]').click();
+     const w = document.querySelector('#width'); w.value = '322'; w.dispatchEvent(new Event('input', { bubbles: true }));`,
+    (b) => {
+      const s = new TextDecoder().decode(b);
+      return s.includes('<svg') && !/<rect width="\d+" height="\d+" fill="#/.test(s);
+    },
+  );
+
+  // A format that cannot store alpha has to ignore the box, which is still
+  // ticked: the file must not come out with a background nobody chose.
+  const forced = await evaluate<{ boxVisible: boolean; corner: number; flag: string }>(`(() => {
+    document.querySelector('input[name="imageFormat"][value="jpeg"]').click();
+    const c = document.querySelector('#canvas');
+    return {
+      boxVisible: !document.querySelector('#alphaBox').hidden,
+      corner: c.getContext('2d').getImageData(0, 0, 1, 1).data[3],
+      flag: c.dataset.transparent,
+    };
+  })()`);
+  check('JPEG hides the box', !forced.boxVisible);
+  check('and exports an opaque background anyway', forced.corner === 255 && forced.flag === 'false', `alpha ${forced.corner}, flag ${forced.flag}`);
+
+  // Back to PNG the choice is still there: the box was never unchecked.
+  const restored = await evaluate<string>(`(() => {
+    document.querySelector('input[name="imageFormat"][value="png"]').click();
+    return document.querySelector('input[name="transparent"]').checked ? 'kept' : 'cleared';
+  })()`);
+  check('going back to PNG restores the choice', restored === 'kept', restored);
+
   const pickTimeline = (f: string) => `
     document.querySelector('input[name="kind"][value="video"]').click();
     document.querySelector('input[name="videoFormat"][value="${f}"]').click();
@@ -503,6 +587,43 @@ try {
     (b) => b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04,
   );
 
+  // The sound control has two halves that can each break on their own: the
+  // checkbox has to enable the picker, and the picker has to stay out of the
+  // way for the formats that cannot carry a track.
+  console.log('\nthe sound control:');
+  const sound = await evaluate<{
+    defaultOn: boolean;
+    toneDisabledUntilChecked: boolean;
+    toneEnabledAfterChecked: boolean;
+    toneOptions: string[];
+    gifDisabled: boolean;
+    backEnabled: boolean;
+  }>(`(() => {
+    const pick = (f) => document.querySelector('input[name="videoFormat"][value="' + f + '"]').click();
+    const set = (id, v) => { const e = document.querySelector(id); e.value = String(v); e.dispatchEvent(new Event('input', { bubbles: true })); };
+    const check = document.querySelector('input[name="sound"]');
+    const tone = document.querySelector('#soundTone');
+    // The Video tab has to be the active one, or the timeline reads zero and
+    // the control is correctly disabled.
+    document.querySelector('input[name="kind"][value="video"]').click();
+    pick('mp4'); set('#duration', 2); set('#fps', 4);
+    const defaultOn = check.checked;
+    const before = tone.disabled;
+    check.click();
+    const after = tone.disabled;
+    const options = [...tone.options].map((o) => o.value);
+    pick('gif');
+    const gifDisabled = check.disabled;
+    pick('mp4');
+    return { defaultOn, toneDisabledUntilChecked: before, toneEnabledAfterChecked: !after, toneOptions: options, gifDisabled, backEnabled: !check.disabled };
+  })()`);
+  check('video is silent by default', !sound.defaultOn);
+  check('the picker is disabled until the box is ticked', sound.toneDisabledUntilChecked);
+  check('ticking the box enables the picker', sound.toneEnabledAfterChecked);
+  check('the picker carries the three sounds', sound.toneOptions.join() === 'beep,tone,noise', sound.toneOptions.join(', '));
+  check('the GIF cannot be given a sound', sound.gifDisabled);
+  check('going back to MP4 restores it', sound.backEnabled);
+
   // Video depends on WebCodecs, so it is only required when the browser has it.
   const hasWebCodecs = await evaluate<boolean>('"VideoEncoder" in window');
   console.log(`\nWebCodecs in this browser: ${hasWebCodecs ? 'yes' : 'no'}`);
@@ -512,10 +633,62 @@ try {
       `${setDims(320, 240)} document.querySelector('input[name="kind"][value="video"]').click();
        document.querySelector('input[name="videoFormat"][value="mp4"]').click();
        const set = (id, v) => { const e = document.querySelector(id); e.value = String(v); e.dispatchEvent(new Event('input', { bubbles: true })); };
-       set('#fps', 4); set('#duration', 1);`,
+       set('#fps', 4); set('#duration', 1);
+       document.querySelector('input[name="sound"]').checked = false;
+       document.querySelector('#soundTone').dispatchEvent(new Event('change', { bubbles: true }));`,
       (b) => {
         const s = new TextDecoder('latin1').decode(b.slice(0, 64));
         return s.includes('ftyp');
+      },
+    );
+
+    // The sound track is the one thing in the video path that no Bun test can
+    // reach, and the way to tell it worked is in the file: an audio track in
+    // MP4 announces itself with an `mp4a` sample entry and a `soun` handler.
+    // Each of these gets its own duration on purpose: the filename carries it,
+    // and Chrome overwrites a file whose name it has already used, which the
+    // wait for a new download cannot tell apart from nothing happening.
+    await exportAndCheck(
+      'MP4 with a real audio track when the sound is on',
+      `${setDims(320, 240)} document.querySelector('input[name="kind"][value="video"]').click();
+       document.querySelector('input[name="videoFormat"][value="mp4"]').click();
+       const set = (id, v) => { const e = document.querySelector(id); e.value = String(v); e.dispatchEvent(new Event('input', { bubbles: true })); };
+       set('#fps', 4); set('#duration', 2);
+       const c = document.querySelector('input[name="sound"]');
+       c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true }));
+       const t = document.querySelector('#soundTone');
+       t.value = 'beep'; t.dispatchEvent(new Event('change', { bubbles: true }));`,
+      (b) => {
+        const s = new TextDecoder('latin1').decode(b);
+        return s.includes('mp4a') && s.includes('soun');
+      },
+    );
+
+    await exportAndCheck(
+      'MP4 stays silent with the sound off',
+      `${setDims(320, 240)} document.querySelector('input[name="kind"][value="video"]').click();
+       document.querySelector('input[name="videoFormat"][value="mp4"]').click();
+       const set = (id, v) => { const e = document.querySelector(id); e.value = String(v); e.dispatchEvent(new Event('input', { bubbles: true })); };
+       set('#fps', 4); set('#duration', 3);
+       const c = document.querySelector('input[name="sound"]');
+       c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true }));`,
+      (b) => !new TextDecoder('latin1').decode(b).includes('mp4a'),
+    );
+
+    await exportAndCheck(
+      'WebM with an Opus track, the codec it is native to',
+      `${setDims(320, 240)} document.querySelector('input[name="kind"][value="video"]').click();
+       document.querySelector('input[name="videoFormat"][value="webm"]').click();
+       const set = (id, v) => { const e = document.querySelector(id); e.value = String(v); e.dispatchEvent(new Event('input', { bubbles: true })); };
+       set('#fps', 4); set('#duration', 4);
+       const c = document.querySelector('input[name="sound"]');
+       c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true }));
+       const t = document.querySelector('#soundTone');
+       t.value = 'noise'; t.dispatchEvent(new Event('change', { bubbles: true }));`,
+      (b) => {
+        // The EBML header ID is the four bytes 1a45dfa3, not the word EBML.
+        const ebml = b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3;
+        return ebml && new TextDecoder('latin1').decode(b).includes('A_OPUS');
       },
     );
   } else {

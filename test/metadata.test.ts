@@ -33,6 +33,7 @@ const spec = (over: Partial<Spec> = {}): Spec => ({
   fps: 30,
   showProgressBar: false,
   showTime: false,
+  transparent: false,
   quality: 0.92,
   ...over,
 });

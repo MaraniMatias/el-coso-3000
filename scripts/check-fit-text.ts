@@ -57,6 +57,7 @@ function spec(w: number, h: number): Spec {
     fps: 15,
     showProgressBar: true,
     showTime: true,
+    transparent: false,
     quality: 0.9,
   };
 }

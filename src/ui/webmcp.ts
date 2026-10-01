@@ -15,7 +15,7 @@
  * detection and there is no error on the normal path.
  */
 import { palette } from "../core/color";
-import { TIMELINE_FORMATS } from "../core/types";
+import { TIMELINE_FORMATS, VIDEO_TONES } from "../core/types";
 
 /** The subset of the API we use. It is not in the DOM types yet. */
 interface ModelContext {
@@ -111,6 +111,22 @@ const SCHEMA = {
     showTime: {
       type: "boolean",
       description: "Draw the 0:03 / 0:10 clock. Video only.",
+    },
+    transparent: {
+      type: "boolean",
+      description:
+        "Leaves the background unpainted so the file carries an alpha channel. The background color still decides the text color, so the contrast guarantee is unchanged. Only png, webp, svg and gif honor it; the other formats export opaque.",
+    },
+    sound: {
+      type: "boolean",
+      description:
+        "Adds a quiet test sound to the video, to prove the file has an audio track. Defaults to false, and it only works for the video containers, not for gif, mjpeg-avi or jpeg-zip.",
+    },
+    soundTone: {
+      type: "string",
+      enum: [...VIDEO_TONES],
+      description:
+        "Which test sound: a soft 440 Hz beep every second, the same pitch held quietly for the whole video, or white noise. Defaults to beep.",
     },
     download: {
       type: "boolean",
