@@ -8,7 +8,9 @@
  *   1. Regenerates `src/core/font-data.ts` from the woff2 in `fonts/`.
  *   2. Bundles `src/main.ts` with Bun's bundler in IIFE format.
  *   3. Injects the JS and CSS into `src/index.html`.
- *   4. Copies the Open Graph image and verifies that the HTML loads nothing
+ *   4. Writes it twice: `dist/placeholder.html` stays offline, while
+ *      `dist/index.html` adds a `<meta>` refresh to the canonical worker URL.
+ *   5. Copies the Open Graph image and verifies that the HTML loads nothing
  *      from the network.
  *
  * Run: `bun run build`
@@ -26,6 +28,9 @@ const OG_IMAGE = join(root, 'assets/og-image.png');
 const LLMS = join(root, 'assets/llms.txt');
 const OUT_DIR = join(root, 'dist');
 const OUT = join(OUT_DIR, 'placeholder.html');
+// The canonical home is the Cloudflare Worker. GitHub Pages keeps the built
+// `index.html` only as an entry point that hands visitors over.
+const CANONICAL_URL = 'https://el-coso-3000.maranimatias.workers.dev/placeholder';
 
 const kb = (n: number) => `${(n / 1024).toFixed(1)} KB`;
 
@@ -79,6 +84,18 @@ async function bundle(): Promise<string> {
  */
 function guardInlineScript(js: string): string {
   return js.replace(/<\/script/gi, '<\\/script').replace(/<!--/g, '<\\!--');
+}
+
+/**
+ * Adds an instant redirect to the canonical URL, keeping every byte of
+ * content. A `<meta>` refresh needs no JavaScript, so it is the only
+ * mechanism: if it never fires, the page underneath is the full app.
+ */
+function withRedirect(html: string, url: string): string {
+  const tag = `    <meta http-equiv="refresh" content="0; url=${url}" />\n`;
+  const out = html.replace('</head>', () => `${tag}  </head>`);
+  if (out === html) throw new Error('no </head> in the built HTML');
+  return out;
 }
 
 // ── 4. Verify that it is truly offline ───────────────────────────────
@@ -151,19 +168,25 @@ auditOffline(html);
 const outBytes = new TextEncoder().encode(html).length;
 
 // The same HTML under two filenames:
-//   - `placeholder.html`, the familiar name for double-clicking.
-//   - `index.html`, the default entry point served by GitHub Pages.
 await Bun.write(OUT, html);
-await Bun.write(join(OUT_DIR, 'index.html'), html);
+//   - `placeholder.html`, the familiar name for double-clicking: no redirect,
+//     no network, the offline promise holds.
+//   - `index.html`, the default entry point served by GitHub Pages: the same
+//     content, plus a redirect to the worker.
+const indexHtml = withRedirect(html, CANONICAL_URL);
+if (html.includes(CANONICAL_URL)) {
+  throw new Error('the redirect leaked into the offline build');
+}
+await Bun.write(join(OUT_DIR, 'index.html'), indexHtml);
 await Bun.write(join(OUT_DIR, 'og-image.png'), Bun.file(OG_IMAGE));
 const llms = Bun.file(LLMS);
 await Bun.write(join(OUT_DIR, 'llms.txt'), llms);
 await Bun.write(join(OUT_DIR, 'llm.txt'), llms);
 
 console.log(`\n✔ ${OUT}`);
-console.log(`✔ ${join(OUT_DIR, 'index.html')}   ← for GitHub Pages`);
+console.log(`✔ ${join(OUT_DIR, 'index.html')}   ← for GitHub Pages; redirects to the worker`);
 console.log(`✔ ${join(OUT_DIR, 'og-image.png')}   ← for Open Graph previews`);
 console.log(`✔ ${join(OUT_DIR, 'llms.txt')}   ← for AI assistants`);
 console.log(`  ${kb(outBytes)} each, self-contained.`);
-console.log('  Double-click either one. No server or internet connection needed.');
+console.log('  Double-click placeholder.html. No server or internet connection needed.');
 console.log('\n  GitHub Pages publishes dist/ automatically on every push to main.');
