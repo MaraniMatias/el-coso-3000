@@ -15,14 +15,16 @@ import {
   buildSvg,
   crc32,
   insertJpegComment,
+  insertJpegXmp,
   insertPngChunks,
   insertWebpXmp,
   pngChunk,
   pngTextChunks,
+  pngXmpChunk,
 } from '../src/encoders/image';
 import { FONT_DATA_URL, FONT_FACE_CSS } from '../src/core/font';
 import { FONT_FAMILY, FONT_WEIGHT, type Spec } from '../src/core/types';
-import { buildMetadata, metadataAsPairs, metadataAsText } from '../src/core/metadata';
+import { buildMetadata, metadataAsPairs, metadataAsText, metadataAsXmp } from '../src/core/metadata';
 import { frameGeometry, timecode } from '../src/core/draw-frame';
 import { dimensionCandidates, layoutDimensions, layoutLine, paddingFor } from '../src/core/fit-text';
 import { hexToRgba } from '../src/core/color';
@@ -36,9 +38,6 @@ function unescapeXml(text: string): string {
 let failures = 0;
 const enc = new TextEncoder();
 const dec = new TextDecoder('utf-8');
-/** ISO-8859-1 decoder, the charset required by the `tEXt` spec. */
-const decLatin1 = new TextDecoder('latin1');
-const latin1 = (bytes: Uint8Array) => decLatin1.decode(bytes);
 
 function check(ok: boolean, label: string, detail = ''): void {
   if (!ok) failures++;
@@ -145,11 +144,28 @@ function walkPng(png: Uint8Array): PngChunk[] {
   return found;
 }
 
-const meta = buildMetadata(spec());
-const pairs = metadataAsPairs(meta);
-const textChunks = pngTextChunks(pairs);
+/**
+ * Reads an `iTXt` payload: `keyword \0 flag method language \0 translated \0
+ * text`. The three separators and the two compression bytes have no length, so
+ * they are skipped by position, exactly as a decoder does.
+ */
+function readItxt(data: Uint8Array): [string, string] {
+  const nul = (from: number) => data.indexOf(0, from) + 1;
+  let at = nul(0) + 2; // after keyword, compression flag and method
+  at = nul(at); // empty language tag
+  at = nul(at); // empty translated keyword
+  return [dec.decode(data.subarray(0, data.indexOf(0))), dec.decode(data.subarray(at))];
+}
 
-section(`PNG: injecting ${textChunks.length} tEXt chunks before IEND`);
+// Fixed clock, so the two serializers and the assertions cannot disagree by a
+// second between runs.
+const NOW = new Date('2026-10-01T11:46:28+02:00');
+const meta = buildMetadata(spec(), { now: NOW });
+const pairs = metadataAsPairs(meta);
+const xmpPacket = metadataAsXmp(meta);
+const textChunks = [...pngTextChunks(pairs), pngXmpChunk(xmpPacket)];
+
+section(`PNG: injecting ${textChunks.length} chunks before the first IDAT`);
 const png = makePng();
 const injected = insertPngChunks(png, textChunks);
 let parsed: PngChunk[] = [];
@@ -177,31 +193,43 @@ check(
   'PNG signature remains intact',
 );
 
-const readTexts = parsed
-  .filter((c) => c.type === 'tEXt')
-  .map((c) => {
-    const nul = c.data.indexOf(0);
-    // `tEXt` is Latin-1 according to the spec, so it is decoded as Latin-1.
-    // Decoding it as UTF-8 would fail on the accented character in the source text.
-    return [latin1(c.data.subarray(0, nul)), latin1(c.data.subarray(nul + 1))] as const;
-  });
-check(readTexts.length === pairs.length, `there are ${pairs.length} tEXt chunks in the file`, `found ${readTexts.length}`);
+// The fix that motivated `iTXt` placement: `exiftool` warns when text chunks
+// land after IDAT, and some decoders skip them entirely.
+const firstIdat = parsed.find((c) => c.type === 'IDAT')?.offset ?? -1;
 check(
-  readTexts.every(([k, v], i) => k === pairs[i]?.[0] && v === pairs[i]?.[1]),
-  'each tEXt round-trips the exact key and value',
+  firstIdat > 0 && parsed.filter((c) => c.type === 'iTXt').every((c) => c.offset < firstIdat),
+  'every iTXt chunk comes before the first IDAT (no exiftool warning)',
+  `first IDAT at ${firstIdat}`,
+);
+check(
+  parsed.every((c, i) => i === 0 || c.offset > parsed[i - 1]!.offset),
+  'chunks stay in file order, so the CRCs still describe a linear stream',
+);
+
+const readTexts = parsed.filter((c) => c.type === 'iTXt').map((c) => readItxt(c.data));
+const xmpInFile = readTexts.find(([key]) => key === 'XML:com.adobe.xmp');
+check(
+  readTexts.length === pairs.length + 1,
+  `there are ${pairs.length} iTXt pairs plus the XMP one`,
+  `found ${readTexts.length}`,
+);
+check(
+  readTexts.slice(0, pairs.length).every(([k, v], i) => k === pairs[i]?.[0] && v === pairs[i]?.[1]),
+  'each iTXt round-trips the exact key and value as UTF-8',
   JSON.stringify(readTexts[0]),
 );
 check(
-  parsed.filter((c) => c.type === 'tEXt').every((c) => c.offset > parsed[0]!.offset),
-  'tEXt chunks come after IHDR',
+  xmpInFile?.[1] === dec.decode(xmpPacket),
+  'the XMP chunk carries the packet byte for byte',
 );
-
-// A PNG without IEND is invalid; the injector must report it, not produce garbage.
+check(xmpInFile !== undefined, 'the file carries the XMP packet');
+// A PNG without pixel data is invalid; the injector must report it, not
+// produce garbage.
 try {
   insertPngChunks(new Uint8Array([...PNG_SIGNATURE, 1, 2, 3, 4]), textChunks);
-  check(false, 'a PNG without IEND is rejected with an error');
+  check(false, 'a PNG without IDAT is rejected with an error');
 } catch {
-  check(true, 'a PNG without IEND is rejected with an error');
+  check(true, 'a PNG without IDAT is rejected with an error');
 }
 try {
   insertPngChunks(new Uint8Array(20), textChunks);
@@ -226,28 +254,101 @@ for (const text of [metadataAsText(meta), 'corto', 'impar']) {
   const out = insertJpegComment(jpeg, text);
   const view = new DataView(out.buffer);
   const label = `"${text.length} bytes"`;
-  const payloadLen = view.getUint16(4);
-  // The declared length is always even; padding is derived from the text because
-  // `2 (its own bytes) + payload` must be even.
-  const pad = (2 + enc.encode(text).length) % 2;
+  const textLen = enc.encode(text).length;
 
   check(out[0] === 0xff && out[1] === 0xd8, `${label}: SOI is still first`, `0x${out[0]?.toString(16)} 0x${out[1]?.toString(16)}`);
   check(out[2] === 0xff && out[3] === 0xfe, `${label}: marker 0xFFFE at offset 2`, `0x${out[2]?.toString(16)} 0x${out[3]?.toString(16)}`);
+  // `COM` is not padded: an extra NUL would be part of the text a reader shows.
   check(
-    payloadLen === 2 + enc.encode(text).length + pad && payloadLen % 2 === 0,
-    `${label}: even length including its 2 bytes`,
-    `length ${payloadLen}, text ${enc.encode(text).length}, padding ${pad}`,
+    view.getUint16(4) === 2 + textLen,
+    `${label}: length is exactly the 2 length bytes plus the text`,
+    `length ${view.getUint16(4)}, text ${textLen}`,
   );
+  check(dec.decode(out.subarray(6, 6 + textLen)) === text, `${label}: text round-trips intact`);
+  check(out.length === jpeg.length + 4 + textLen, `${label}: size checks out`);
   check(
-    dec.decode(out.subarray(6, 6 + enc.encode(text).length)) === text,
-    `${label}: text round-trips intact`,
-  );
-  check(pad === 0 || out[6 + enc.encode(text).length] === 0x00, `${label}: padding byte is zero`);
-  check(out.length === jpeg.length + 4 + enc.encode(text).length + pad, `${label}: size checks out`);
-  check(
-    out.slice(2 + 4 + enc.encode(text).length + pad).every((b, i) => b === jpeg[2 + i]),
+    out.slice(6 + textLen).every((b, i) => b === jpeg[2 + i]),
     `${label}: the rest of the JPEG is byte-for-byte unchanged`,
   );
+}
+
+section('JPEG: the APP1 segment carries the XMP packet right after SOI');
+{
+  const jpeg = makeJpeg();
+  const out = insertJpegXmp(jpeg, xmpPacket);
+  const view = new DataView(out.buffer);
+  const signature = 'http://ns.adobe.com/xap/1.0/';
+  const payloadLen = signature.length + 1 + xmpPacket.length;
+  const packetAt = 6 + signature.length + 1;
+
+  check(out[0] === 0xff && out[1] === 0xd8, 'SOI is still first');
+  check(out[2] === 0xff && out[3] === 0xe1, 'marker 0xFFE1 at offset 2', `0x${out[3]?.toString(16)}`);
+  check(
+    dec.decode(out.subarray(6, 6 + signature.length)) === signature &&
+      out[6 + signature.length] === 0x00,
+    'the payload starts with the XMP signature and its NUL terminator',
+  );
+  check(
+    dec.decode(out.subarray(packetAt, packetAt + xmpPacket.length)) === dec.decode(xmpPacket),
+    'the packet round-trips intact',
+  );
+  check(view.getUint16(4) === 2 + payloadLen, 'length is exactly the 2 length bytes plus the payload', `length ${view.getUint16(4)}, payload ${payloadLen}`);
+  check(out.length === jpeg.length + 4 + payloadLen, 'size checks out');
+  check(
+    out.subarray(6 + payloadLen).every((b, i) => b === jpeg[2 + i]),
+    'the rest of the JPEG is byte-for-byte unchanged',
+  );
+
+  // The order `exportImage` writes them: XMP first, then the comment on top, so
+  // `COM` stays first in the file for tools that stop at the first segment.
+  const both = insertJpegComment(out, metadataAsText(meta));
+  const commentBytes = enc.encode(metadataAsText(meta));
+  const app1 = 2 + 4 + commentBytes.length;
+  check(both[2] === 0xff && both[3] === 0xfe, 'inserting COM afterwards leaves COM first');
+  check(
+    both[app1] === 0xff && both[app1 + 1] === 0xe1 &&
+      dec.decode(
+        both.subarray(
+          app1 + 4 + signature.length + 1,
+          app1 + 4 + signature.length + 1 + xmpPacket.length,
+        ),
+      ) === dec.decode(xmpPacket),
+    'the XMP segment survives intact behind the comment',
+  );
+}
+try {
+  insertJpegXmp(new Uint8Array([1, 2, 3, 4]), xmpPacket);
+  check(false, 'a file without SOI is rejected by the XMP inserter');
+} catch {
+  check(true, 'a file without SOI is rejected by the XMP inserter');
+}
+
+section('JPEG: a segment larger than the 16-bit length field is rejected');
+{
+  const jpeg = makeJpeg();
+  const signatureBytes = 'http://ns.adobe.com/xap/1.0/'.length + 1;
+  // The length field counts its own 2 bytes, so 65533 payload bytes is the most
+  // a segment can carry. For XMP that budget is shared with the signature.
+  const maxPacket = new Uint8Array(0xffff - 2 - signatureBytes);
+  const out = insertJpegXmp(jpeg, maxPacket);
+  const declared = new DataView(out.buffer).getUint16(4);
+  check(declared === 0xffff, 'a maximum-size payload declares 0xFFFF and is not truncated', `length ${declared}`);
+  check(out.length === jpeg.length + 4 + signatureBytes + maxPacket.length, 'the maximum-size segment is written whole');
+  for (const [label, insert] of [
+    ['XMP', () => insertJpegXmp(jpeg, new Uint8Array(maxPacket.length + 1))],
+    ['comment', () => insertJpegComment(jpeg, 'x'.repeat(0xffff - 1))],
+  ] as Array<[string, () => Uint8Array]>) {
+    try {
+      insert();
+      check(false, `an oversized ${label} segment is rejected`);
+    } catch (err) {
+      check(
+        err instanceof Error && /too large/i.test(err.message),
+        `an oversized ${label} segment is rejected with a readable error`,
+        (err as Error).message,
+      );
+    }
+  }
 }
 
 // ── WebP ──────────────────────────────────────────────────────────────────
@@ -304,24 +405,30 @@ section('Metadata: serialized without characters that would break the container'
 const pairKeys = pairs.map(([k]) => k);
 const pairValues = pairs.map(([, v]) => v);
 const allValues = [...pairKeys, ...pairValues, metadataAsText(meta)];
+// `iTXt` is UTF-8, so non-Latin-1 text is fine, but a control character has no
+// business in a keyword or in a value that must stay one line. The text block
+// does contain newlines: it is the separator between its lines.
 check(
-  allValues.every((s) => [...s].every((c) => c.charCodeAt(0) <= 0xff)),
-  'all metadata text fits in Latin-1 (tEXt requirement)',
-  JSON.stringify(allValues.filter((s) => [...s].some((c) => c.charCodeAt(0) > 0xff))),
+  [...pairKeys, ...pairValues].every((s) => ![...s].some((c) => c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f)),
+  'no keyword or value contains control characters',
+  JSON.stringify([...pairKeys, ...pairValues].filter((s) => [...s].some((c) => c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f))),
 );
-check(allValues.every((s) => !s.includes('\0')), 'no value contains NUL (it would break the key/value split)');
-// `tEXt` is key\0value with no length, so a line break there cannot be
-// distinguished from the content. This is not a problem in JPEG's `COM` or
-// SVG's `<metadata>`: the length is explicit.
+// `iTXt` keyword: 1 to 79 Latin-1 characters. PNG asks for no leading or
+// trailing spaces; the colon of the `ElCoso3000:` prefix is allowed.
 check(
-  pairKeys.every((s) => !/[\r\n\0]/.test(s)) && pairValues.every((s) => !/[\r\n\0]/.test(s)),
-  'no tEXt pair contains line breaks',
-  JSON.stringify([...pairKeys, ...pairValues].filter((s) => /[\r\n\0]/.test(s))),
+  pairs.every(([k]) => /^[!-~](?:[ -~]{0,77}[!-~])?$/.test(k)),
+  'iTXt keywords are 1 to 79 printable ASCII characters with no padding spaces',
+  JSON.stringify(pairKeys.filter((k) => !/^[!-~](?:[ -~]{0,77}[!-~])?$/.test(k))),
 );
 check(
-  pairs.every(([k]) => /^[A-Za-z0-9]{1,79}$/.test(k)),
-  'tEXt keys are names of 1 to 79 ASCII characters',
-  JSON.stringify(pairKeys.filter((k) => !/^[A-Za-z0-9]{1,79}$/.test(k))),
+  pairKeys.filter((k) => k.startsWith('ElCoso3000:')).length > 0 &&
+    pairKeys.slice(0, 8).every((k) => !k.startsWith('ElCoso3000:')),
+  'the app own keywords are prefixed, so exiftool groups them instead of listing unknown tags',
+);
+check(
+  new Set(pairKeys).size === pairKeys.length,
+  'no keyword repeats (a repeated iTXt key would make the first one unreachable)',
+  JSON.stringify(pairKeys.filter((k, i) => pairKeys.indexOf(k) !== i)),
 );
 
 // ── XML validator ─────────────────────────────────────────────────────────
@@ -450,6 +557,20 @@ for (const [doc, why] of badDocs) {
 }
 check(xmlProblem('<?xml version="1.0"?><a><b/></a>') === null, 'accepts a valid document');
 
+// Now that the validator is proven, use it on the real packet.
+section('XMP: the packet is well-formed and namespaced');
+const xmpText = xmpInFile?.[1] ?? '';
+check(xmlProblem(xmpText) === null, 'the packet in the PNG is well-formed XML', String(xmlProblem(xmpText)));
+check(
+  xmpText.includes('xmlns:ec3k="https://github.com/MaraniMatias/el-coso-3000/ns/1.0/"') &&
+    xmpText.includes(`<ec3k:Placeholder>${meta.width}x${meta.height}</ec3k:Placeholder>`) &&
+    // The schema forms, not just readable XML: an alternative and a sequence.
+    xmpText.includes(`<rdf:li xml:lang="x-default">${meta.title}</rdf:li>`) &&
+    xmpText.includes(`<rdf:Seq><rdf:li>${meta.author}</rdf:li></rdf:Seq>`),
+  'the packet declares the app namespace and fills both layers',
+  xmpText,
+);
+
 // ── SVG ───────────────────────────────────────────────────────────────────
 
 section('SVG: valid XML, metadata, and embedded font');
@@ -484,9 +605,20 @@ for (const [name, s] of cases) {
   check(svg.includes('text-anchor="middle"'), `${name}: text is centered like on canvas`);
 
   const block = /<metadata>([\s\S]*?)<\/metadata>/.exec(svg)?.[1] ?? '';
-  check(unescapeXml(block) === metadataAsText(buildMetadata(s)), `${name}: <metadata> contains the escaped metadata`, block);
-  check(block.split('\n').length === 5, `${name}: metadata retains all 5 lines`, `${block.split('\n').length} remain`);
-  check(block.includes(buildMetadata(s).title), `${name}: metadata includes the title`);
+  // `buildSvg` reads the clock itself, so the export instant is the one field
+  // that cannot be compared literally without a race against the second tick.
+  const withoutTime = (t: string) => t.replace(/^Creation Time: .*$/m, '');
+  check(
+    withoutTime(unescapeXml(block)) === withoutTime(metadataAsText(buildMetadata(s, { now: NOW }))),
+    `${name}: <metadata> contains the escaped metadata`,
+    block,
+  );
+  check(
+    block.split('\n').length === pairs.length,
+    `${name}: metadata retains all ${pairs.length} lines`,
+    `${block.split('\n').length} remain`,
+  );
+  check(block.includes(buildMetadata(s, { now: NOW }).title), `${name}: metadata includes the title`);
 }
 
 /**

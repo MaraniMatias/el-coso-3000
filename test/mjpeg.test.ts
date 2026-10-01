@@ -11,8 +11,8 @@
  */
 
 import { describe, expect, test } from 'bun:test';
-import { buildMetadata } from '../src/core/metadata';
-import { REPO_URL, type Spec } from '../src/core/types';
+import { buildMetadata, metadataAsText } from '../src/core/metadata';
+import { AUTHOR, REPO_URL, type Spec } from '../src/core/types';
 import { crc32 } from '../src/encoders/image';
 import { buildJpegZip, buildMjpegAvi, type JpegZipEntry } from '../src/encoders/mjpeg';
 
@@ -452,12 +452,13 @@ describe('buildMjpegAvi', () => {
     }
   });
 
-  test('INFO contains the repo URL and comment', () => {
+  test('INFO contains the repo URL and the full block as the comment', () => {
     const view = parseAvi(buildMjpegAvi(frames, params));
     expect(view.info.ISBJ).toBe(REPO_URL);
-    expect(view.info.ICMT).toBe(meta.comment);
+    expect(view.info.ICMT).toBe(metadataAsText(meta));
     expect(view.info.ISFT).toBe(meta.software);
     expect(view.info.INAM).toBe(meta.title);
+    expect(view.info.IART).toBe(AUTHOR);
   });
 
   test('a single frame is also a valid AVI', () => {

@@ -20,6 +20,7 @@ import { drawFrame } from "../core/draw-frame";
 import { filenameForSpec, mimeFor } from "../core/filename";
 import {
   buildMetadata,
+  KEYWORD_PREFIX,
   metadataAsPairs,
   metadataAsText,
   type FileMetadata,
@@ -310,13 +311,21 @@ function bitmapInfoHeader(p: MjpegAviParams): Bytes {
   return out;
 }
 
-/** Standard RIFF `INFO` tags for metadata pairs that have one. */
+/**
+ * Standard RIFF `INFO` tags for metadata pairs that have one.
+ *
+ * Only keys without `KEYWORD_PREFIX` can land here: a fourCC is 4 bytes, so
+ * every prefixed key would collapse into `ELCO` and overwrite the previous one.
+ * The app's own technical data stays in the `ICMT` comment block.
+ */
 const INFO_TAG: Record<string, string> = {
   Software: "ISFT",
-  Comment: "ICMT",
   Source: "ISBJ",
   Title: "INAM",
   Description: "IDSC",
+  Author: "IART",
+  Copyright: "ICOP",
+  "Creation Time": "IDIT",
 };
 
 /** Tag fourCC: the standard one if available, otherwise the key truncated to 4. */
@@ -327,14 +336,18 @@ function infoTag(key: string): string {
 /**
  * `INFO` list with metadata tags.
  *
- * `ISBJ` is the subject and holds the repo URL; `ICMT` is the comment. Readers
+ * `ISBJ` is the subject and holds the repo URL; `IART` is the artist. Readers
  * ignore unknown tags, so pairs without a standard tag use the truncated key
- * instead of being discarded.
+ * instead of being discarded, and the full block (prefixed keys included) is
+ * written once in `ICMT`.
  */
 function infoList(meta: FileMetadata): Bytes {
-  const chunks = metadataAsPairs(meta).map(([key, value]) =>
-    riffChunk(infoTag(key), UTF8.encode(value)),
-  );
+  const chunks = metadataAsPairs(meta)
+    // A fourCC is 4 bytes, so the app's prefixed keys would all become `ELCO`
+    // and overwrite each other. `ICMT` carries the whole block instead.
+    .filter(([key]) => !key.startsWith(KEYWORD_PREFIX))
+    .map(([key, value]) => riffChunk(infoTag(key), UTF8.encode(value)));
+  chunks.push(riffChunk("ICMT", UTF8.encode(metadataAsText(meta))));
   return riffList("INFO", concatBytes(chunks));
 }
 
@@ -644,7 +657,7 @@ export async function exportMjpegAvi(
     width: spec.width,
     height: spec.height,
     fps: spec.fps,
-    meta: buildMetadata(spec),
+    meta: buildMetadata(spec, { quality: spec.quality }),
   });
 
   const mimeType = mimeFor("mjpeg-avi");
@@ -676,7 +689,9 @@ export async function exportJpegZip(
   checkAbort(signal);
 
   onProgress?.({ progress: 0.85, message: "Packing ZIP…" });
-  const meta = buildMetadata(spec);
+  // `quality` is the JPEG quality the frames are encoded with, so the ZIP
+  // reports the setting that actually produced them.
+  const meta = buildMetadata(spec, { quality: spec.quality });
   const entries: JpegZipEntry[] = [
     { name: "metadata.json", data: UTF8.encode(JSON.stringify(meta, null, 2)) },
     ...frames.map((data, i) => ({

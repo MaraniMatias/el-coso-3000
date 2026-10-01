@@ -14,7 +14,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import { filenameForSpec, mimeFor } from '../src/core/filename';
-import { APP_NAME, REPO_URL, VIDEO_FORMATS, type Spec } from '../src/core/types';
+import { APP_NAME, AUTHOR, REPO_URL, VIDEO_FORMATS, type Spec } from '../src/core/types';
 import {
   MAX_TOTAL_FRAMES,
   MAX_VIDEO_DIMENSION,
@@ -342,7 +342,8 @@ describe('video metadata', () => {
   test('normalized fields come from buildMetadata with the actual dimensions', () => {
     expect(tags.title).toBe('Placeholder 642x362');
     expect(tags.description).toContain('Placeholder 642x362');
-    expect(tags.artist).toContain(APP_NAME);
+    // The artist is the person, not the tool: `Software` already covers the app.
+    expect(tags.artist).toBe(AUTHOR);
   });
 
   test('raw contains Software and Source', () => {

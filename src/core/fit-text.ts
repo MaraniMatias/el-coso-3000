@@ -110,11 +110,8 @@ function searchSize(
 }
 
 /**
- * Composes the text of the placeholder. By design it only holds the dimensions.
- *
- * Several shapes are tried and the one that allows the BIGGEST text wins, with
- * a single line preferred on a tie. All shapes are a single line: the text is
- * never split, so on a tall format the compact `×h` form simply fits bigger.
+ * Composes the placeholder dimensions, preferring the spaced form unless the
+ * compact form is needed to reach the target size. The label stays on one line.
  */
 export function dimensionCandidates(width: number, height: number): string[][] {
   const w = String(width);
@@ -125,14 +122,11 @@ export function dimensionCandidates(width: number, height: number): string[][] {
   ];
 }
 
-/** Bigger font wins; on a tie, fewer lines; on a tie, narrower. */
+/** Bigger font wins; on a tie, fewer lines. Candidate order breaks remaining ties. */
 function beats(candidate: TextLayout, best: TextLayout): boolean {
   return (
     candidate.fontSize > best.fontSize + 0.01 ||
-    (Math.abs(candidate.fontSize - best.fontSize) <= 0.01 && candidate.lines.length < best.lines.length) ||
-    (Math.abs(candidate.fontSize - best.fontSize) <= 0.01 &&
-      candidate.lines.length === best.lines.length &&
-      candidate.width < best.width)
+    (Math.abs(candidate.fontSize - best.fontSize) <= 0.01 && candidate.lines.length < best.lines.length)
   );
 }
 
@@ -140,6 +134,8 @@ function beats(candidate: TextLayout, best: TextLayout): boolean {
 const MAX_BLOCK_W = 0.7;
 /** Share of the usable height the dimensions may use. */
 const MAX_BLOCK_H = 0.6;
+/** Target font size as a share of the placeholder's short side. */
+const DIMENSION_FONT_RATIO = 0.15;
 
 /**
  * Area the dimensions may occupy: a share of the room the caller allows, with
@@ -204,9 +200,8 @@ export function layoutDimensions(
     ? [[spec.label.replace(/\s*\n+\s*/g, ' ').trim()]]
     : dimensionCandidates(spec.width, spec.height);
 
-  // The area is the only limit: the text grows until it fills it. Widest
-  // candidate bounds the box, so a long label is measured against the width it
-  // actually needs rather than the shortest one.
+  // Scale with the short side for a consistent composition across aspect ratios;
+  // the measured area only reduces this target when the label cannot fit.
   const area = searchArea(
     ctx,
     maxW,
@@ -215,13 +210,12 @@ export function layoutDimensions(
     weight,
     min,
   );
-  // Upper bracket of the search, never a cap: twice the largest side can never
-  // fit, so it always brackets the real answer.
   const max = opts.maxFontSize ?? Math.max(area.maxW, area.maxH) * 2;
+  const target = Math.min(max, Math.max(min, Math.min(spec.width, spec.height) * DIMENSION_FONT_RATIO));
 
   let best: TextLayout | null = null;
   for (const lines of candidates) {
-    const size = searchSize(ctx, lines, max, area.maxW, area.maxH, weight);
+    const size = searchSize(ctx, lines, target, area.maxW, area.maxH, weight);
     // `0` means it does not fit even at the smallest drawable size: the
     // candidate is dropped and the next one is tried.
     if (size <= 0) continue;
@@ -268,5 +262,5 @@ export function layoutLine(
   };
 }
 
-export { ABSOLUTE_FLOOR, LINE_HEIGHT_RATIO, MAX_BLOCK_H, MAX_BLOCK_W, PADDING_RATIO };
+export { ABSOLUTE_FLOOR, DIMENSION_FONT_RATIO, LINE_HEIGHT_RATIO, MAX_BLOCK_H, MAX_BLOCK_W, PADDING_RATIO };
 export { measureBlock, applyFont };

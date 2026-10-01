@@ -51,7 +51,20 @@ Always start with the dimensions:
 1920x1080-30fps-10s.mp4
 ```
 
-Every generated file includes origin metadata (Software, Comment, Source, Title) when the format allows it.
+Every generated file records where it came from. What each format can carry differs, because the containers differ:
+
+| Format | Metadata |
+| --- | --- |
+| PNG | Standard keywords (`Software`, `Title`, `Author`, `Copyright`, `Source`, `Creation Time`), the app's own data behind an `ElCoso3000:` prefix (dimensions, palette, colors, WCAG contrast, drawn text), and an XMP packet. |
+| JPEG | A readable comment block plus an XMP packet in `APP1`. |
+| WebP | An XMP packet. |
+| SVG | An escaped `<metadata>` block. |
+| GIF | The block in the comment extension. |
+| Motion JPEG AVI | Standard `INFO` tags, plus the full block in `ICMT`. |
+| JPEG sequence ZIP | The block in the ZIP comment and a `metadata.json` inside. |
+| MP4, WebM, MOV, MKV | The block in the container comment field, plus `Software` and `Source` where the container has room for them. |
+
+The app's own keywords are prefixed so tools group them instead of listing them as unknown tags, and the XMP packet uses a private namespace for them. `exiftool` reads both layers of a PNG and reports no warnings.
 
 ---
 

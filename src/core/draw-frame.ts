@@ -20,9 +20,9 @@ export interface FrameGeometry {
  * drifting away from it. `MIN` are floors, not ceilings: they only stop the
  * strip from disappearing on a tiny canvas, they never flatten it on a big one.
  */
-const BAR_RATIO = 0.012;
+const BAR_RATIO = 0.018;
 const BAR_MIN = 2;
-const TIME_RATIO = 0.035;
+const TIME_RATIO = 0.05;
 const TIME_MIN = 10;
 /**
  * The clock block: its line height plus a small breather over the bar.
@@ -56,7 +56,7 @@ export function frameGeometry(spec: Spec): FrameGeometry {
   let timeFontSize = showTime ? Math.max(TIME_MIN, Math.round(timeRatio)) : 0;
   // The bar crosses to its floor together with the clock. Letting each round
   // on its own leaves a window where the clock sits on 10px and the bar is
-  // still at 1.2%, and the two lose their proportion for no visible reason.
+  // still below its proportional size, and the two lose their relation.
   let barHeight = Math.max(BAR_MIN, Math.round(side * BAR_RATIO));
   if (showTime && timeRatio < TIME_MIN) barHeight = BAR_MIN;
 

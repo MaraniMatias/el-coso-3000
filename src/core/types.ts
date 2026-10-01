@@ -8,6 +8,9 @@
 /** Tool identity. It ends up in the metadata of every generated file. */
 export const APP_NAME = 'El Coso 3000';
 
+/** Released version, written to the metadata of every generated file. */
+export const APP_VERSION = '1.0.0';
+
 /** Author, as it appears in the metadata of the page. */
 export const AUTHOR = 'Matias Ezequiel Marani';
 
@@ -16,6 +19,10 @@ export const AUTHOR = 'Matias Ezequiel Marani';
  * generated files and to the footer of the UI.
  */
 export const REPO_URL = 'https://github.com/MaraniMatias/el-coso-3000';
+
+/** License of the code and of the generated files, as stated in `LICENSE`. */
+export const LICENSE = 'MIT';
+export const LICENSE_URL = `${REPO_URL}/blob/main/LICENSE`;
 
 /** Embedded typeface. Montserrat SemiBold (see `fonts/`). */
 export const FONT_FAMILY = 'Montserrat';

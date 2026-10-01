@@ -25,9 +25,10 @@ import {
 } from "../core/fit-text";
 import {
   buildMetadata,
+  esc,
   metadataAsPairs,
   metadataAsText,
-  type FileMetadata,
+  metadataAsXmp,
 } from "../core/metadata";
 import {
   FONT_WEIGHT,
@@ -207,11 +208,16 @@ export function pngChunk(type: string, data: Uint8Array): Bytes {
 }
 
 /**
- * Inserts prebuilt chunks immediately before `IEND`.
+ * Inserts prebuilt chunks immediately before the first `IDAT`.
  *
- * `IEND` must remain the last chunk; otherwise decoders treat it as garbage and
- * the PNG will not open. Search for it by walking from `IHDR` instead of blindly
- * assuming it is at the end.
+ * The PNG spec places ancillary chunks that describe the image before the pixel
+ * data. Inserting after `IDAT` (which is what "before `IEND`" means, since
+ * `IEND` is last) is legal but `exiftool` then warns that the text chunks "may
+ * be ignored by some readers", because plenty of decoders only look at what
+ * precedes the first scanline.
+ *
+ * Walking from `IHDR` keeps this correct even if the file has extra chunks
+ * before `IDAT`, and still fails loudly on something that is not a PNG.
  */
 export function insertPngChunks(png: Uint8Array, chunks: Bytes[]): Bytes {
   if (!matchesAt(png, 0, PNG_SIGNATURE))
@@ -219,80 +225,127 @@ export function insertPngChunks(png: Uint8Array, chunks: Bytes[]): Bytes {
 
   const view = viewOf(png);
   let offset = 8;
-  let iend = -1;
+  let idat = -1;
   while (offset + 8 <= png.length) {
-    if (fourCC(png, offset + 4) === "IEND") {
-      iend = offset;
+    if (fourCC(png, offset + 4) === "IDAT") {
+      idat = offset;
       break;
     }
     offset += 12 + view.getUint32(offset);
   }
-  if (iend < 0) throw new Error("Invalid PNG: IEND chunk not found.");
+  if (idat < 0) throw new Error("Invalid PNG: IDAT chunk not found.");
 
   const extra = chunks.reduce((n, c) => n + c.length, 0);
   const out = new Uint8Array(png.length + extra);
-  out.set(png.subarray(0, iend), 0);
-  let at = iend;
+  out.set(png.subarray(0, idat), 0);
+  let at = idat;
   for (const chunk of chunks) {
     out.set(chunk, at);
     at += chunk.length;
   }
-  out.set(png.subarray(iend), at);
+  out.set(png.subarray(idat), at);
   return out;
 }
 
 /**
- * `tEXt` is Latin-1 according to the spec. The metadata vocabulary fits in
- * Latin-1, but values above 255 become `?` instead of corrupting the chunk
- * (partial UTF-8 leaves garbage for every reader).
+ * One `iTXt` chunk: `keyword \0 flag method language \0 translated \0 text`.
+ *
+ * `tEXt` would be simpler but the spec pins it to Latin-1, and replacing
+ * non-Latin-1 characters with `?` mangles names like `Matías`. `iTXt` is
+ * UTF-8 by definition; the compression flag stays 0 because the packet is small
+ * and an uncompressed chunk can always be read.
  */
 export function pngTextChunks(pairs: Array<[string, string]>): Bytes[] {
-  return pairs.map(([key, value]) => {
-    const data = new Uint8Array(key.length + 1 + value.length);
-    for (let i = 0; i < key.length; i++) data[i] = key.charCodeAt(i);
-    data[key.length] = 0; // NUL separator between key and value
-    for (let i = 0; i < value.length; i++) {
-      const code = value.charCodeAt(i);
-      data[key.length + 1 + i] = code <= 0xff ? code : 0x3f;
-    }
-    return pngChunk("tEXt", data);
-  });
+  return pairs.map(([key, value]) =>
+    pngChunk("iTXt", itxtData(key, new TextEncoder().encode(value))),
+  );
+}
+
+/** The `iTXt` payload: keyword, three empty strings, then UTF-8 text. */
+function itxtData(keyword: string, text: Uint8Array): Uint8Array {
+  const key = new TextEncoder().encode(keyword);
+  const data = new Uint8Array(key.length + 5 + text.length);
+  data.set(key, 0);
+  // NUL after the keyword, then compression flag + method (both 0), then the
+  // empty language tag, empty translated keyword: five NULs before the text.
+  data.set(text, key.length + 5);
+  return data;
+}
+
+/** `iTXt` chunk holding the XMP packet, which is what exiftool reads as XMP. */
+export function pngXmpChunk(payload: Uint8Array): Bytes {
+  return pngChunk("iTXt", itxtData("XML:com.adobe.xmp", payload));
 }
 
 // ── JPEG ──────────────────────────────────────────────────────────────────
 
+/** Signature of an XMP payload inside `APP1`. */
+const XMP_SIGNATURE = "http://ns.adobe.com/xap/1.0/";
+
+/** A segment length is a 16-bit field that includes its own 2 bytes. */
+const MAX_SEGMENT_PAYLOAD = 0xffff - 2;
+
 /**
- * Inserts a `COM` segment (0xFFFE) immediately after `SOI`.
+ * Inserts a segment (marker + payload) immediately after `SOI`.
  *
- * The length field includes its own 2 bytes, and every JPEG segment must have
- * an even length, so add a padding byte if the text leaves an odd length. Put
- * `COM` first because `SOI` is the only thing the parser requires before it.
+ * Only some segments are padded: `APPn` with a length that leaves an odd
+ * payload needs one, but `COM` and the XMP `APP1` do not, and adding a byte
+ * would make readers show a trailing NUL. So the length is exactly what the
+ * payload needs.
+ *
+ * The size is checked before allocating: the length field is 16 bits, so an
+ * oversized payload would wrap to a smaller number and produce a segment no
+ * reader can parse, silently dropping the metadata and the rest of the file.
+ * Put the segment first because `SOI` is the only thing the parser requires
+ * before it.
  */
-export function insertJpegComment(jpeg: Uint8Array, text: string): Bytes {
+function insertJpegSegment(jpeg: Uint8Array, marker: number, payload: Bytes): Bytes {
   if (!matchesAt(jpeg, 0, [0xff, 0xd8]))
     throw new Error("Not a JPEG: SOI marker missing.");
 
-  // `COM` does not specify a charset, so use UTF-8, which inspection tools
-  // read today.
-  const payload = new TextEncoder().encode(text);
-  const pad = (2 + payload.length) % 2;
-  const out = new Uint8Array(jpeg.length + 4 + payload.length + pad);
+  if (payload.length > MAX_SEGMENT_PAYLOAD)
+    throw new Error(
+      `JPEG segment too large: ${payload.length} bytes of payload, maximum ${MAX_SEGMENT_PAYLOAD}.`,
+    );
+
+  const out = new Uint8Array(jpeg.length + 4 + payload.length);
   out.set(jpeg.subarray(0, 2), 0);
 
   let at = 2;
   out[at] = 0xff;
-  out[at + 1] = 0xfe;
-  viewOf(out).setUint16(at + 2, 2 + payload.length + pad);
+  out[at + 1] = marker;
+  viewOf(out).setUint16(at + 2, 2 + payload.length);
   at += 4;
   out.set(payload, at);
   at += payload.length;
-  if (pad) {
-    out[at] = 0x00;
-    at += 1;
-  }
 
   out.set(jpeg.subarray(2), at);
   return out;
+}
+
+/**
+ * Inserts a `COM` segment (0xFFFE) immediately after `SOI`.
+ *
+ * `COM` does not specify a charset, so the text goes in as UTF-8, which
+ * inspection tools read today. It is the human-readable fallback for tools that
+ * ignore XMP.
+ */
+export function insertJpegComment(jpeg: Uint8Array, text: string): Bytes {
+  return insertJpegSegment(jpeg, 0xfe, new TextEncoder().encode(text));
+}
+
+/**
+ * Inserts an `APP1` segment (0xFFE1) with the XMP packet after `SOI`.
+ *
+ * `APP1` is the standard home for XMP in JPEG, identified by the null-
+ * terminated `http://ns.adobe.com/xap/1.0/` signature that follows the length.
+ */
+export function insertJpegXmp(jpeg: Uint8Array, packet: Uint8Array): Bytes {
+  const payload = new Uint8Array(XMP_SIGNATURE.length + 1 + packet.length);
+  payload.set(new TextEncoder().encode(XMP_SIGNATURE), 0);
+  payload[XMP_SIGNATURE.length] = 0; // NUL terminator of the signature
+  payload.set(packet, XMP_SIGNATURE.length + 1);
+  return insertJpegSegment(jpeg, 0xe1, payload);
 }
 
 // ── WebP ──────────────────────────────────────────────────────────────────
@@ -347,37 +400,7 @@ export function insertWebpXmp(webp: Uint8Array, payload: Uint8Array): Bytes {
   return out;
 }
 
-/** Minimal but valid XMP, so tools read it as metadata. */
-function xmpPayload(meta: FileMetadata): Bytes {
-  const packet = [
-    '<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>',
-    '<x:xmpmeta xmlns:x="adobe:ns:meta/">',
-    '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">',
-    '<rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:dc="http://purl.org/dc/elements/1.1/">',
-    `<xmp:CreatorTool>${esc(meta.software)}</xmp:CreatorTool>`,
-    `<dc:title>${esc(meta.title)}</dc:title>`,
-    `<dc:description>${esc(meta.description)}</dc:description>`,
-    `<dc:rights>${esc(meta.source)}</dc:rights>`,
-    "</rdf:Description></rdf:RDF></x:xmpmeta>",
-    '<?xpacket end="w"?>',
-  ].join("\n");
-  return new TextEncoder().encode(packet);
-}
-
 // ── XML ───────────────────────────────────────────────────────────────────
-
-const XML_ENTITIES: Record<string, string> = {
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-  '"': "&quot;",
-  "'": "&apos;",
-};
-
-/** Escapes anything that could break a text node or attribute. */
-function esc(text: string): string {
-  return text.replace(/[&<>"']/g, (c) => XML_ENTITIES[c] ?? c);
-}
 
 /** Attributes need no more than two decimals, which keeps the file small. */
 function num(n: number): string {
@@ -548,13 +571,30 @@ export async function exportImage(
   const raw = new Uint8Array(await blob.arrayBuffer());
   checkAbort(signal);
   // Metadata is needed here; SVG emits it in `buildSvg`.
-  const meta = buildMetadata(spec);
+  // Both layers: flat keywords for tools that ignore XMP, XMP for the ones that
+  // do not. `quality` only reaches the formats where it changes the bytes.
+  const meta = buildMetadata(
+    spec,
+    QUALITY_FORMATS.has(format) ? { quality: spec.quality } : {},
+  );
   switch (format) {
     case "png":
-      return finish(insertPngChunks(raw, pngTextChunks(metadataAsPairs(meta))));
+      return finish(
+        insertPngChunks(raw, [
+          ...pngTextChunks(metadataAsPairs(meta)),
+          pngXmpChunk(metadataAsXmp(meta)),
+        ]),
+      );
     case "jpeg":
-      return finish(insertJpegComment(raw, metadataAsText(meta)));
+      // XMP first, then the comment, so `COM` lands before `APP1`: readers that
+      // stop at the first segment still find the readable text.
+      return finish(
+        insertJpegComment(
+          insertJpegXmp(raw, metadataAsXmp(meta)),
+          metadataAsText(meta),
+        ),
+      );
     case "webp":
-      return finish(insertWebpXmp(raw, xmpPayload(meta)));
+      return finish(insertWebpXmp(raw, metadataAsXmp(meta)));
   }
 }

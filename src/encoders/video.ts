@@ -337,7 +337,7 @@ export function videoMetadataTags(spec: Spec): MetadataTags {
     title: meta.title,
     description: meta.description,
     comment: metadataAsText(meta),
-    artist: meta.software,
+    artist: meta.author,
     raw: { Software: meta.software, Source: meta.source },
   };
 }

@@ -7,7 +7,7 @@
  * It is not the real font, but it reproduces its essential behavior: the width
  * grows with the size and is proportional to the number of characters.
  */
-import { ABSOLUTE_FLOOR, layoutDimensions, layoutLine, paddingFor, MAX_BLOCK_H, MAX_BLOCK_W } from '../src/core/fit-text';
+import { ABSOLUTE_FLOOR, DIMENSION_FONT_RATIO, layoutDimensions, layoutLine, paddingFor, MAX_BLOCK_H, MAX_BLOCK_W } from '../src/core/fit-text';
 import { frameGeometry } from '../src/core/draw-frame';
 import type { Spec } from '../src/core/types';
 
@@ -97,7 +97,7 @@ for (const [w, h] of CASES) {
     continue;
   }
 
-  // The only limit is the area it is given: it fills it and never overflows.
+  // The label stays within its area and never overflows.
   const fits = layout.width <= maxW && layout.height <= maxH;
   check(`${w}x${h} fits`, fits, `(${layout.width.toFixed(1)}x${layout.height.toFixed(1)} in ${maxW.toFixed(1)}x${maxH.toFixed(1)})`);
   check(`${w}x${h} never bigger than the image`, layout.fontSize <= Math.min(w, h));
@@ -110,8 +110,7 @@ for (const [w, h] of CASES) {
   );
 }
 
-// The font size has to GROW with the image. This is what a subagent found
-// broken: everything stayed at 10px.
+// The font size scales with the image rather than staying fixed.
 console.log('\nmonotonicity of the font size:');
 const ladder: Array<[number, number]> = [[64, 64], [128, 128], [256, 256], [512, 512], [1024, 1024], [1920, 1080]];
 const sizes = ladder.map(([w, h]) => layoutDimensions(ctx, spec(w, h), w, h)?.fontSize ?? 0);
@@ -123,9 +122,20 @@ for (let i = 1; i < sizes.length; i++) {
 check('the size grows with the image', monotonic, `→ ${sizes.map((s) => s?.toFixed(1)).join(' ')}`);
 console.log(monotonic ? '  ✔ grows' : '  ✘ does not grow');
 
-// A narrow format keeps the text on ONE line: it is never split, the compact
-// `×h` form simply scales to whatever fits. 70% of the width is not enough
-// here, so the width is given back up to the legibility floor and no further.
+const proportional: Array<[number, number]> = [[320, 180], [640, 360], [1280, 720], [1920, 1080]];
+const fontRatios = proportional.map(([w, h]) => (layoutDimensions(ctx, spec(w, h), w, h)?.fontSize ?? 0) / h);
+check(
+  'the text keeps its proportion as resolution doubles',
+  fontRatios.every((ratio) => Math.abs(ratio - DIMENSION_FONT_RATIO) < 0.01),
+  `→ ${fontRatios.map((ratio) => ratio.toFixed(3)).join(' ')}`,
+);
+check(
+  'spaced dimensions are preferred when they fit',
+  layoutDimensions(ctx, spec(1920, 1080), 1920, 1080)?.lines[0] === '1920 × 1080',
+);
+
+// A narrow format stays on one line; compact notation is used only when the
+// spaced form cannot reach the target size without exceeding the width cap.
 const narrow = layoutDimensions(ctx, spec(40, 600), 40 - paddingFor(40, 600) * 2, 600 - paddingFor(40, 600) * 2);
 check('the narrow one stays in one line', narrow?.lines.length === 1, `→ ${narrow?.lines.length} line(s)`);
 // At 40px wide the label is 34.8px at the 10px floor but only 33.6px are left
@@ -150,8 +160,7 @@ check(
 );
 console.log(`\n40x600 → ${narrow ? narrow.lines.join(' / ') : 'no layout'} at ${narrow?.fontSize.toFixed(1)}px`);
 
-// The wide banners that used to be squeezed: every one of them must now be a
-// single line that scales with its height, inside the 70%/60% box.
+// Banners keep a short-side-based text size and leave breathing room.
 console.log('\nbanners that used to break or shrink:');
 const BANNERS: Array<[number, number]> = [[320, 50], [468, 60], [728, 90], [970, 90], [320, 100]];
 for (const [w, h] of BANNERS) {
@@ -159,11 +168,10 @@ for (const [w, h] of BANNERS) {
   const usableW = w - pad * 2;
   const usableH = h - pad * 2;
   const L = layoutDimensions(ctx, spec(w, h), usableW, usableH);
-  // Before the fix these sat at 10-14px, crushed by the 60% square and by the
-  // 0.14 ceiling on the shortest side.
+  const target = Math.max(ABSOLUTE_FLOOR, Math.min(w, h) * DIMENSION_FONT_RATIO);
   check(`${w}x${h} is one line`, L?.lines.length === 1, `→ ${L?.lines.length} line(s)`);
-  check(`${w}x${h} scales with its height`, (L?.fontSize ?? 0) > h * 0.3, `→ ${L?.fontSize.toFixed(1)}px of ${h}px`);
-  // It grows to fill its box without crossing the two limits.
+  check(`${w}x${h} stays near its target size`, (L?.fontSize ?? 0) <= target + 0.5, `→ ${L?.fontSize.toFixed(1)}px, target ${target.toFixed(1)}px`);
+  // The label fits with headroom inside both area limits.
   check(
     `${w}x${h} stays within 70% of the width`,
     (L?.width ?? 0) <= usableW * MAX_BLOCK_W + 0.5,
@@ -174,12 +182,7 @@ for (const [w, h] of BANNERS) {
     (L?.height ?? 0) <= usableH * MAX_BLOCK_H + 0.5,
     `(${L?.height.toFixed(1)}px in ${(usableH * MAX_BLOCK_H).toFixed(1)}px)`,
   );
-  // And it uses the height it is allowed, otherwise the cap is too timid.
-  check(
-    `${w}x${h} uses the height it has`,
-    (L?.height ?? 0) > usableH * MAX_BLOCK_H * 0.9,
-    `→ ${L?.height.toFixed(1)}px of ${(usableH * MAX_BLOCK_H).toFixed(1)}px`,
-  );
+  check(`${w}x${h} leaves breathing room`, (L?.height ?? 0) < usableH * 0.5, `→ ${L?.height.toFixed(1)}px of ${usableH.toFixed(1)}px`);
   console.log(
     `  ${`${w}x${h}`.padEnd(10)} ${L ? `${L.fontSize.toFixed(1)}px  ${L.lines.join('')}` : 'no layout'}`,
   );
@@ -193,15 +196,15 @@ check('the clock returns null when it does not fit', tooSmall === null);
 console.log(`clock at ${clock?.fontSize.toFixed(1)}px`);
 
 // ── The bottom strip scales with the video ─────────────────────────────
-// The bar is 1.2% of the shortest side and the clock 3.5% of it, each with a
+// The bar is 1.8% of the shortest side and the clock 5% of it, each with a
 // floor (2px and 10px) so they stay visible on a short banner. Both share the
 // same reference side, which is what keeps their proportion constant whatever
 // the aspect ratio. The strip never takes more than 35% of the height: the
 // dimensions are the subject of the image, so the strip yields when it has to.
 console.log('\nbottom strip: bar and clock');
-const BAR_RATIO = 0.012;
+const BAR_RATIO = 0.018;
 const BAR_MIN = 2;
-const TIME_RATIO = 0.035;
+const TIME_RATIO = 0.05;
 const TIME_MIN = 10;
 const MAX_STRIP_RATIO = 0.35;
 const videoLadder: Array<[number, number]> = [
@@ -221,12 +224,12 @@ for (const [w, h] of videoLadder) {
   const clockFloored = side * TIME_RATIO < TIME_MIN;
   const capped = barWanted + timeWanted * 1.5 > h * MAX_STRIP_RATIO;
   check(
-    `${w}x${h} bar is 1.2% of the shortest side`,
+    `${w}x${h} bar is 1.8% of the shortest side`,
     capped || clockFloored || Math.abs(geo.barHeight - barWanted) <= 0.5,
     `(${geo.barHeight}px, wanted ${barWanted.toFixed(2)})`,
   );
   check(
-    `${w}x${h} clock is 3.5% of the shortest side`,
+    `${w}x${h} clock is 5% of the shortest side`,
     capped || Math.abs(geo.timeFontSize - timeWanted) <= 0.5,
     `(${geo.timeFontSize}px, wanted ${timeWanted.toFixed(2)})`,
   );
@@ -259,7 +262,7 @@ for (const [w, h] of [[1920, 1080], [640, 360], [320, 240], [120, 600], [320, 48
   const geo = frameGeometry({ ...spec(w, h), showProgressBar: true, showTime: true });
   const ratio = geo.timeFontSize > 0 ? geo.barHeight / geo.timeFontSize : 0;
   // Either both sit on their floor (2px and 10px, ratio 0.2) or both follow
-  // the 1.2%/3.5% ratios, which give 0.343. Nothing in between may drift.
+  // the 1.8%/5% ratios, which give 0.36. Nothing in between may drift.
   check(
     `${w}x${h} bar/clock holds its proportion`,
     Math.abs(ratio - BAR_MIN / TIME_MIN) < 0.02 || Math.abs(ratio - BAR_RATIO / TIME_RATIO) < 0.04,
@@ -268,8 +271,7 @@ for (const [w, h] of [[1920, 1080], [640, 360], [320, 240], [120, 600], [320, 48
   console.log(`  ${`${w}x${h}`.padEnd(11)} bar ${geo.barHeight}px  clock ${geo.timeFontSize.toFixed(1)}px  ratio ${ratio.toFixed(3)}`);
 }
 
-// A short banner is the case that used to look wrong: a 1px bar and a 6px
-// clock next to 70px of dimensions.
+// Short banners keep the minimum controls visible without crowding the label.
 console.log('\nshort banners keep a readable strip:');
 for (const [w, h] of [[320, 100], [468, 60], [728, 90], [320, 50]] as Array<[number, number]>) {
   const geo = frameGeometry({ ...spec(w, h), showProgressBar: true, showTime: true });
@@ -278,7 +280,7 @@ for (const [w, h] of [[320, 100], [468, 60], [728, 90], [320, 50]] as Array<[num
   console.log(`  ${`${w}x${h}`.padEnd(11)} bar ${geo.barHeight}px  clock ${geo.timeFontSize.toFixed(1)}px`);
 }
 
-// And it grows with the video, which is the whole point of using ratios.
+// The bar and clock remain proportional as video resolution scales up.
 const strips = [[320, 240], [640, 360], [1280, 720], [1920, 1080], [3840, 2160]].map(
   ([w, h]) => frameGeometry({ ...spec(w!, h!), showProgressBar: true, showTime: true }),
 );

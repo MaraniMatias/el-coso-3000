@@ -3,7 +3,7 @@
   "module": "src/main.ts",
   "type": "module",
   "description": "Image and video placeholder generator, offline and with no server.",
-  "license": "MPL-2.0",
+  "license": "MIT",
   "scripts": {
     "build": "bun run scripts/build.ts",
     "test": "bun test",
