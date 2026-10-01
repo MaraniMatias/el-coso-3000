@@ -14,9 +14,11 @@ export interface FrameGeometry {
 
 /**
  * The bar and the clock are sized as a fraction of the video, so they keep the
- * same proportion at 320×240 and at 4K. `MIN` are floors, not ceilings: they
- * only stop the strip from disappearing on a tiny canvas, they never flatten it
- * on a big one.
+ * same proportion at 320×240 and at 4K. Both are shares of
+ * `MIN(width, height)`, so a portrait and a landscape of the same short side
+ * get the same strip: the bar keeps its thickness next to the clock instead of
+ * drifting away from it. `MIN` are floors, not ceilings: they only stop the
+ * strip from disappearing on a tiny canvas, they never flatten it on a big one.
  */
 const BAR_RATIO = 0.012;
 const BAR_MIN = 2;
@@ -47,10 +49,16 @@ export function frameGeometry(spec: Spec): FrameGeometry {
     return { barHeight: 0, timeFontSize: 0, stripHeight: 0 };
   }
   const block = (time: number) => (time > 0 ? time * TIME_BLOCK_RATIO : 0);
-  let barHeight = Math.max(BAR_MIN, Math.round(spec.height * BAR_RATIO));
-  let timeFontSize = showTime
-    ? Math.max(TIME_MIN, Math.round(Math.min(spec.width, spec.height) * TIME_RATIO))
-    : 0;
+  // One reference side for both, so the bar and the clock keep their relation
+  // to each other at every aspect ratio.
+  const side = Math.min(spec.width, spec.height);
+  const timeRatio = side * TIME_RATIO;
+  let timeFontSize = showTime ? Math.max(TIME_MIN, Math.round(timeRatio)) : 0;
+  // The bar crosses to its floor together with the clock. Letting each round
+  // on its own leaves a window where the clock sits on 10px and the bar is
+  // still at 1.2%, and the two lose their proportion for no visible reason.
+  let barHeight = Math.max(BAR_MIN, Math.round(side * BAR_RATIO));
+  if (showTime && timeRatio < TIME_MIN) barHeight = BAR_MIN;
 
   // The strip is capped so the dimensions keep the canvas. The floors above
   // come first: only a canvas too short to hold them reaches this, and then the
@@ -135,16 +143,20 @@ export function drawFrame(ctx: CanvasRenderingContext2D, spec: Spec, progress?: 
 
     if (spec.showTime && geo.timeFontSize > 0) {
       const tc = timecode((progress ?? 0) * spec.duration, spec.duration);
+      // `layoutLine` fits the clock to the width it really has and returns
+      // `null` when even the smallest drawable size would overflow, so on a
+      // very narrow frame the timecode is dropped instead of spilling past the
+      // edges. `timeFontSize` only caps it; the width is what decides.
       const clock = layoutLine(
         ctx,
         tc,
-        width - pad,
-        geo.timeFontSize * 1.5,
+        width - pad * 2,
+        geo.timeFontSize * TIME_BLOCK_RATIO,
         { fontWeight: FONT_WEIGHT, minFontSize: 7, maxFontSize: geo.timeFontSize },
       );
       if (clock) {
         applyFont(ctx, clock.fontSize, FONT_WEIGHT);
-        paintText(ctx, clock, width / 2, barTop - geo.timeFontSize * 1.5, geo.timeFontSize * 1.5, spec.fg);
+        paintText(ctx, clock, width / 2, barTop - geo.timeFontSize * TIME_BLOCK_RATIO, geo.timeFontSize * TIME_BLOCK_RATIO, spec.fg);
       }
     }
 

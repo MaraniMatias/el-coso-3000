@@ -193,10 +193,11 @@ check('the clock returns null when it does not fit', tooSmall === null);
 console.log(`clock at ${clock?.fontSize.toFixed(1)}px`);
 
 // ── The bottom strip scales with the video ─────────────────────────────
-// The bar is 1.2% of the height and the clock 3.5% of the shortest side, each
-// with a floor (2px and 10px) so they stay visible on a short banner. Neither
-// is allowed to take more than a quarter of the height: the dimensions are the
-// subject of the image, so the strip yields when there is no room.
+// The bar is 1.2% of the shortest side and the clock 3.5% of it, each with a
+// floor (2px and 10px) so they stay visible on a short banner. Both share the
+// same reference side, which is what keeps their proportion constant whatever
+// the aspect ratio. The strip never takes more than 35% of the height: the
+// dimensions are the subject of the image, so the strip yields when it has to.
 console.log('\nbottom strip: bar and clock');
 const BAR_RATIO = 0.012;
 const BAR_MIN = 2;
@@ -206,17 +207,22 @@ const MAX_STRIP_RATIO = 0.35;
 const videoLadder: Array<[number, number]> = [
   [32, 32], [64, 64], [320, 240], [320, 100], [468, 60], [728, 90], [640, 360],
   [1280, 720], [1920, 1080], [3840, 2160],
+  // Portrait and extreme shapes: the axes used to disagree here.
+  [120, 600], [320, 480], [300, 1050], [30, 800], [100, 100],
 ];
 for (const [w, h] of videoLadder) {
   const geo = frameGeometry({ ...spec(w, h), showProgressBar: true, showTime: true });
-  const barWanted = Math.max(BAR_MIN, h * BAR_RATIO);
-  const timeWanted = Math.max(TIME_MIN, Math.min(w, h) * TIME_RATIO);
-  // The floors and the 25% cap both override the ratio, so the ratio is only
-  // the expected value where neither of them is the binding rule.
+  const side = Math.min(w, h);
+  const barWanted = Math.max(BAR_MIN, side * BAR_RATIO);
+  const timeWanted = Math.max(TIME_MIN, side * TIME_RATIO);
+  // The floors and the 35% cap both override the ratio, so the ratio is only
+  // the expected value where neither of them is the binding rule. The bar
+  // crosses to its floor together with the clock, so `clockFloored` covers both.
+  const clockFloored = side * TIME_RATIO < TIME_MIN;
   const capped = barWanted + timeWanted * 1.5 > h * MAX_STRIP_RATIO;
   check(
-    `${w}x${h} bar is 1.2% of the height`,
-    capped || Math.abs(geo.barHeight - barWanted) <= 0.5,
+    `${w}x${h} bar is 1.2% of the shortest side`,
+    capped || clockFloored || Math.abs(geo.barHeight - barWanted) <= 0.5,
     `(${geo.barHeight}px, wanted ${barWanted.toFixed(2)})`,
   );
   check(
@@ -242,6 +248,24 @@ for (const [w, h] of videoLadder) {
       `(${((geo.timeFontSize / Math.min(w, h)) * 100).toFixed(2)}%)  strip ${geo.stripHeight.toFixed(1)}px ` +
       `(${(capped ? 'capped' : `${((geo.stripHeight / h) * 100).toFixed(2)}%`)})`,
   );
+}
+
+// The bar and the clock are both shares of the shortest side, so they keep the
+// same proportion to each other at any aspect ratio. Measuring the bar on the
+// height and the clock on the shortest side is what made a portrait strip look
+// like a 1px thread next to 70px of text.
+console.log('\nthe bar keeps its proportion to the clock:');
+for (const [w, h] of [[1920, 1080], [640, 360], [320, 240], [120, 600], [320, 480], [300, 1050], [30, 800]] as Array<[number, number]>) {
+  const geo = frameGeometry({ ...spec(w, h), showProgressBar: true, showTime: true });
+  const ratio = geo.timeFontSize > 0 ? geo.barHeight / geo.timeFontSize : 0;
+  // Either both sit on their floor (2px and 10px, ratio 0.2) or both follow
+  // the 1.2%/3.5% ratios, which give 0.343. Nothing in between may drift.
+  check(
+    `${w}x${h} bar/clock holds its proportion`,
+    Math.abs(ratio - BAR_MIN / TIME_MIN) < 0.02 || Math.abs(ratio - BAR_RATIO / TIME_RATIO) < 0.04,
+    `→ ${ratio.toFixed(3)} (floor ${(BAR_MIN / TIME_MIN).toFixed(3)}, ratio ${(BAR_RATIO / TIME_RATIO).toFixed(3)})`,
+  );
+  console.log(`  ${`${w}x${h}`.padEnd(11)} bar ${geo.barHeight}px  clock ${geo.timeFontSize.toFixed(1)}px  ratio ${ratio.toFixed(3)}`);
 }
 
 // A short banner is the case that used to look wrong: a 1px bar and a 6px
