@@ -4,7 +4,7 @@ Image and video placeholder generator that runs **entirely in the browser**.
 No server, no connection, nothing uploaded. The result is **a single HTML file** you can open with a double-click.
 
 
-**Demo:** [https://maranimatias.github.io/el-coso-3000/](https://maranimatias.github.io/el-coso-3000/)
+**Demo:** [https://el-coso-3000.maranimatias.workers.dev/](https://el-coso-3000.maranimatias.workers.dev/)
 
 ---
 
