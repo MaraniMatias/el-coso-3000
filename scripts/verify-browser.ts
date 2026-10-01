@@ -281,6 +281,42 @@ try {
   check('a size that is not a preset falls back to Custom', preset.custom === '', `"${preset.custom}"`);
   check('the dropdown carries every standard size', preset.options >= 15, `${preset.options} options`);
 
+  // Pasting a size into either field has to fill both. The inputs are
+  // `type="number"`, so the browser would sanitize "1629×420" into an empty
+  // field on its own: the `paste` event is the only place the raw text is still
+  // readable. `dispatchEvent` returns false when the listener called
+  // `preventDefault`, which is how a synthetic paste reports that it was taken.
+  console.log('\npasting a size:');
+  const pasted = await evaluate<{ w: string; h: string; cw: number; ch: number; blocked: boolean; plain: boolean; kept: string; msg: string }>(`(() => {
+    const w = document.querySelector('#width'), h = document.querySelector('#height');
+    const paste = (el, text) => {
+      const data = new DataTransfer();
+      data.setData('text/plain', text);
+      return el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    };
+    const blocked = !paste(w, '1629×420');
+    const canvas = document.querySelector('#canvas');
+    const filled = { w: w.value, h: h.value, cw: canvas.width, ch: canvas.height, blocked };
+    // A lone number is not a pair, so the browser has to keep handling it.
+    const plain = paste(h, '800');
+    // A pair outside the range the inputs declare fills nothing.
+    paste(w, '5000×10');
+    const kept = w.value + '×' + h.value;
+    return { ...filled, plain, kept, msg: document.querySelector('#message').textContent };
+  })()`);
+  check('pasting 1629×420 fills both fields', pasted.w === '1629' && pasted.h === '420', `${pasted.w}×${pasted.h}`);
+  check('the preview takes the pasted size', pasted.cw === 1629 && pasted.ch === 420, `${pasted.cw}×${pasted.ch}`);
+  check('the paste is taken instead of sanitized away', pasted.blocked);
+  check('pasting a lone number is left to the browser', pasted.plain);
+  check('a size out of range fills nothing', pasted.kept === '1629×420' && pasted.msg.includes('4096'), `${pasted.kept} · ${pasted.msg}`);
+
+  // Back to a size the exporters below expect, and the input event clears the
+  // error message the refused paste left.
+  await evaluate(`(() => {
+    const set = (id, v) => { const e = document.querySelector(id); e.value = String(v); e.dispatchEvent(new Event('input', { bubbles: true })); };
+    set('#width', 320); set('#height', 240);
+  })()`);
+
   const kind = await evaluate<string>(`(() => {
     document.querySelector('input[name="kind"][value="video"]').click();
     return document.querySelector('input[name="kind"]:checked').value;

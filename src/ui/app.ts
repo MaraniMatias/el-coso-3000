@@ -59,6 +59,18 @@ const LOSSY: ReadonlySet<ImageFormat | VideoFormat> = new Set<
 
 // ── Reading the form ───────────────────────────────────────────────────
 
+/** The pixel ceiling, the same one the `max="4096"` of the size inputs has. */
+const DIM_MAX = 4096;
+
+/**
+ * A pair of dimensions as they are copied around: "1629×420", "1629x420",
+ * "1629 420 px", "1629*420", "1629,420".
+ *
+ * The separator is required on purpose. If it were optional, "1629420" would
+ * match as 1629×420 and a single size would turn into two.
+ */
+const DIMS_PAIR = /^\s*(\d{1,4})\s*(?:[x×*,]|\s)\s*(\d{1,4})\s*(?:px)?\s*$/i;
+
 function num(name: string, fallback: number): number {
   const el = form.elements.namedItem(name);
   if (el instanceof RadioNodeList) {
@@ -632,6 +644,33 @@ function wireEvents(): void {
 
   form.addEventListener("change", () => {
     refreshContrast();
+    refreshDependentUi();
+  });
+
+  // Pasting a size into either field fills both. A `type="number"` input runs
+  // the value sanitization algorithm, so "1629×420" would land there empty:
+  // the `paste` event still carries the raw text, which is the only chance to
+  // read it.
+  form.addEventListener("paste", (ev) => {
+    const target = ev.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    if (target.id !== "width" && target.id !== "height") return;
+
+    const m = DIMS_PAIR.exec(ev.clipboardData?.getData("text") ?? "");
+    if (!m) return; // not a pair: the paste stays the one the browser does
+    ev.preventDefault();
+
+    // Left to right, like the `×` between the two labels. Pasting into the
+    // height fills the width too, it does not flip.
+    const width = Number(m[1]);
+    const height = Number(m[2]);
+    if (width < 1 || height < 1 || width > DIM_MAX || height > DIM_MAX) {
+      showMessage(`Sizes must be between 1 and ${DIM_MAX} px.`, "error");
+      return;
+    }
+    setNum("width", width);
+    setNum("height", height);
+    clearMessage();
     refreshDependentUi();
   });
 
