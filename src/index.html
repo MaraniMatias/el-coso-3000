@@ -421,18 +421,19 @@
                     type="checkbox"
                     name="sound"
                     toolparamtitle="Include sound"
-                    toolparamdescription="Adds a quiet test sound to MP4, MOV, WebM and MKV, to check that the file has an audio track. It is off by default, and the animated outputs (gif, mjpeg-avi, jpeg-zip) stay silent."
+                    toolparamdescription="Adds a soundtrack to MP4, MOV, WebM and MKV. It is off by default, and the animated outputs (gif, mjpeg-avi, jpeg-zip) stay silent."
                   />
                   <span>Include sound</span></label
                 >
                 <select
                   id="soundTone"
                   name="soundTone"
-                  aria-label="Test sound"
+                  aria-label="Soundtrack"
                   disabled
-                  toolparamtitle="Test sound"
-                  toolparamdescription="Which sound to add when Include sound is on. 'beep' is a soft 440 Hz beep every second and the default. 'tone' is the same pitch held quietly for the whole video. 'noise' is white noise."
+                  toolparamtitle="Soundtrack"
+                  toolparamdescription="Which sound to add when Include sound is on. 'tango' is a synthesized tango nuevo, 100 BPM, and the default. 'beep' is a soft 440 Hz beep every second. 'tone' is the same pitch held quietly for the whole video. 'noise' is white noise."
                 >
+                  <option value="tango">Tango</option>
                   <option value="beep">Soft beep every second</option>
                   <option value="tone">Continuous low tone</option>
                   <option value="noise">White noise</option>
@@ -491,7 +492,7 @@
           <li>Choose Image or Video.</li>
           <li>Enter the width and height in pixels, or select a size preset, then choose a background color.</li>
           <li>Select an output format. Enable the transparent background for PNG, WebP, SVG, or GIF. For animated and video outputs, set the duration, frame rate, and optional progress bar or clock.</li>
-          <li>To give a video an audio track, tick Include sound and choose a test sound. MP4, MOV, WebM, and MKV support it; GIF, AVI, and ZIP stay silent.</li>
+          <li>To give a video a soundtrack, tick Include sound and pick one: a synthesized tango, a test beep, a held tone, or noise. MP4, MOV, WebM, and MKV support it; GIF, AVI, and ZIP stay silent.</li>
           <li>Select Download to save the generated file.</li>
         </ol>
       </section>

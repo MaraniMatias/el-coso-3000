@@ -593,6 +593,7 @@ try {
   console.log('\nthe sound control:');
   const sound = await evaluate<{
     defaultOn: boolean;
+    defaultTone: string;
     toneDisabledUntilChecked: boolean;
     toneEnabledAfterChecked: boolean;
     toneOptions: string[];
@@ -612,15 +613,21 @@ try {
     check.click();
     const after = tone.disabled;
     const options = [...tone.options].map((o) => o.value);
+    const defaultTone = tone.value;
     pick('gif');
     const gifDisabled = check.disabled;
     pick('mp4');
-    return { defaultOn, toneDisabledUntilChecked: before, toneEnabledAfterChecked: !after, toneOptions: options, gifDisabled, backEnabled: !check.disabled };
+    return { defaultOn, defaultTone, toneDisabledUntilChecked: before, toneEnabledAfterChecked: !after, toneOptions: options, gifDisabled, backEnabled: !check.disabled };
   })()`);
   check('video is silent by default', !sound.defaultOn);
   check('the picker is disabled until the box is ticked', sound.toneDisabledUntilChecked);
   check('ticking the box enables the picker', sound.toneEnabledAfterChecked);
-  check('the picker carries the three sounds', sound.toneOptions.join() === 'beep,tone,noise', sound.toneOptions.join(', '));
+  check('the sound it picks is the tango', sound.defaultTone === 'tango', sound.defaultTone);
+  check(
+    'the picker carries the four sounds, tango first',
+    sound.toneOptions.join() === 'tango,beep,tone,noise',
+    sound.toneOptions.join(', '),
+  );
   check('the GIF cannot be given a sound', sound.gifDisabled);
   check('going back to MP4 restores it', sound.backEnabled);
 
@@ -674,6 +681,27 @@ try {
        c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true }));`,
       (b) => !new TextDecoder('latin1').decode(b).includes('mp4a'),
     );
+
+    // The tango is the one sound that is music rather than a formula, and no
+    // Bun test can reach it: it is rendered by a Web Audio graph, so the only
+    // honest check is a real export. Six seconds is two bars and a half, and
+    // it is timed, because the whole point of generating it is that it costs
+    // seconds of rendering rather than six seconds of waiting.
+    const tangoStarted = Date.now();
+    await exportAndCheck(
+      'MP4 with the tango soundtrack, the default, in AAC',
+      `${setDims(320, 240)} document.querySelector('input[name="kind"][value="video"]').click();
+       document.querySelector('input[name="videoFormat"][value="mp4"]').click();
+       const set = (id, v) => { const e = document.querySelector(id); e.value = String(v); e.dispatchEvent(new Event('input', { bubbles: true })); };
+       set('#fps', 6); set('#duration', 6);
+       const c = document.querySelector('input[name="sound"]');
+       c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true }));`,
+      (b) => {
+        const s = new TextDecoder('latin1').decode(b);
+        return s.includes('mp4a') && s.includes('soun');
+      },
+    );
+    console.log(`        (six seconds of tango in ${((Date.now() - tangoStarted) / 1000).toFixed(1)} s wall clock)`);
 
     await exportAndCheck(
       'WebM with an Opus track, the codec it is native to',

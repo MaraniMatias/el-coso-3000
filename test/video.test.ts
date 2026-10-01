@@ -14,7 +14,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import { filenameForSpec, mimeFor } from '../src/core/filename';
-import { APP_NAME, AUTHOR, REPO_URL, VIDEO_FORMATS, type Spec } from '../src/core/types';
+import { APP_NAME, AUTHOR, REPO_URL, VIDEO_FORMATS, VIDEO_TONES, type Spec } from '../src/core/types';
 import {
   MAX_TOTAL_FRAMES,
   MAX_VIDEO_DIMENSION,
@@ -162,7 +162,11 @@ describe('audio codec preference', () => {
   // before it starts drawing instead of failing once it is half encoded.
   test('a browser with no AudioEncoder cannot resolve one', async () => {
     expect(isVideoExportSupported()).toBe(false);
-    expect(await resolveAudioCodec('mp4')).toBeNull();
+    // Every tone, because each is probed at its own shape: a browser can
+    // support one and not the other.
+    for (const tone of VIDEO_TONES) {
+      expect(await resolveAudioCodec('mp4', tone)).toBeNull();
+    }
   });
 });
 

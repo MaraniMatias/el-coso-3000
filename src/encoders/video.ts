@@ -26,6 +26,7 @@
  */
 
 import {
+  AudioBufferSource,
   BufferTarget,
   CanvasSource,
   MkvOutputFormat,
@@ -34,16 +35,19 @@ import {
   Output,
   Quality,
   WebMOutputFormat,
+  getFirstEncodableAudioCodec,
   getFirstEncodableVideoCodec,
+  type AudioCodec,
   type MetadataTags,
   type OutputFormat,
   type VideoCodec,
 } from 'mediabunny';
 
+import { audioChunks, renderSound, soundShape } from '../core/audio';
 import { drawFrame } from '../core/draw-frame';
 import { evenDimensions, filenameForSpec, mimeFor } from '../core/filename';
 import { buildMetadata, metadataAsText } from '../core/metadata';
-import type { ExportResult, ProgressCallback, ProgressInfo, Spec, VideoFormat } from '../core/types';
+import type { ExportResult, ProgressCallback, ProgressInfo, Spec, VideoFormat, VideoTone } from '../core/types';
 
 // ── Limits ────────────────────────────────────────────────────────────────
 
@@ -68,6 +72,16 @@ export const MAX_TOTAL_FRAMES = 3600;
  */
 const KEY_FRAME_SECONDS = 2;
 
+/**
+ * Seconds of sound per piece added to the muxer.
+ *
+ * Long enough that the audio encoder is not re-entered dozens of times a
+ * second, short enough that the muxer is never holding much of either track.
+ * Ten seconds of stereo 44.1 kHz is about 3.5 MB, which is nothing next to a
+ * 4096 px frame.
+ */
+const AUDIO_CHUNK_SECONDS = 10;
+
 // ── Containers and codecs ─────────────────────────────────────────────────
 
 export interface VideoFormatProfile {
@@ -84,6 +98,12 @@ export interface VideoFormatProfile {
    * containers.
    */
   codecs: readonly VideoCodec[];
+  /**
+   * Audio codecs in preference order, for the optional test sound. AAC comes
+   * first in MP4/MOV because it is what those containers are watched with;
+   * Opus comes first in WebM/MKV because it is native to them.
+   */
+  audioCodecs: readonly AudioCodec[];
 }
 
 export const VIDEO_FORMATS_TABLE: Record<VideoFormat, VideoFormatProfile> = {
@@ -92,24 +112,28 @@ export const VIDEO_FORMATS_TABLE: Record<VideoFormat, VideoFormatProfile> = {
     container: 'Mp4OutputFormat',
     createFormat: () => new Mp4OutputFormat(),
     codecs: ['avc', 'av1', 'vp9'],
+    audioCodecs: ['aac', 'opus'],
   },
   mov: {
     label: 'MOV',
     container: 'MovOutputFormat',
     createFormat: () => new MovOutputFormat(),
     codecs: ['avc', 'av1', 'vp9'],
+    audioCodecs: ['aac', 'opus'],
   },
   webm: {
     label: 'WebM',
     container: 'WebMOutputFormat',
     createFormat: () => new WebMOutputFormat(),
     codecs: ['vp9', 'vp8'],
+    audioCodecs: ['opus', 'vorbis'],
   },
   mkv: {
     label: 'MKV',
     container: 'MkvOutputFormat',
     createFormat: () => new MkvOutputFormat(),
     codecs: ['vp9', 'vp8', 'av1'],
+    audioCodecs: ['opus', 'aac', 'vorbis'],
   },
 };
 
@@ -130,6 +154,25 @@ async function resolveCodec(format: VideoFormat, width: number, height: number):
   const wanted = VIDEO_FORMATS_TABLE[format].codecs.filter((codec) => supported.has(codec));
   if (wanted.length === 0) return null;
   return getFirstEncodableVideoCodec(wanted, { width, height });
+}
+
+/**
+ * Codec for the optional sound, or `null` if this browser cannot encode audio
+ * for this container at the shape that sound is rendered at.
+ *
+ * The shape is part of the question and not a detail: the tones are mono at
+ * 48 kHz and the tango is stereo at 44.1 kHz, and a browser can support one and
+ * not the other. mediabunny configures the encoder from the buffer it is
+ * handed, so the probe has to ask about the same thing the buffer will be.
+ */
+export async function resolveAudioCodec(format: VideoFormat, tone: VideoTone): Promise<AudioCodec | null> {
+  const supported = new Set(outputFormatFor(format).getSupportedAudioCodecs());
+  const wanted: AudioCodec[] = VIDEO_FORMATS_TABLE[format].audioCodecs.filter((codec) => supported.has(codec));
+  if (wanted.length === 0) return null;
+  // The declared return type is the union of every codec mediabunny knows,
+  // wider than the ones this table lists, so the promise is narrowed here.
+  const codec = await getFirstEncodableAudioCodec(wanted, soundShape(tone));
+  return codec === null ? null : (codec as AudioCodec);
 }
 
 // ── Browser support ───────────────────────────────────────────────────────
@@ -398,8 +441,10 @@ function withContext(err: unknown, label: string): unknown {
  *
  * @param format `mp4`, `webm`, `mov`, or `mkv`. Only offer formats returned by
  * `availableVideoFormats`.
+ * @param spec `spec.tone` adds that soundtrack as a second track; without it the
+ * video is silent, which is the default.
  * @throws {Error} in English if the browser cannot export, a limit is exceeded,
- * or the codec fails.
+ * or a codec fails.
  * @throws {DOMException} `AbortError` if canceled.
  */
 export async function exportVideo(
@@ -421,6 +466,32 @@ export async function exportVideo(
       `This browser cannot encode ${label} at ${plan.width}x${plan.height}. ` +
         'Try another format or smaller dimensions.',
     );
+  }
+  checkAbort(signal);
+
+  // The sound is opt-in: the codec is only looked for, and the music only
+  // rendered, when the spec asks for one, so a browser with no audio encoder
+  // still exports silent video. Rendering happens before anything is encoded,
+  // because a browser that cannot make the sound should say so before the
+  // picture is half done.
+  let audioCodec: AudioCodec | null = null;
+  let audioPieces: AudioBuffer[] = [];
+  if (spec.tone) {
+    audioCodec = await resolveAudioCodec(format, spec.tone);
+    if (!audioCodec) {
+      throw new Error(
+        `This browser cannot encode audio for ${label}. Download without sound, or try another format.`,
+      );
+    }
+    onProgress?.({
+      progress: 0,
+      frame: 0,
+      totalFrames: plan.totalFrames,
+      message: `Preparing the ${spec.tone} sound…`,
+    });
+    // `totalFrames / fps` and not `spec.duration`: the track has to be as long
+    // as the picture that was actually encoded, to the sample.
+    audioPieces = audioChunks(await renderSound(spec.tone, plan.totalFrames / plan.fps), AUDIO_CHUNK_SECONDS);
   }
   checkAbort(signal);
 
@@ -451,22 +522,61 @@ export async function exportVideo(
     // the grid instead of accumulating drift.
     output.addVideoTrack(source, { frameRate: plan.fps });
 
+    // The codec and the sound are bound together on purpose: the codec was
+    // resolved from the tone, and a `let` that could still be null here is a
+    // null the type system would ask about at every use.
+    const sound =
+      spec.tone && audioCodec
+        ? new AudioBufferSource({
+            codec: audioCodec,
+            // The test tones are one frequency or one burst and anything above
+            // the lowest bitrate would be wasted on them. The tango is music,
+            // so it is the one that gets a real bitrate.
+            quality: new Quality(spec.tone === 'tango' ? 'medium' : 'low'),
+          })
+        : null;
+    // The track has to exist before `start()`, its samples after it.
+    if (sound) output.addAudioTrack(sound);
+
     onProgress?.({ progress: 0, frame: 0, totalFrames: plan.totalFrames, message: `Encoding ${label}…` });
     await output.start();
 
+    // Audio and video are interleaved, not one after the other: a muxer waits
+    // for every track before it can write, so a whole soundtrack handed over
+    // first leaves it holding every video frame in memory. Each piece is added
+    // as the picture reaches its timestamp, and `await`ing keeps the
+    // backpressure the video frames rely on.
+    let nextPiece = 0;
     const ctx = context2d(surface);
     await encodeFrames(
       plan,
       {
         draw: (progress) => drawFrame(ctx, plan.spec, progress),
-        add: (timestamp, duration, keyFrame) => source.add(timestamp, duration, { keyFrame }),
+        add: async (timestamp, duration, keyFrame) => {
+          // A piece is added when the picture reaches the second it starts on,
+          // so the muxer never has more than one piece of either track waiting.
+          while (nextPiece * AUDIO_CHUNK_SECONDS <= timestamp) {
+            const piece = audioPieces[nextPiece];
+            nextPiece++;
+            if (piece && sound) await sound.add(piece);
+          }
+          await source.add(timestamp, duration, { keyFrame });
+        },
       },
       onProgress,
       signal,
     );
 
+    // Any piece the loop did not reach: the last one can start in the final
+    // frame's own duration, and the soundtrack must not end before the picture.
+    while (sound && nextPiece < audioPieces.length) {
+      const piece = audioPieces[nextPiece++];
+      if (piece) await sound.add(piece);
+    }
+
     // `close` is not required, but prevents mediabunny from waiting for more frames.
     source.close();
+    sound?.close();
     await output.finalize();
   } catch (err) {
     // Manual cancellation is required: otherwise the encoder stays alive with

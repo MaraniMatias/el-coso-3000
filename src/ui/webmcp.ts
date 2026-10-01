@@ -120,13 +120,13 @@ const SCHEMA = {
     sound: {
       type: "boolean",
       description:
-        "Adds a quiet test sound to the video, to prove the file has an audio track. Defaults to false, and it only works for the video containers, not for gif, mjpeg-avi or jpeg-zip.",
+        "Adds a soundtrack to the video. Defaults to false, and it only works for the video containers, not for gif, mjpeg-avi or jpeg-zip.",
     },
     soundTone: {
       type: "string",
       enum: [...VIDEO_TONES],
       description:
-        "Which test sound: a soft 440 Hz beep every second, the same pitch held quietly for the whole video, or white noise. Defaults to beep.",
+        "Which soundtrack: 'tango' is a synthesized tango nuevo at 100 BPM, 'beep' is a soft 440 Hz beep every second, 'tone' is the same pitch held quietly for the whole video, and 'noise' is white noise. Defaults to tango.",
     },
     download: {
       type: "boolean",

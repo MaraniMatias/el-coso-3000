@@ -44,13 +44,19 @@ export const TIMELINE_FORMATS = ['mp4', 'webm', 'mov', 'mkv', 'gif', 'mjpeg-avi'
 export type TimelineFormat = (typeof TIMELINE_FORMATS)[number];
 
 /**
- * Test sounds a video can carry. They exist to prove the file has an audio
- * track and that it stays in sync, not to be listened to: a soft beep every
- * second, a quiet continuous tone, and white noise. A `Spec` without one is
- * silent, which is the default.
+ * Sounds a video can carry. A `Spec` without one is silent, which is the
+ * default.
+ *
+ * The first three are test sounds: they exist to prove the file has an audio
+ * track and that it stays in sync, not to be listened to. The tango is the odd
+ * one, a synthesized tango nuevo for when the placeholder should not be silent
+ * in the room it plays in, and it is the default when sound is asked for.
  */
-export const VIDEO_TONES = ['beep', 'tone', 'noise'] as const;
+export const VIDEO_TONES = ['tango', 'beep', 'tone', 'noise'] as const;
 export type VideoTone = (typeof VIDEO_TONES)[number];
+
+/** The sound chosen when the box is ticked without picking one. */
+export const DEFAULT_VIDEO_TONE: VideoTone = 'tango';
 
 /**
  * Formats that cannot carry an alpha channel: JPEG by definition, and the
@@ -137,7 +143,7 @@ export interface Spec {
    */
   transparent: boolean;
   /**
-   * Test sound for a video export. Absent means silent: sound is opt-in, and
+   * Soundtrack for a video export. Absent means silent: sound is opt-in, and
    * only the video containers can take it.
    */
   tone?: VideoTone;

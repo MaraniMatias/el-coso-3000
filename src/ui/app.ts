@@ -24,7 +24,7 @@ import type {
   VideoFormat,
   VideoTone,
 } from "../core/types";
-import { supportsAlpha, VIDEO_TONES } from "../core/types";
+import { DEFAULT_VIDEO_TONE, supportsAlpha, VIDEO_TONES } from "../core/types";
 import { setupWebMcp, webmcpStatusText } from "./webmcp";
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string): T => {
@@ -122,10 +122,12 @@ function currentFormat(): ImageFormat | TimelineFormat {
     : (str("imageFormat", "png") as ImageFormat);
 }
 
-/** The test sound that was asked for, defaulting to the softest one. */
+/** The sound that was asked for, defaulting to the tango. */
 function selectedTone(): VideoTone {
-  const value = str("soundTone", "beep");
-  return VIDEO_TONES.includes(value as VideoTone) ? (value as VideoTone) : "beep";
+  const value = str("soundTone", DEFAULT_VIDEO_TONE);
+  return VIDEO_TONES.includes(value as VideoTone)
+    ? (value as VideoTone)
+    : DEFAULT_VIDEO_TONE;
 }
 
 function readSpec(): Spec {
