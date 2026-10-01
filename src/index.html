@@ -21,16 +21,16 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="El Coso 3000" />
     <meta property="og:title" content="Placeholder Image & Video Generator | El Coso 3000" />
-    <meta property="og:description" content="Image and video placeholders, offline, free, with guaranteed contrast." />
+    <meta property="og:description" content="Create image and video placeholders in your browser. Free, offline, and nothing is uploaded." />
     <meta property="og:url" content="https://maranimatias.github.io/el-coso-3000/" />
     <meta property="og:image" content="https://maranimatias.github.io/el-coso-3000/og-image.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="El Coso 3000 placeholder generator interface" />
+    <meta property="og:image:alt" content="El Coso 3000 placeholder generator graphic with a 1920 by 1080 image placeholder" />
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Placeholder Image & Video Generator | El Coso 3000" />
-    <meta name="twitter:description" content="Offline, free, with guaranteed contrast." />
+    <meta name="twitter:description" content="Create image and video placeholders in your browser. Free, offline, and nothing is uploaded." />
     <meta name="twitter:image" content="https://maranimatias.github.io/el-coso-3000/og-image.png" />
 
     <script type="application/ld+json">
@@ -56,12 +56,13 @@
   <body>
     <a class="skip" href="#panel">Skip to the controls</a>
 
-    <header class="topbar">
-      <h1>El Coso 3000</h1>
-      <p class="tagline">Image and video placeholders. Runs in your browser, nothing is uploaded.</p>
-    </header>
+    <div class="app-shell">
+      <header class="topbar">
+        <h1>Image &amp; Video Placeholder Generator</h1>
+        <p class="tagline">El Coso 3000 creates image and video placeholders in your browser. Nothing is uploaded.</p>
+      </header>
 
-    <main class="layout">
+      <main class="layout">
       <form
         id="panel"
         class="panel"
@@ -421,14 +422,66 @@
         <p class="dims-label" id="dimsLabel">1920 × 1080</p>
         <p class="meta-line" id="metaLine"></p>
       </section>
-    </main>
+      </main>
 
-    <footer class="footer">
-      <p>
-        <a href="https://github.com/MaraniMatias/el-coso-3000" id="repoLink" rel="noopener">El Coso 3000</a>
-      </p>
-      <p class="sub" id="webmcpStatus" hidden></p>
-    </footer>
+      <footer class="footer">
+        <p>
+          <a href="https://github.com/MaraniMatias/el-coso-3000" id="repoLink" rel="noopener">El Coso 3000</a>
+        </p>
+        <p class="sub" id="webmcpStatus" hidden></p>
+      </footer>
+    </div>
+
+    <article class="seo-content">
+      <section aria-labelledby="about-heading">
+        <h2 id="about-heading">Image and video placeholders for design and development</h2>
+        <p>Make dimension-labeled placeholder assets for wireframes, mockups, prototypes, demos, visual tests, and temporary media. Set a custom size or choose a preset, pick a background color, then download the result.</p>
+        <ul>
+          <li><strong>Still images:</strong> PNG, JPEG, WebP, and SVG.</li>
+          <li><strong>Animated and video outputs:</strong> GIF, Motion JPEG AVI, ZIP files of numbered JPEG frames, MP4, WebM, MOV, and MKV.</li>
+        </ul>
+        <p>The placeholder displays its dimensions. Choose a palette or custom background; the text color is calculated automatically for readable contrast.</p>
+      </section>
+
+      <section aria-labelledby="how-heading">
+        <h2 id="how-heading">How to make a placeholder</h2>
+        <ol>
+          <li>Choose Image or Video.</li>
+          <li>Enter the width and height in pixels, or select a size preset, then choose a background color.</li>
+          <li>Select an output format. For animated and video outputs, set the duration, frame rate, and optional progress bar or clock.</li>
+          <li>Select Download to save the generated file.</li>
+        </ol>
+      </section>
+
+      <section aria-labelledby="privacy-heading">
+        <h2 id="privacy-heading">Private, browser-based, and available offline</h2>
+        <p>Rendering and encoding happen locally in your browser; your settings and generated files are not uploaded. The online page needs a connection to load, but you can then use it offline. You can also <a href="./placeholder.html" download>download the self-contained placeholder.html</a> and open it later without a server or internet connection.</p>
+      </section>
+
+      <section aria-labelledby="limits-heading">
+        <h2 id="limits-heading">Formats and limits</h2>
+        <ul>
+          <li>Width and height can each be from 1 to 4,096 pixels.</li>
+          <li>Video exports are limited to 3,600 frames. H.264 output may round odd dimensions up to even values.</li>
+          <li>MP4, WebM, MOV, and MKV depend on browser WebCodecs and available encoders. Video export is not supported in Firefox for Android.</li>
+          <li>GIF frame timing is quantized, so its actual frame rate may differ slightly from the selected rate.</li>
+        </ul>
+      </section>
+
+      <section aria-labelledby="faq-heading">
+        <h2 id="faq-heading">Frequently asked questions</h2>
+        <dl class="faq">
+          <dt>Are my files uploaded?</dt>
+          <dd>No. The generator creates and downloads files in your browser.</dd>
+          <dt>Can I use the generator without internet?</dt>
+          <dd>Yes. Use the page after it has loaded, or download the standalone HTML file to open offline.</dd>
+          <dt>Can I create a custom size?</dt>
+          <dd>Yes. Enter any width and height from 1 to 4,096 pixels, or start with a preset and edit it.</dd>
+          <dt>Why might video export be unavailable?</dt>
+          <dd>Video formats require browser support for WebCodecs and the requested encoder. Support varies by browser and device.</dd>
+        </dl>
+      </section>
+    </article>
 
     <script>
       /*__BUNDLE__*/

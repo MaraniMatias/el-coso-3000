@@ -137,6 +137,31 @@ try {
   await send('Page.navigate', { url: origin });
   await Bun.sleep(2500);
 
+  // The generator keeps a full-height desktop shell; its explanatory content
+  // should extend the document and remain reachable by scrolling below it.
+  await send('Emulation.setDeviceMetricsOverride', {
+    width: 1440, height: 900, deviceScaleFactor: 1, mobile: false,
+  });
+  await Bun.sleep(100);
+  const pageLayout = await evaluate<{
+    viewport: number; shell: number; page: number; panel: number; panelBottom: number; shellBottom: number;
+  }>(`(() => {
+    const shell = document.querySelector('.app-shell').getBoundingClientRect();
+    const panel = document.querySelector('.panel');
+    return {
+      viewport: innerHeight,
+      shell: shell.height,
+      page: document.scrollingElement.scrollHeight,
+      panel: panel.clientHeight,
+      panelBottom: panel.getBoundingClientRect().bottom,
+      shellBottom: shell.bottom,
+    };
+  })()`);
+  check('desktop app shell fills the viewport', Math.abs(pageLayout.shell - pageLayout.viewport) < 1, `${pageLayout.shell}px / ${pageLayout.viewport}px`);
+  check('desktop content scrolls below the shell', pageLayout.page > pageLayout.viewport, `${pageLayout.page}px document`);
+  check('desktop controls remain usable inside the shell', pageLayout.panel > 0 && pageLayout.panelBottom <= pageLayout.shellBottom, `${pageLayout.panel}px panel`);
+  await send('Emulation.clearDeviceMetricsOverride');
+
   // ── Clean console ──────────────────────────────────────────────────
   console.log('console:');
   check('no uncaught exceptions', exceptions.length === 0, exceptions[0]?.slice(0, 160) ?? '');

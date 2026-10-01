@@ -1,14 +1,15 @@
 /**
  * Build for el-coso-3000.
  *
- * Produces a single file: `dist/placeholder.html`, which opens with a double
- * click from Finder, without a server or an internet connection.
+ * Produces a standalone `dist/placeholder.html` and the static assets needed
+ * by the GitHub Pages version.
  *
  * Steps:
  *   1. Regenerates `src/core/font-data.ts` from the woff2 in `fonts/`.
  *   2. Bundles `src/main.ts` with Bun's bundler in IIFE format.
  *   3. Injects the JS and CSS into `src/index.html`.
- *   4. Verifies that the result loads nothing from the network.
+ *   4. Copies the Open Graph image and verifies that the HTML loads nothing
+ *      from the network.
  *
  * Run: `bun run build`
  */
@@ -21,6 +22,7 @@ const FONT_DATA = join(root, 'src/core/font-data.ts');
 const ENTRY = join(root, 'src/main.ts');
 const TEMPLATE = join(root, 'src/index.html');
 const STYLES = join(root, 'src/styles.css');
+const OG_IMAGE = join(root, 'assets/og-image.png');
 const OUT_DIR = join(root, 'dist');
 const OUT = join(OUT_DIR, 'placeholder.html');
 
@@ -152,9 +154,11 @@ const outBytes = new TextEncoder().encode(html).length;
 //   - `index.html`, the default entry point served by GitHub Pages.
 await Bun.write(OUT, html);
 await Bun.write(join(OUT_DIR, 'index.html'), html);
+await Bun.write(join(OUT_DIR, 'og-image.png'), Bun.file(OG_IMAGE));
 
 console.log(`\n✔ ${OUT}`);
 console.log(`✔ ${join(OUT_DIR, 'index.html')}   ← for GitHub Pages`);
+console.log(`✔ ${join(OUT_DIR, 'og-image.png')}   ← for Open Graph previews`);
 console.log(`  ${kb(outBytes)} each, self-contained.`);
 console.log('  Double-click either one. No server or internet connection needed.');
 console.log('\n  GitHub Pages publishes dist/ automatically on every push to main.');

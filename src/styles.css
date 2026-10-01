@@ -56,17 +56,14 @@
   display: none !important;
 }
 
-/* On a desktop the app is a shell that fills the window: the page itself does
-   not scroll, so the panel is always on screen. What scrolls are the controls
-   inside the panel. The phone layout at the bottom gives the page its scroll
-   back. */
+/* The app keeps its full-height desktop shell, while explanatory content below
+   it can scroll with the page. */
 body {
   margin: 0;
-  height: 100vh;
-  height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: var(--bg);
   color: var(--ink);
   font:
@@ -75,6 +72,14 @@ body {
     "Segoe UI",
     sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+.app-shell {
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .visually-hidden {
@@ -106,7 +111,7 @@ body {
 
 .topbar {
   flex: none;
-  padding: 28px clamp(16px, 4vw, 40px) 8px;
+  padding: 10px clamp(16px, 4vw, 40px) 8px;
 }
 .topbar h1 {
   margin: 0;
@@ -117,6 +122,7 @@ body {
   margin: 4px 0 0;
   color: var(--ink-soft);
   font-size: 14px;
+  display: none;
 }
 
 /* ── Distribución ───────────────────────────────────────────────── */
@@ -178,6 +184,12 @@ body {
 @media (max-width: 860px) {
   body {
     display: block;
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+  .app-shell {
     height: auto;
     min-height: 100vh;
     min-height: 100dvh;
@@ -648,6 +660,40 @@ button.ghost:hover {
 }
 .footer a {
   color: var(--accent);
+}
+
+.seo-content {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 48px clamp(16px, 4vw, 40px) 64px;
+}
+.seo-content section + section {
+  margin-top: 32px;
+}
+.seo-content h2 {
+  margin: 0 0 10px;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+}
+.seo-content p {
+  margin: 0 0 12px;
+  color: var(--ink-soft);
+}
+.seo-content ul,
+.seo-content ol {
+  margin: 0 0 12px;
+  padding-left: 1.4em;
+}
+.seo-content li + li {
+  margin-top: 5px;
+}
+.faq dt {
+  font-weight: 600;
+}
+.faq dd {
+  margin: 2px 0 12px;
+  color: var(--ink-soft);
 }
 
 /* A window with little height: the panel is what has to stay useful, so the
