@@ -1,5 +1,5 @@
 import { cssColor, hexToRgba } from './color';
-import { applyFont, clampMaxFont, layoutDimensions, layoutLine, paddingFor, type TextLayout } from './fit-text';
+import { applyFont, layoutDimensions, layoutLine, paddingFor, type TextLayout } from './fit-text';
 import { FONT_WEIGHT, type Spec } from './types';
 
 /** Strip reserved at the bottom for the progress bar and the clock. */
@@ -19,9 +19,20 @@ export interface FrameGeometry {
  * on a big one.
  */
 const BAR_RATIO = 0.012;
-const BAR_MIN = 1;
+const BAR_MIN = 2;
 const TIME_RATIO = 0.035;
-const TIME_MIN = 6;
+const TIME_MIN = 10;
+/**
+ * The clock block: its line height plus a small breather over the bar.
+ */
+const TIME_BLOCK_RATIO = 1.5;
+/**
+ * Last-resort ceiling on the strip: it keeps the dimensions as the subject of
+ * the image. It only bites on a canvas too short to hold the floors, which is
+ * why it sits above the share the floors already ask for (17px is 34% of a
+ * 50px banner).
+ */
+const MAX_STRIP_RATIO = 0.35;
 /** Opacity of the bar track, so it reads without competing. */
 const TRACK_ALPHA = 0.16;
 
@@ -35,13 +46,24 @@ export function frameGeometry(spec: Spec): FrameGeometry {
   if (!showBar && !showTime) {
     return { barHeight: 0, timeFontSize: 0, stripHeight: 0 };
   }
-  const barHeight = Math.max(BAR_MIN, Math.round(spec.height * BAR_RATIO));
-  const timeFontSize = showTime
+  const block = (time: number) => (time > 0 ? time * TIME_BLOCK_RATIO : 0);
+  let barHeight = Math.max(BAR_MIN, Math.round(spec.height * BAR_RATIO));
+  let timeFontSize = showTime
     ? Math.max(TIME_MIN, Math.round(Math.min(spec.width, spec.height) * TIME_RATIO))
     : 0;
-  // The clock needs its line height plus a small breather over the bar.
-  const timeBlock = timeFontSize > 0 ? timeFontSize * 1.5 : 0;
-  return { barHeight, timeFontSize, stripHeight: barHeight + timeBlock };
+
+  // The strip is capped so the dimensions keep the canvas. The floors above
+  // come first: only a canvas too short to hold them reaches this, and then the
+  // clock gives way before the bar does.
+  const budget = spec.height * MAX_STRIP_RATIO;
+  if (barHeight + block(timeFontSize) > budget) {
+    timeFontSize = Math.max(0, (budget - barHeight) / TIME_BLOCK_RATIO);
+  }
+  if (barHeight + block(timeFontSize) > budget) {
+    barHeight = Math.max(0, budget - block(timeFontSize));
+  }
+
+  return { barHeight, timeFontSize, stripHeight: barHeight + block(timeFontSize) };
 }
 
 /** `0:03`, with minutes without a leading zero and seconds always with two. */
@@ -149,5 +171,3 @@ export function drawFrame(ctx: CanvasRenderingContext2D, spec: Spec, progress?: 
 export function makeFrameRenderer(spec: Spec): (ctx: CanvasRenderingContext2D, progress?: number) => void {
   return (ctx, progress) => drawFrame(ctx, spec, progress);
 }
-
-export { clampMaxFont };

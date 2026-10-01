@@ -19,7 +19,7 @@ Generates ready-to-use placeholders for wireframes, mockups, prototypes, and tem
 | Animated JPEG | AVI (Motion-JPEG) · ZIP of `.jpg` | Meant for editors (Photoshop, etc.). |
 | Video | MP4 · WebM · MOV · MKV | Encoded with the browser engine. |
 
-Placeholder text is **only the dimensions**. It never takes more than 60% of the shortest side. Animated and video outputs also include a progress bar and clock (`0:03 / 0:10`).
+Placeholder text is **only the dimensions**: always on a single line, scaled as large as fits within 70% of the width and 60% of the height of the image. Animated and video outputs also include a progress bar and clock (`0:03 / 0:10`).
 
 ### Colors with guaranteed contrast
 
