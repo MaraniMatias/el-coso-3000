@@ -6,7 +6,7 @@
     <title>Placeholder Image & Video Generator | El Coso 3000</title>
     <meta
       name="description"
-      content="Offline placeholder generator for images and video. PNG, JPEG, WebP, SVG, GIF, MP4 and WebM at any size, with guaranteed contrast and an optional transparent background. Runs in your browser."
+      content="Create image and video placeholders in your browser. Export transparent PNG, WebP, SVG or GIF, and add optional soundtracks to MP4, WebM, MOV or MKV."
     />
     <meta name="generator" content="El Coso 3000" />
     <meta name="author" content="Matias Ezequiel Marani" />
@@ -21,7 +21,7 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="El Coso 3000" />
     <meta property="og:title" content="Placeholder Image & Video Generator | El Coso 3000" />
-    <meta property="og:description" content="Create image and video placeholders in your browser. Free, offline, and nothing is uploaded." />
+    <meta property="og:description" content="Create image and video placeholders in your browser, with transparent image exports and optional soundtracks for MP4, WebM, MOV and MKV. Nothing is uploaded." />
     <meta property="og:url" content="https://maranimatias.github.io/el-coso-3000/" />
     <meta property="og:image" content="https://maranimatias.github.io/el-coso-3000/og-image.png" />
     <meta property="og:image:width" content="1200" />
@@ -30,7 +30,7 @@
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Placeholder Image & Video Generator | El Coso 3000" />
-    <meta name="twitter:description" content="Create image and video placeholders in your browser. Free, offline, and nothing is uploaded." />
+    <meta name="twitter:description" content="Create image and video placeholders in your browser, with transparent image exports and optional soundtracks for MP4, WebM, MOV and MKV. Nothing is uploaded." />
     <meta name="twitter:image" content="https://maranimatias.github.io/el-coso-3000/og-image.png" />
 
     <script type="application/ld+json">
@@ -39,7 +39,13 @@
         "@type": "WebApplication",
         "name": "El Coso 3000",
         "url": "https://maranimatias.github.io/el-coso-3000/",
-        "description": "Image and video placeholder generator that runs entirely in the browser.",
+        "description": "Free image and video placeholder generator with transparent PNG, WebP, SVG and GIF exports, plus optional soundtracks for MP4, WebM, MOV and MKV.",
+        "featureList": [
+          "Transparent PNG, WebP, SVG and GIF exports",
+          "Optional synthesized soundtracks for MP4, WebM, MOV and MKV",
+          "Local rendering in the browser, with no uploads",
+          "Custom dimensions up to 4096 by 4096 pixels"
+        ],
         "applicationCategory": "DesignApplication",
         "operatingSystem": "Any",
         "browserRequirements": "Requires a modern browser with canvas support",
@@ -480,10 +486,10 @@
         <h2 id="about-heading">Image and video placeholders for design and development</h2>
         <p>Make dimension-labeled placeholder assets for wireframes, mockups, prototypes, demos, visual tests, and temporary media. Set a custom size or choose a preset, pick a background color, then download the result.</p>
         <ul>
-          <li><strong>Still images:</strong> PNG, JPEG, WebP, and SVG. PNG, WebP, and SVG can carry a transparent background.</li>
-          <li><strong>Animated and video outputs:</strong> GIF, Motion JPEG AVI, ZIP files of numbered JPEG frames, MP4, WebM, MOV, and MKV.</li>
+          <li><strong>Still images:</strong> PNG, JPEG, WebP, and SVG. PNG, WebP, and SVG support transparency; GIF supports binary transparency.</li>
+          <li><strong>Animated and video outputs:</strong> GIF, Motion JPEG AVI, ZIP files of numbered JPEG frames, MP4, WebM, MOV, and MKV. MP4, WebM, MOV, and MKV can include an optional generated soundtrack.</li>
         </ul>
-        <p>The placeholder displays its dimensions. Choose a palette or custom background; the text color is calculated automatically for readable contrast.</p>
+        <p>The placeholder displays its dimensions. Choose a palette or custom background; the text color is calculated for contrast against that color. With transparency enabled, visible contrast depends on the background beneath the image.</p>
       </section>
 
       <section aria-labelledby="how-heading">
@@ -521,6 +527,10 @@
           <dd>Yes. Use the page after it has loaded, or download the standalone HTML file to open offline.</dd>
           <dt>Can I create a custom size?</dt>
           <dd>Yes. Enter any width and height from 1 to 4,096 pixels, or start with a preset and edit it.</dd>
+          <dt>Can I make a transparent placeholder?</dt>
+          <dd>Yes. PNG, WebP, and SVG support transparency, and GIF supports binary transparency. JPEG and the video containers do not. When transparency is enabled, visible text contrast depends on the background behind the file.</dd>
+          <dt>Can a video placeholder include sound?</dt>
+          <dd>Yes. MP4, WebM, MOV, and MKV can include an optional synthesized tango, beep, tone, or noise soundtrack. Audio encoding support varies by browser; GIF, AVI, and ZIP exports are silent.</dd>
           <dt>Why might video export be unavailable?</dt>
           <dd>Video formats require browser support for WebCodecs and the requested encoder. Support varies by browser and device.</dd>
         </dl>

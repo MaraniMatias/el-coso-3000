@@ -15,9 +15,9 @@ Generates ready-to-use placeholders for wireframes, mockups, prototypes, and tem
 | Kind | Formats | Notes |
 |------|---------|-------|
 | Image | PNG · JPEG · WebP · SVG | Optional transparent background in PNG, WebP and SVG. SVG embeds the font. |
-| Animated GIF | GIF | Infinite loop, global 256-color palette. |
+| Animated GIF | GIF | Infinite loop, global 256-color palette, binary transparency. |
 | Animated JPEG | AVI (Motion-JPEG) · ZIP of `.jpg` | Meant for editors (Photoshop, etc.). |
-| Video | MP4 · WebM · MOV · MKV | Encoded with the browser engine. |
+| Video | MP4 · WebM · MOV · MKV | Encoded with the browser engine; optional synthesized tango, beep, tone, or noise soundtrack. |
 
 Placeholder text is **only the dimensions**: always on a single line, scaled as large as fits within 70% of the width and 60% of the height of the image. Animated and video outputs also include a progress bar and clock (`0:03 / 0:10`).
 
@@ -100,4 +100,5 @@ Open the HTML, pick size and format, download.
 - Maximum 3600 frames per export.
 - WebCodecs is missing in Firefox Android → Video tab is disabled there.
 - AVI and MKV do not play in Firefox/Safari (they are still generated for editors).
-- JPEG / MJPEG / ZIP and the video containers have no alpha channel, so the transparent background is only available for PNG, WebP, SVG and the GIF.
+- JPEG / MJPEG / ZIP and the video containers have no alpha channel. Transparency is available in PNG, WebP, SVG and GIF (binary transparency); with transparent backgrounds, visible text contrast depends on the background beneath the file.
+- Sound is optional and only available in MP4, WebM, MOV and MKV. Audio encoding support depends on the browser.

@@ -23,6 +23,7 @@ const ENTRY = join(root, 'src/main.ts');
 const TEMPLATE = join(root, 'src/index.html');
 const STYLES = join(root, 'src/styles.css');
 const OG_IMAGE = join(root, 'assets/og-image.png');
+const LLMS = join(root, 'assets/llms.txt');
 const OUT_DIR = join(root, 'dist');
 const OUT = join(OUT_DIR, 'placeholder.html');
 
@@ -155,10 +156,14 @@ const outBytes = new TextEncoder().encode(html).length;
 await Bun.write(OUT, html);
 await Bun.write(join(OUT_DIR, 'index.html'), html);
 await Bun.write(join(OUT_DIR, 'og-image.png'), Bun.file(OG_IMAGE));
+const llms = Bun.file(LLMS);
+await Bun.write(join(OUT_DIR, 'llms.txt'), llms);
+await Bun.write(join(OUT_DIR, 'llm.txt'), llms);
 
 console.log(`\n✔ ${OUT}`);
 console.log(`✔ ${join(OUT_DIR, 'index.html')}   ← for GitHub Pages`);
 console.log(`✔ ${join(OUT_DIR, 'og-image.png')}   ← for Open Graph previews`);
+console.log(`✔ ${join(OUT_DIR, 'llms.txt')}   ← for AI assistants`);
 console.log(`  ${kb(outBytes)} each, self-contained.`);
 console.log('  Double-click either one. No server or internet connection needed.');
 console.log('\n  GitHub Pages publishes dist/ automatically on every push to main.');
