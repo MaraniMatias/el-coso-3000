@@ -67,7 +67,7 @@ A pair picked by hand can land below AA, and it is exported as it is. The indica
 
 On a video you can pick how fast they move: **1× to 3×**, 2× by default, as a multiple of the timing in the [`docs/`](docs/) demo they come from. Unchecking **Texture movement** holds the first frame for the whole clip — a texture that is painted and never moves, which is a speed of 0. The control only appears when there is something to move: an animated texture, on a format with more than one frame. A still image is the same picture at any speed.
 
-Two consequences worth knowing: the loop of a video is not seamless, and the grain is expensive for a still compressor, so a textured PNG is much larger than a flat one.
+Two consequences worth knowing: the loop of a video is not seamless, and the grain is expensive for a still compressor, so a textured PNG is much larger than a flat one. And the movement runs on real time, so it does not depend on the length of the clip: a second of a 120s video moves the background exactly as far as a second of the 5s one it is tuned on. A short clip therefore shows less of the animation, not a faster one — 120ms at 15 fps is two frames, and they are almost the same picture.
 
 ### File names
 

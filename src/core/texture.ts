@@ -22,6 +22,37 @@ import { DEFAULT_TEXTURE_SPEED, type Spec, type Texture } from './types';
  */
 const SEED = 1;
 
+/**
+ * The duration, in seconds, the app is tuned on: a 5s clip at the default speed
+ * is the reference for how a texture moves.
+ *
+ * It is the reference, not the rule. The clock below is real time, so every
+ * duration moves at the same speed, and this is what the preview uses to judge
+ * a clip of any length at that speed.
+ */
+export const TEXTURE_REFERENCE_SECONDS = 5;
+
+/**
+ * Where a frame sits on the clock of a texture, in seconds.
+ *
+ * Real time, and that is the whole point: the sphere travels the same distance
+ * per second in a 120ms clip, in a 5s one and in a 120s one, so the speed of a
+ * video never depends on how long it is. A short clip shows less of the arc
+ * because it is short, not faster.
+ *
+ * The tempting alternative is to fix the clock to a reference arc and let every
+ * clip play it from end to end. That is a time-lapse, not a texture: a 1s clip
+ * would move five times as fast as the 5s one it was tuned on, and a 120ms one
+ * forty times as fast.
+ *
+ * @param progress position in the clip, 0..1. Out of range is clamped, and
+ * `undefined` (a still image, which has no timeline) lands on the first frame.
+ * @param duration length of the clip, in seconds.
+ */
+export function textureTime(progress = 0, duration = 0): number {
+  return Math.max(0, Math.min(1, progress)) * Math.max(0, duration);
+}
+
 /** Longest side of the offscreen the orbs are composed on. */
 const ORB_SURFACE_MAX = 640;
 
@@ -486,7 +517,8 @@ function orbContext(w: number, h: number): { ctx: CanvasRenderingContext2D; scal
 /**
  * Paints the background of one frame over the flat color already on the canvas.
  *
- * @param t Position in the clip, in seconds.
+ * @param t Position in the texture's own clock, in seconds: `textureTime` of
+ * the frame's progress, so every duration moves at the same speed.
  */
 export function paintTexture(ctx: CanvasRenderingContext2D, spec: Spec, t: number): void {
   if (spec.texture === 'none') return;

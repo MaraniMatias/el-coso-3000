@@ -18,6 +18,8 @@ import {
   mixTone,
   ORB_COUNT,
   RISE_TOTAL,
+  TEXTURE_REFERENCE_SECONDS,
+  textureTime,
   type Rgb,
 } from '../src/core/texture';
 import {
@@ -171,6 +173,46 @@ check(
   DEFAULT_IMAGE_TEXTURE === 'fog' && DEFAULT_VIDEO_TEXTURE === 'mix',
   'an image starts on fog and a video on bokeh',
   `${DEFAULT_IMAGE_TEXTURE} / ${DEFAULT_VIDEO_TEXTURE}`,
+);
+
+section('the movement of a frame is real time, so the speed never changes');
+// The clock is the one thing that decides how fast a texture moves. Anchored to
+// real time, a second of a 120s clip travels the same ground as a second of a
+// 5s one, which is the 5s the app is tuned on. Anchored to a fixed arc instead,
+// a short clip would be a time-lapse: five times the speed at 1s, forty at 120ms.
+const CLIPS = [0.12, 1, 5, 30, 120];
+const travelled = (duration: number) => textureTime(1, duration);
+check(
+  TEXTURE_REFERENCE_SECONDS === 5,
+  'the reference is the 5s a video is tuned on',
+  `${TEXTURE_REFERENCE_SECONDS}s`,
+);
+check(
+  // A second of a clip is a second of the animation, whatever the clip is.
+  CLIPS.every((d) => Math.abs(travelled(d) - d) < 1e-9),
+  'a clip of any length shows its own length of the movement',
+  CLIPS.map((d) => `${d}s:${travelled(d)}`).join(' '),
+);
+check(
+  // The speed, which is the point: the same arc per second everywhere.
+  CLIPS.every((d) => Math.abs(travelled(d) / d - 1) < 1e-9),
+  'and every one of them moves at the same speed',
+  CLIPS.map((d) => `${(travelled(d) / d).toFixed(3)}`).join(' '),
+);
+check(
+  textureTime(0.5, 5) === 2.5 && textureTime(0.5, 120) === 60,
+  'halfway through a clip is halfway through its own movement',
+  `${textureTime(0.5, 5)} / ${textureTime(0.5, 120)}`,
+);
+check(
+  textureTime() === 0 && textureTime(undefined) === 0,
+  'a still image has no timeline and lands on the first frame',
+  `${textureTime()}`,
+);
+check(
+  textureTime(-1, 5) === 0 && textureTime(2, 5) === 5 && textureTime(0.5, -5) === 0,
+  'a frame outside its clip is held at the edge of it',
+  `${textureTime(-1, 5)} .. ${textureTime(2, 5)}`,
 );
 
 section('the tones are mixes of the two colors, and never anything else');

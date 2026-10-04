@@ -1,6 +1,6 @@
 import { cssColor, hexToRgba } from './color';
 import { applyFont, layoutDimensions, layoutLine, paddingFor, type TextLayout } from './fit-text';
-import { paintTexture } from './texture';
+import { paintTexture, textureTime } from './texture';
 import { FONT_WEIGHT, type Spec } from './types';
 
 /** Strip reserved at the bottom for the progress bar and the clock. */
@@ -120,9 +120,10 @@ export function drawFrame(ctx: CanvasRenderingContext2D, spec: Spec, progress?: 
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, width, height);
   // The texture is a function of the frame's position in the timeline, so the
-  // preview and every frame of every exporter show the same thing. A still image
-  // has no timeline and lands on the first frame, at t = 0.
-  const t = (progress ?? 0) * spec.duration;
+  // preview and every frame of every exporter show the same thing. The clock is
+  // real time, so the speed of the movement does not depend on how long the clip
+  // is. A still image has no timeline and lands on the first frame, at t = 0.
+  const t = textureTime(progress, spec.duration);
   if (spec.texture !== 'none') {
     // A texture is an opaque background by definition: it fills every pixel, so
     // `transparent` does not apply while it is on.

@@ -10,7 +10,7 @@ import {
   rgbToHsl,
 } from "../core/color";
 import { drawFrame } from "../core/draw-frame";
-import { paintTexture } from "../core/texture";
+import { paintTexture, TEXTURE_REFERENCE_SECONDS } from "../core/texture";
 import { downloadBlob } from "../core/download";
 import { evenDimensions } from "../core/filename";
 import { ensureFontLoaded } from "../core/font";
@@ -468,8 +468,22 @@ function updateMetaLine(spec: Spec): void {
 }
 
 /**
+ * A clip shorter than this is previewed slower than real time: 120ms of a
+ * timeline is a couple of frames, and a preview nobody can follow is not a
+ * preview. It only costs fidelity on clips that are already degenerate.
+ */
+const PREVIEW_MIN_SEC = 0.6;
+
+/**
  * In video mode the bar is animated so it reads as progress. It is only the
  * preview; the real file is drawn by the encoder.
+ *
+ * It plays the frames of the file at the speed the file plays them: the first
+ * `TEXTURE_REFERENCE_SECONDS` of the clip, in real time, looping. Compressing a
+ * whole clip into a fixed number of seconds would be a time-lapse instead, and
+ * the background would not move at the speed it moves in the file — 24 times
+ * faster for a 120s clip, faster than real for a 5s one. As it is, every
+ * duration is judged at the velocity of the 5s clip the app is tuned on.
  */
 function animatePreview(): void {
   stopPreviewAnimation();
@@ -478,11 +492,14 @@ function animatePreview(): void {
     renderPreview(0);
     return;
   }
-  const cycleMs = Math.max(600, Math.min(4000, spec.duration * 1000));
+  const windowSec = Math.max(PREVIEW_MIN_SEC, Math.min(TEXTURE_REFERENCE_SECONDS, spec.duration));
+  const windowMs = windowSec * 1000;
   const start = performance.now();
   const tick = (now: number) => {
-    const t = ((now - start) % cycleMs) / cycleMs;
-    renderPreview(t);
+    // Progress in the *file*, not in the loop, so what is on screen is a frame
+    // of the file and not an impression of it.
+    const elapsed = (now - start) % windowMs;
+    renderPreview(Math.min(1, elapsed / (spec.duration * 1000)));
     previewAnimation = requestAnimationFrame(tick);
   };
   previewAnimation = requestAnimationFrame(tick);
