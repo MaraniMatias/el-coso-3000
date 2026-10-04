@@ -132,6 +132,21 @@ try {
   await send('Runtime.enable');
   await send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: downloads });
 
+  // A stand-in for the browser's `modelContext`, installed before the app runs.
+  // The real API needs origin isolation, which `file://` does not have, so
+  // without this the imperative tool is never registered here and the whole
+  // WebMCP input path goes unexercised: the text parameters, the validation
+  // errors, and what the tool hands back.
+  await send('Page.addScriptToEvaluateOnNewDocument', {
+    source: `
+      window.__tools = [];
+      Object.defineProperty(document, 'modelContext', {
+        configurable: true,
+        value: { registerTool: async (tool) => { window.__tools.push(tool); } },
+      });
+    `,
+  });
+
   // ── Load ───────────────────────────────────────────────────────────
   console.log(`\nopening ${origin} (${(await stat(DIST)).size} bytes)\n`);
   await send('Page.navigate', { url: origin });
@@ -1194,6 +1209,141 @@ try {
     console.log('  (video is skipped: this browser has no WebCodecs)');
   }
 
+  // ── Text tab ───────────────────────────────────────────────────────
+  // The generators themselves are covered by the Bun tests against the real
+  // faker. What no Bun test can reach is the wiring: that the pickers were
+  // filled from the catalog, that a preset and a bare generator produce the
+  // shapes the tab promises, and that the tab hands the person a file.
+  console.log('\ntext tab:');
+  await evaluate(`document.querySelector('input[name="kind"][value="text"]').click()`);
+
+  const textTab = await evaluate<{
+    kind: string;
+    stageHidden: boolean;
+    previewHidden: boolean;
+    preview: string;
+    presetOptions: string[];
+    categoryOptions: number;
+    generatorOptions: number;
+    categoryDisabled: boolean;
+    preset: string;
+    formatLabel: string;
+    regenerate: boolean;
+    copy: boolean;
+  }>(`(() => ({
+    kind: document.querySelector('input[name="kind"]:checked').value,
+    stageHidden: document.querySelector('#stage').hidden,
+    previewHidden: document.querySelector('#textPreview').hidden,
+    preview: document.querySelector('#textPreview').textContent,
+    presetOptions: [...document.querySelectorAll('#textPreset option')].map((o) => o.value),
+    categoryOptions: document.querySelectorAll('#textCategory option').length,
+    generatorOptions: document.querySelectorAll('#textGenerator option').length,
+    categoryDisabled: document.querySelector('#textCategory').disabled,
+    preset: document.querySelector('#textPreset').value,
+    formatLabel: document.querySelector('#generateLabel').textContent,
+    regenerate: !document.querySelector('#textRegenerate').hidden,
+    copy: !document.querySelector('#textCopy').hidden,
+  }))()`);
+  check('switching to Text stays selected', textTab.kind === 'text', `stuck on ${textTab.kind}`);
+  check('the canvas gives way to the text preview', textTab.stageHidden && !textTab.previewHidden);
+  check(
+    'the preset picker carries the eight presets plus Custom',
+    textTab.presetOptions.join() === 'sentence,paragraph,user,company,product,address,payment,api,custom',
+    textTab.presetOptions.join(', '),
+  );
+  check('the catalog filled the category picker', textTab.categoryOptions >= 20, `${textTab.categoryOptions} categories`);
+  check(
+    'the chosen category filled the generator picker',
+    textTab.generatorOptions > 0,
+    `${textTab.generatorOptions} generators`,
+  );
+  check('a preset takes the pickers over', textTab.categoryDisabled);
+  check('the CTA names the extension, not a format', /^Download \.\w+$/.test(textTab.formatLabel), textTab.formatLabel);
+  check('Copy and Regenerate come out', textTab.regenerate === true && textTab.copy === true);
+
+  // A preset is many columns at once and the tabular formats need a header for
+  // every one of them. A bare generator is one column that still gets one.
+  const userRows = await evaluate<string>(`(() => {
+    const p = document.querySelector('#textPreset');
+    p.value = 'user'; p.dispatchEvent(new Event('change', { bubbles: true }));
+    document.querySelector('#textCount').value = '3';
+    document.querySelector('#textCount').dispatchEvent(new Event('input', { bubbles: true }));
+    document.querySelector('input[name="textFormat"][value="md"]').click();
+    return document.querySelector('#textPreview').textContent;
+  })()`);
+  const mdLines = userRows.split('\n');
+  check(
+    'the user profile is a Markdown table with a header for all nine fields',
+    !!mdLines[0]?.startsWith('| name | email | username | job | phone | street | city | country | zip |') &&
+      mdLines[1]?.replace(/[| -]/g, '') === '' &&
+      mdLines.length === 5,
+    `${mdLines.length} lines, first: ${mdLines[0]?.slice(0, 60)}`,
+  );
+  check(
+    'every Markdown line has the same number of columns',
+    mdLines.every((line) => (line.match(/(?<!\\)\|/g) ?? []).length === 10),
+  );
+
+  const englishEmails = await evaluate<string>(`(() => {
+    const p = document.querySelector('#textPreset');
+    p.value = 'custom'; p.dispatchEvent(new Event('change', { bubbles: true }));
+    const c = document.querySelector('#textCategory');
+    c.value = 'internet'; c.dispatchEvent(new Event('change', { bubbles: true }));
+    const g = document.querySelector('#textGenerator');
+    g.value = 'internet.email'; g.dispatchEvent(new Event('change', { bubbles: true }));
+    document.querySelector('input[name="textFormat"][value="plain"]').click();
+    return document.querySelector('#textPreview').textContent;
+  })()`);
+  const emails = englishEmails.split('\n').filter(Boolean);
+  check(
+    'Custom with internet.email gives one address per line',
+    emails.length === 3 && emails.every((line) => /^[^@\s]+@[^@\s]+\.[a-z]+$/.test(line)),
+    emails[0] ?? 'empty',
+  );
+
+  // The locale is the reason the tab is not a plain `Math.random`. The same
+  // generator has to actually change, or the picker is decoration.
+  const spanishNames = await evaluate<string>(`(() => {
+    const g = document.querySelector('#textGenerator');
+    g.value = 'internet.displayName'; g.dispatchEvent(new Event('change', { bubbles: true }));
+    const l = document.querySelector('#textLocale');
+    l.value = 'es'; l.dispatchEvent(new Event('change', { bubbles: true }));
+    return document.querySelector('#textPreview').textContent;
+  })()`);
+  const englishNames = await evaluate<string>(`(() => {
+    const l = document.querySelector('#textLocale');
+    l.value = 'en'; l.dispatchEvent(new Event('change', { bubbles: true }));
+    return document.querySelector('#textPreview').textContent;
+  })()`);
+  check(
+    'Spanish names are not the English ones',
+    spanishNames !== englishNames,
+    `es ${spanishNames.split('\n')[0]} vs en ${englishNames.split('\n')[0]}`,
+  );
+
+  await exportAndCheck(
+    'a file of fake data lands on disk',
+    `document.querySelector('input[name="kind"][value="text"]').click();
+     const g = document.querySelector('#textGenerator');
+     g.value = 'internet.email'; g.dispatchEvent(new Event('change', { bubbles: true }));
+     document.querySelector('input[name="textFormat"][value="csv"]').click();`,
+    (b) => {
+      const s = new TextDecoder().decode(b);
+      // A CSV of addresses: a header naming the column and a row per address.
+      return /^email\r?\n/.test(s) && s.split(/\r?\n/).filter((l) => l.includes('@')).length === 3;
+    },
+  );
+
+  // Back to a media tab, because the rest of the run is about pixels.
+  await evaluate(`document.querySelector('input[name="kind"][value="image"]').click()`);
+  const backToImage = await evaluate<{ stageHidden: boolean; textHidden: boolean }>(
+    `({ stageHidden: document.querySelector('#stage').hidden, textHidden: document.querySelector('#textPreview').hidden })`,
+  );
+  check(
+    'going back to Image brings the canvas back',
+    !backToImage.stageHidden && backToImage.textHidden,
+  );
+
   // ── WebMCP: declarative API ────────────────────────────────────────
   // These are HTML attributes, so they are always there. What changes is
   // whether the browser uses them to expose the tool: that needs origin
@@ -1245,6 +1395,75 @@ try {
     true,
     webmcp.present ? 'registered' : 'degraded silently (the attributes are still in the HTML)',
   );
+
+  // ── WebMCP: the imperative tool, driven for real ───────────────────
+  // `modelContext` is stubbed above, so the tool that got registered can be
+  // called with real inputs. What is being checked is the contract an agent
+  // depends on: that text comes back as data rather than as a confirmation,
+  // and that a bad or contradictory input is refused in words.
+  console.log('\nwebmcp tool:');
+  const tool = await evaluate<{ name: string; props: string[] }>(
+    `({ name: window.__tools[0]?.name ?? '', props: Object.keys(window.__tools[0]?.inputSchema?.properties ?? {}) })`,
+  );
+  check('the imperative tool registers', tool.name === 'generate_placeholder', tool.name || 'none');
+  check(
+    'the schema carries the text parameters',
+    ['textPreset', 'textGenerator', 'textLocale', 'textCount', 'textFormat'].every((p) => tool.props.includes(p)),
+    tool.props.filter((p) => p.startsWith('text')).join(', '),
+  );
+
+  const call = async (input: Record<string, unknown>): Promise<string> =>
+    String(await evaluate(`window.__tools[0].execute(${JSON.stringify(input)})`));
+
+  const userJson = await call({
+    kind: 'text', textPreset: 'user', textCount: 2, textFormat: 'json', download: false,
+  });
+  let userParsed: { name?: string; email?: string } = {};
+  try {
+    userParsed = JSON.parse(userJson);
+  } catch {
+    /* left empty so the check below reports it */
+  }
+  check(
+    'kind=text with a preset returns the data itself',
+    !!userParsed.name && !!userParsed.email && /@/.test(userParsed.email),
+    userParsed.email ?? userJson.slice(0, 70),
+  );
+
+  const csv = await call({ kind: 'text', textPreset: 'payment', textCount: 1, textFormat: 'csv' });
+  check(
+    'a download of text still returns the rows',
+    /^name,card,issuer/.test(csv) && csv.split('\n').length === 2,
+    csv.split('\n')[0]?.slice(0, 60),
+  );
+
+  const esName = await call({
+    kind: 'text', textPreset: 'custom', textGenerator: 'person.fullName',
+    textLocale: 'es', textCount: 1, textFormat: 'plain', download: false,
+  });
+  check('the locale reaches the generator', esName.trim().length > 0 && !/^[A-Za-z]+ [A-Za-z]+$/.test(esName.trim()), esName.trim());
+
+  const refused = await call({ kind: 'text', textPreset: 'user', width: 800 });
+  check('a pixel setting with kind=text is refused', refused.includes('does not apply'), refused.slice(0, 80));
+
+  // The refusal has to leave the form alone. Applying half the input and then
+  // complaining would hand the agent an error and a tab holding a width it was
+  // just told does not matter.
+  const widthAfter = await evaluate<string>(`document.querySelector('#width').value`);
+  check('and the refused call changed nothing', widthAfter !== '800', `width is ${widthAfter}`);
+
+  for (const [label, input, needle] of [
+    ['an unknown preset', { kind: 'text', textPreset: 'nope' }, 'unknown text preset'],
+    ['an unknown generator', { kind: 'text', textPreset: 'custom', textGenerator: 'internet.nope' }, 'unknown generator'],
+    ['an unknown category', { kind: 'text', textPreset: 'custom', textCategory: 'nope' }, 'unknown category'],
+    ['an unknown format', { kind: 'text', textPreset: 'user', textFormat: 'yaml' }, 'unknown text format'],
+    ['an unknown locale', { kind: 'text', textPreset: 'user', textLocale: 'fr' }, 'unknown text locale'],
+  ] as Array<[string, Record<string, unknown>, string]>) {
+    const said = await call(input);
+    check(`${label} is refused`, said.includes(needle), said.slice(0, 90));
+  }
+
+  await evaluate(`document.querySelector('input[name="kind"][value="image"]').click()`);
 } finally {
   try { ws?.close(); } catch { /* already closed */ }
   chrome.kill();

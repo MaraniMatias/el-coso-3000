@@ -769,6 +769,30 @@ button.ghost:hover {
     0 0 / 16px 16px;
 }
 
+/* The text preview is the one thing on the page that has to be read and copied,
+   so it stays selectable and wraps instead of scrolling sideways. It sits in the
+   same grid track the stage uses, and `min-height: 0` is what lets a scroll
+   container actually scroll inside a stretched grid item rather than growing
+   the track. Tabbable because selecting generated data by hand is a real use:
+   copy a few rows out of a hundred. */
+.text-preview {
+  width: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 20px;
+  overflow: auto;
+  max-height: 62dvh;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+}
+
 .dims-label {
   margin: 0;
   font-size: 13px;

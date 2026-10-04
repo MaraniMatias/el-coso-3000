@@ -1,6 +1,6 @@
 # El Coso 3000
 
-Image and video placeholder generator that runs **entirely in the browser**.  
+Image, video, and fake data placeholder generator that runs **entirely in the browser**.  
 No server, no connection, nothing uploaded. The result is **a single HTML file** you can open with a double-click.
 
 
@@ -18,8 +18,27 @@ Generates ready-to-use placeholders for wireframes, mockups, prototypes, and tem
 | Animated GIF | GIF | Infinite loop, global 256-color palette, binary transparency. |
 | Animated JPEG | AVI (Motion-JPEG) · ZIP of `.jpg` | Meant for editors (Photoshop, etc.). |
 | Video | MP4 · WebM · MOV · MKV | Encoded with the browser engine; optional synthesized tango, beep, tone, or noise soundtrack. |
+| Fake data | plain text · JSON · JSON array · CSV · Markdown | No pixels. The Text tab, powered by `@faker-js/faker` in English and Spanish. |
 
 Placeholder text is **only the dimensions**: always on a single line, scaled as large as fits within 70% of the width and 60% of the height of the image. Animated and video outputs also include a progress bar and clock (`0:03 / 0:10`).
+
+### Fake data
+
+The **Text** tab generates placeholder data instead of an image, so the size, palette, and background controls do not apply to it. It draws on **24 groups** (person, internet, location, company, commerce, phone, date, finance, string, color, number, word, git, system, database, vehicle, airline, book, music, food, animal, science and lorem) and about **210 generators**, in **English or Spanish**.
+
+Eight presets bundle the common ones — a lorem sentence, a lorem paragraph, a user profile, a company, a product, an address, a payment card, and an API response — or any single generator can be picked on its own.
+
+| Output | What you get |
+|--------|--------------|
+| `plain` | One value per line, no header. A preset puts its fields side by side with the chosen separator. |
+| `json` | A single object built from the first row, for a request body. |
+| `array` | One object per row. |
+| `csv` | Comma separated with a header row; cells with a comma or a quote are quoted. |
+| `md` | A Markdown table, with pipes escaped, ready to paste into a README. |
+
+Also in the tab: **Regenerate** rerolls the data without touching a control, and **Copy text** puts the rows on the clipboard. Up to 1000 rows per generation.
+
+> A few generators come out the same in both languages: lorem filler is Latin by definition, and there is no Spanish IBAN dataset, so `finance.iban` returns a Belgian IBAN either way.
 
 ### Colors with guaranteed contrast
 
@@ -102,7 +121,7 @@ The app's own keywords are prefixed so tools group them instead of listing them 
 Readable placeholders with solid contrast and an embedded font. Good for mockups, wireframes, and temporary assets that shouldn't look broken.
 
 **Developers**  
-Test images and videos ready for prototypes, visual tests, or demos. Everything runs in the browser, no server required.
+Test images, videos, and fake data (users, addresses, emails, payments) ready for prototypes, visual tests, seeding a database, or demos. Everything runs in the browser, no server required.
 
 **Anyone**  
 Open the HTML, pick size and format, download.
@@ -113,7 +132,7 @@ Open the HTML, pick size and format, download.
 
 1. Download `dist/placeholder.html` (or open the [online demo](https://maranimatias.github.io/el-coso-3000/)).
 2. Open it in a browser (double-click is enough).
-3. Choose size, format, and color.
+3. Choose size, format, and color — or switch to the **Text** tab for fake data.
 4. Download the generated file.
 
 > [!NOTE]
@@ -130,3 +149,5 @@ Open the HTML, pick size and format, download.
 - AVI and MKV do not play in Firefox/Safari (they are still generated for editors).
 - JPEG / MJPEG / ZIP and the video containers have no alpha channel. Transparency is available in PNG, WebP, SVG and GIF (binary transparency); with transparent backgrounds, visible text contrast depends on the background beneath the file.
 - Sound is optional and only available in MP4, WebM, MOV and MKV. Audio encoding support depends on the browser.
+- Fake data is limited to 1000 rows per generation. Bundling `@faker-js/faker` with two locales is what makes `dist/placeholder.html` 872 KB instead of 400 KB; everything still runs offline, with no network request.
+- Lorem filler and IBANs are identical in both languages: the filler is Latin, and there is no Spanish IBAN dataset, so `finance.iban` returns a Belgian one either way.

@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Placeholder Image & Video Generator | El Coso 3000</title>
+    <title>Placeholder Image, Video & Fake Data Generator | El Coso 3000</title>
     <meta
       name="description"
-      content="Create image and video placeholders in your browser. Export transparent PNG, WebP, SVG or GIF, and add optional soundtracks to MP4, WebM, MOV or MKV."
+      content="Create image and video placeholders in your browser. Export transparent PNG, WebP, SVG or GIF, add optional soundtracks to MP4, WebM, MOV or MKV, and generate fake text data in English and Spanish."
     />
     <meta name="generator" content="El Coso 3000" />
     <meta name="author" content="Matias Ezequiel Marani" />
@@ -20,8 +20,8 @@
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="El Coso 3000" />
-    <meta property="og:title" content="Placeholder Image & Video Generator | El Coso 3000" />
-    <meta property="og:description" content="Create image and video placeholders in your browser, with transparent image exports and optional soundtracks for MP4, WebM, MOV and MKV. Nothing is uploaded." />
+    <meta property="og:title" content="Placeholder Image, Video & Fake Data Generator | El Coso 3000" />
+    <meta property="og:description" content="Create image and video placeholders in your browser, with transparent image exports, optional soundtracks for MP4, WebM, MOV and MKV, and fake text data in English and Spanish. Nothing is uploaded." />
     <meta property="og:url" content="https://maranimatias.github.io/el-coso-3000/" />
     <meta property="og:image" content="https://maranimatias.github.io/el-coso-3000/og-image.png" />
     <meta property="og:image:width" content="1200" />
@@ -39,12 +39,13 @@
         "@type": "WebApplication",
         "name": "El Coso 3000",
         "url": "https://maranimatias.github.io/el-coso-3000/",
-        "description": "Free image and video placeholder generator with transparent PNG, WebP, SVG and GIF exports, plus optional soundtracks for MP4, WebM, MOV and MKV.",
+        "description": "Free image and video placeholder generator with transparent PNG, WebP, SVG and GIF exports, plus optional soundtracks for MP4, WebM, MOV and MKV. Also generates fake text data in English and Spanish.",
         "featureList": [
           "Transparent PNG, WebP, SVG and GIF exports",
           "Optional synthesized soundtracks for MP4, WebM, MOV and MKV",
           "Local rendering in the browser, with no uploads",
-          "Custom dimensions up to 4096 by 4096 pixels"
+          "Custom dimensions up to 4096 by 4096 pixels",
+          "Fake text data in English and Spanish, as plain text, JSON, CSV or Markdown"
         ],
         "applicationCategory": "DesignApplication",
         "operatingSystem": "Any",
@@ -64,8 +65,8 @@
 
     <div class="app-shell">
       <header class="topbar">
-        <h1>Image &amp; Video Placeholder Generator</h1>
-        <p class="tagline">El Coso 3000 creates image and video placeholders in your browser. Nothing is uploaded.</p>
+        <h1>Image, Video &amp; Fake Data Placeholder Generator</h1>
+        <p class="tagline">El Coso 3000 creates image and video placeholders, and fake text data, in your browser. Nothing is uploaded.</p>
       </header>
 
       <main class="layout">
@@ -73,7 +74,7 @@
         id="panel"
         class="panel"
         toolname="generate_placeholder"
-        tooldescription="Configures and generates an image or video placeholder in the browser. Adjusts dimensions, pastel palette, contrast and background (flat, transparent or an animated texture), and returns the downloaded file."
+        tooldescription="Configures and generates an image placeholder, a video placeholder, or a file of fake text data in the browser. For an image or a video: adjust dimensions, pastel palette, contrast and background (flat, transparent or an animated texture), and the file is downloaded. For text: fake names, addresses, emails, companies, products and payment details in English or Spanish, written as plain text, JSON, CSV or a Markdown table, and the rows are returned."
       >
         <div class="panel-body">
           <fieldset class="tabs">
@@ -85,7 +86,7 @@
                 value="image"
                 checked
                 toolparamtitle="Output type"
-                toolparamdescription="What to generate. Use 'image' for a still image, or 'video' for a looping output with a timeline: the four video containers plus the animated ones (gif, mjpeg-avi, jpeg-zip)."
+                toolparamdescription="What to generate. Use 'image' for a still image, 'video' for a looping output with a timeline: the four video containers plus the animated ones (gif, mjpeg-avi, jpeg-zip), or 'text' for fake placeholder data."
               />
               <span>Image</span>
             </label>
@@ -95,13 +96,23 @@
                 name="kind"
                 value="video"
                 toolparamtitle="Output type"
-                toolparamdescription="What to generate. Use 'image' for a still image, or 'video' for a looping output with a timeline: the four video containers plus the animated ones (gif, mjpeg-avi, jpeg-zip)."
+                toolparamdescription="What to generate. Use 'image' for a still image, 'video' for a looping output with a timeline: the four video containers plus the animated ones (gif, mjpeg-avi, jpeg-zip), or 'text' for fake placeholder data."
               />
               <span>Video</span>
             </label>
+            <label class="tab">
+              <input
+                type="radio"
+                name="kind"
+                value="text"
+                toolparamtitle="Output type"
+                toolparamdescription="What to generate. Use 'image' for a still image, 'video' for a looping output with a timeline: the four video containers plus the animated ones (gif, mjpeg-avi, jpeg-zip), or 'text' for fake placeholder data."
+              />
+              <span>Text</span>
+            </label>
           </fieldset>
 
-          <section class="group">
+          <section class="group" data-kind="image video">
             <h2>Size</h2>
             <div class="dims">
               <div class="field">
@@ -148,7 +159,7 @@
             <p class="note warning" id="evenWarning" hidden></p>
           </section>
 
-          <section class="group">
+          <section class="group" data-kind="image video">
             <h2>Color</h2>
             <div class="swatches" id="swatches" role="group" aria-label="Pastel palette"></div>
             <!-- The color fields stay in the form but not on screen: the mosaic is the
@@ -189,7 +200,7 @@
             </div>
           </section>
 
-          <section class="group">
+          <section class="group" data-kind="image video">
             <h2>Background</h2>
             <!-- One tile per background, each a real render of it on the two
                  colors picked above, the same size as the palette swatches
@@ -277,6 +288,160 @@
                 ></label
               >
             </div>
+          </section>
+
+          <section class="group" data-kind="text" hidden>
+            <h2>Text</h2>
+            <!-- The two selects are populated from the generator registry in
+                 `text-generators.ts`, not written here: the picker is driven by
+                 the catalog so a new faker method shows up without touching the
+                 markup. A preset is a bundle of those same generators, which is
+                 why picking one fills the two selects instead of hiding them. -->
+            <div class="field">
+              <label for="textPreset">Preset</label>
+              <select
+                id="textPreset"
+                name="textPreset"
+                toolparamtitle="Text preset"
+                toolparamdescription="A ready-made bundle of generators. 'sentence' and 'paragraph' are lorem filler; the rest are a user profile, a company, a product, an address, a payment card, and a fake API response. Choose 'custom' to pick the category and generator yourself."
+              ></select>
+            </div>
+
+            <div class="field-row">
+              <div class="field">
+                <label for="textCategory">Category</label>
+                <select
+                  id="textCategory"
+                  name="textCategory"
+                  toolparamtitle="Category"
+                  toolparamdescription="Which group of faker generators to draw from, for example lorem, person, internet, location, company, commerce, finance or string."
+                ></select>
+              </div>
+              <div class="field">
+                <label for="textGenerator">Generator</label>
+                <select
+                  id="textGenerator"
+                  name="textGenerator"
+                  toolparamtitle="Generator"
+                  toolparamdescription="Which faker method to call, written as category.method, for example internet.email or location.city."
+                ></select>
+              </div>
+            </div>
+
+            <div class="field-row">
+              <div class="field">
+                <label for="textCount">Count</label>
+                <input
+                  type="number"
+                  id="textCount"
+                  name="textCount"
+                  min="1"
+                  max="1000"
+                  step="1"
+                  value="10"
+                  toolparamtitle="Count"
+                  toolparamdescription="How many rows to generate, from 1 to 1000."
+                />
+              </div>
+              <div class="field">
+                <label for="textLocale">Language</label>
+                <select
+                  id="textLocale"
+                  name="textLocale"
+                  toolparamtitle="Language"
+                  toolparamdescription="Which set of names, addresses and words to use: 'en' for English or 'es' for Spanish. A few generators, such as lorem filler and IBANs, come out the same in both."
+                >
+                  <option value="en" selected>English</option>
+                  <option value="es">Español</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="field">
+              <div class="choices" role="radiogroup" aria-label="Text output format">
+                <label class="choice">
+                  <input
+                    type="radio"
+                    name="textFormat"
+                    value="plain"
+                    checked
+                    toolparamtitle="Output format"
+                    toolparamdescription="One value per line, with no header. A preset puts its fields side by side separated by the chosen separator."
+                  />
+                  <span>Plain</span>
+                </label>
+                <label class="choice">
+                  <input
+                    type="radio"
+                    name="textFormat"
+                    value="json"
+                    toolparamtitle="Output format"
+                    toolparamdescription="A single JSON object built from the first row, for pasting into a request body."
+                  />
+                  <span>JSON</span>
+                </label>
+                <label class="choice">
+                  <input
+                    type="radio"
+                    name="textFormat"
+                    value="array"
+                    toolparamtitle="Output format"
+                    toolparamdescription="A JSON array with one object per row."
+                  />
+                  <span>JSON array</span>
+                </label>
+                <label class="choice">
+                  <input
+                    type="radio"
+                    name="textFormat"
+                    value="csv"
+                    toolparamtitle="Output format"
+                    toolparamdescription="Comma separated values, with a header row. Fields that contain a comma or a quote are quoted."
+                  />
+                  <span>CSV</span>
+                </label>
+                <label class="choice">
+                  <input
+                    type="radio"
+                    name="textFormat"
+                    value="md"
+                    toolparamtitle="Output format"
+                    toolparamdescription="A Markdown table, with a header row and pipes escaped, ready to paste into a README."
+                  />
+                  <span>Markdown</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="textSeparator">Separator</label>
+              <select
+                id="textSeparator"
+                name="textSeparator"
+                toolparamtitle="Separator"
+                toolparamdescription="What goes between values in the plain format: a new line, a comma, a semicolon, a tab or a space."
+              >
+                <option value="newline" selected>New line</option>
+                <option value="comma">Comma</option>
+                <option value="semicolon">Semicolon</option>
+                <option value="tab">Tab</option>
+                <option value="space">Space</option>
+                <option value="custom">Custom…</option>
+              </select>
+              <input
+                type="text"
+                id="textSeparatorCustom"
+                name="textSeparatorCustom"
+                maxlength="8"
+                placeholder="Custom separator"
+                aria-label="Custom separator"
+                hidden
+                toolparamtitle="Custom separator"
+                toolparamdescription="The literal text placed between values when the separator is 'custom'. Up to 8 characters."
+              />
+            </div>
+
+            <p class="note" id="textNote" aria-live="polite"></p>
           </section>
 
           <section class="group" data-kind="image">
@@ -522,7 +687,9 @@
 
         <div class="dock">
           <div class="actions">
+            <button type="button" class="ghost" id="textRegenerate" hidden>Regenerate</button>
             <button type="submit" class="primary" id="generate"><span id="generateLabel">Download</span></button>
+            <button type="button" class="ghost" id="textCopy" hidden>Copy text</button>
             <button type="button" class="ghost" id="cancel" hidden>Cancel</button>
           </div>
 
@@ -539,6 +706,11 @@
         <div class="stage" id="stage">
           <canvas id="canvas" role="img" aria-label="Preview of the placeholder"></canvas>
         </div>
+        <!-- Text has nothing to draw, so it gets its own preview: a real block of
+             selectable text instead of a canvas of pixels. It lives beside the
+             stage rather than inside it, because the stage carries the aspect
+             ratio of the requested image and text has no such thing. -->
+        <pre class="text-preview" id="textPreview" tabindex="0" hidden aria-label="Generated text"></pre>
         <p class="dims-label" id="dimsLabel">1920 × 1080</p>
         <p class="meta-line" id="metaLine"></p>
       </section>
@@ -554,11 +726,12 @@
 
     <article class="seo-content">
       <section aria-labelledby="about-heading">
-        <h2 id="about-heading">Image and video placeholders for design and development</h2>
+        <h2 id="about-heading">Image, video, and fake data placeholders for design and development</h2>
         <p>Make dimension-labeled placeholder assets for wireframes, mockups, prototypes, demos, visual tests, and temporary media. Set a custom size, pick a background color, then download the result.</p>
         <ul>
           <li><strong>Still images:</strong> PNG, JPEG, WebP, and SVG. PNG, WebP, and SVG support transparency; GIF supports binary transparency.</li>
           <li><strong>Animated and video outputs:</strong> GIF, Motion JPEG AVI, ZIP files of numbered JPEG frames, MP4, WebM, MOV, and MKV. MP4, WebM, MOV, and MKV can include an optional generated soundtrack.</li>
+          <li><strong>Fake data:</strong> placeholder names, addresses, emails, phone numbers, companies, products, payment details, dates, identifiers, and commit messages, in English or Spanish, as plain text, JSON, a JSON array, CSV, or a Markdown table.</li>
         </ul>
         <p>The placeholder displays its dimensions. Choose a palette or a custom background; the text color is calculated for contrast against it. Both colors can be picked from the same row: the last swatch is split in two, its large triangle being the background and its small one the text, so whichever of the two you pick the other follows. The indicator under the row reports the measured ratio, says where the pair comes from, and offers a <em>fix</em> button when, and only when, the pair cannot be read. With transparency enabled, visible contrast depends on the background beneath the image. The background can also be one of four animated textures, in which case the contrast is measured against the flat color it is drawn over.</p>
       </section>
@@ -566,13 +739,14 @@
       <section aria-labelledby="how-heading">
         <h2 id="how-heading">How to make a placeholder</h2>
         <ol>
-          <li>Choose Image or Video.</li>
+          <li>Choose Image, Video, or Text.</li>
           <li>Enter the width and height in pixels, then choose the colors. Pick one and the other one is computed from it to guarantee contrast; pick both and the indicator under the row is the only thing measuring the pair, until you press <em>fix</em>.</li>
           <li>Pick the background: solid, transparent, or one of the four animated textures. Textures are painted into every format except SVG, which stays flat.</li>
           <li>On a video, set how fast an animated background moves: from 1× to 3×.</li>
           <li>Select an output format. For animated and video outputs, set the duration, frame rate, and optional progress bar or clock.</li>
           <li>To give a video a soundtrack, tick Include sound and pick one: a synthesized tango, a test beep, a held tone, or noise. MP4, MOV, WebM, and MKV support it; GIF, AVI, and ZIP stay silent.</li>
           <li>Select Download to save the generated file.</li>
+          <li>For Text, choose a preset such as a user profile, a company, a product, an address, a payment card, or an API response, or pick Custom and choose any of the 24 categories and their generators. Set how many rows, the language, and the output: plain text, JSON, a JSON array, CSV, or a Markdown table. Use Regenerate for a different set without changing anything, and Copy text to put the rows on the clipboard.</li>
         </ol>
       </section>
 
@@ -588,6 +762,7 @@
           <li>Video exports are limited to 3,600 frames. H.264 output may round odd dimensions up to even values.</li>
           <li>MP4, WebM, MOV, and MKV depend on browser WebCodecs and available encoders. Video export is not supported in Firefox for Android.</li>
           <li>GIF frame timing is quantized, so its actual frame rate may differ slightly from the selected rate.</li>
+          <li>Fake data is limited to 1,000 rows per generation. A few generators come out the same in both languages: lorem filler is Latin in any language, and IBANs have no Spanish dataset, so finance.iban returns a Belgian one either way.</li>
         </ul>
       </section>
 
@@ -612,6 +787,12 @@
           <dd>Yes. MP4, WebM, MOV, and MKV can include an optional synthesized tango, beep, tone, or noise soundtrack. Audio encoding support varies by browser; GIF, AVI, and ZIP exports are silent.</dd>
           <dt>Why might video export be unavailable?</dt>
           <dd>Video formats require browser support for WebCodecs and the requested encoder, and the encoder is the part most likely to be missing.</dd>
+          <dt>What can the Text tab generate?</dt>
+          <dd>Placeholder data drawn from 24 groups: person, internet, location, company, commerce, phone, date, finance, string, color, number, word, git, system, database, vehicle, airline, book, music, food, animal, science and lorem. Around 210 generators in total, in English or Spanish. The eight presets bundle the common ones: a lorem sentence or paragraph, a user profile, a company, a product, an address, a payment card, and an API response.</dd>
+          <dt>Is the fake data real?</dt>
+          <dd>No, and it is not meant to be. The names and addresses are plausible combinations of real datasets, not records of anyone. Everything is generated locally, so nothing about it is sent anywhere.</dd>
+          <dt>Why does IBAN not change with the language?</dt>
+          <dd>There is no Spanish IBAN dataset, so the generator falls back to its base one and returns a Belgian IBAN in both languages. The same happens with lorem filler, which is Latin by definition.</dd>
         </dl>
       </section>
     </article>

@@ -40,6 +40,28 @@ import {
   type Texture,
   type TextureSpeed,
 } from "../core/types";
+import {
+  CATEGORIES,
+  categoryOf,
+  COUNT_MAX,
+  COUNT_MIN,
+  CUSTOM_PRESET,
+  DEFAULT_COUNT,
+  formatRows,
+  generateRows,
+  generatorLabel,
+  GENERATORS,
+  PRESETS,
+  PRESET_KEYS,
+  TEXT_FORMAT_INFO,
+  TEXT_FORMATS,
+  textFilename,
+  type CategoryKey,
+  type GeneratorKey,
+  type TextFormat,
+  type TextLocale,
+  type TextSpec,
+} from "./text-generators";
 import { setupWebMcp, webmcpStatusText } from "./webmcp";
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string): T => {
@@ -88,7 +110,7 @@ let hand: Hand = "none";
  * video gets `mix`, which is the liveliest of the four and has the grain to
  * make the movement read on a small frame.
  */
-const BACKGROUND_BY_KIND = new Map<'image' | 'video', string>([
+const BACKGROUND_BY_KIND = new Map<MediaKind, string>([
   ['image', DEFAULT_IMAGE_TEXTURE],
   ['video', DEFAULT_VIDEO_TEXTURE],
 ]);
@@ -173,7 +195,7 @@ function checked(name: string): boolean {
  * decision.
  */
 function selectedBackground(): string {
-  return str('background', BACKGROUND_BY_KIND.get(currentKind()) ?? 'solid');
+  return str('background', BACKGROUND_BY_KIND.get(mediaKind()) ?? 'solid');
 }
 
 /** The texture that kind means. Both flat backgrounds are `none`. */
@@ -182,8 +204,27 @@ function selectedTexture(): Texture {
   return TEXTURES.includes(value as Texture) ? (value as Texture) : 'none';
 }
 
-function currentKind(): "image" | "video" {
-  return str("kind", "image") === "video" ? "video" : "image";
+/** The three tabs. Text joins image and video as a way to download something. */
+type Kind = "image" | "video" | "text";
+
+/** The tabs that draw to a canvas and share the background and palette state. */
+type MediaKind = Exclude<Kind, "text">;
+
+function currentKind(): Kind {
+  const value = str("kind", "image");
+  return value === "video" || value === "text" ? value : "image";
+}
+
+/**
+ * The same answer narrowed to the tabs that have a canvas.
+ *
+ * `BACKGROUND_BY_KIND` is per media tab because each one keeps its own pick,
+ * and the text tab has no background to keep. Reading the map with the full
+ * `Kind` would need a lie in the map or a cast at every call, so the narrowing
+ * is a named function instead.
+ */
+function mediaKind(): MediaKind {
+  return currentKind() === "video" ? "video" : "image";
 }
 
 /** The format the current tab is going to produce. */
@@ -701,9 +742,16 @@ const FORMAT_LABEL: Readonly<Record<string, string>> = {
 };
 
 function refreshDownloadLabel(): void {
+  const label = $("#generateLabel");
+  if (currentKind() === "text") {
+    // The extension is said instead of the format name because the file is what
+    // the person is about to open, and `json` twice for two different shapes
+    // would be a poor way to name them.
+    label.textContent = `Download .${TEXT_FORMAT_INFO[readTextSpec().format].extension}`;
+    return;
+  }
   const format = currentFormat();
-  $("#generateLabel").textContent =
-    `Download ${FORMAT_LABEL[format] ?? format.toUpperCase()}`;
+  label.textContent = `Download ${FORMAT_LABEL[format] ?? format.toUpperCase()}`;
 }
 
 /**
@@ -725,7 +773,26 @@ function refreshFormatHints(): void {
 function refreshDependentUi(): void {
   const kind = currentKind();
   for (const section of document.querySelectorAll<HTMLElement>("[data-kind]")) {
-    section.hidden = section.dataset.kind !== kind;
+    // A section lists every tab it belongs to, space separated. The three
+    // canvas groups carry both media tabs, since a video is measured and colored
+    // exactly like a still image.
+    const kinds = section.dataset.kind?.split(" ") ?? [];
+    section.hidden = !kinds.includes(kind);
+  }
+  // The stage and the text preview share the same slot in the layout, and
+  // neither carries `data-kind` because they are not groups of controls. Which
+  // one shows is decided here, once, for every tab: leaving it to the text
+  // branch alone would hide the canvas on the way in and never bring it back.
+  const text = kind === "text";
+  $("#stage").hidden = text;
+  $<HTMLElement>("#textPreview").hidden = !text;
+  $("#textRegenerate").hidden = !text;
+  $("#textCopy").hidden = !text;
+
+  if (text) {
+    refreshDownloadLabel();
+    refreshTextUi();
+    return;
   }
   if (kind === "image") stopPreviewAnimation();
 
@@ -864,6 +931,204 @@ function refreshDependentUi(): void {
   fitCanvas();
 }
 
+// ── Text ─────────────────────────────────────────────────────────────────
+
+/**
+ * The named separators. The picker offers words rather than the characters
+ * themselves because a literal newline in the value of an `<option>` is
+ * invisible in the markup and impossible to tell from a space when reading it.
+ */
+const SEPARATORS: Record<string, string> = {
+  newline: "\n",
+  comma: ",",
+  semicolon: ";",
+  tab: "\t",
+  space: " ",
+};
+
+/** Resolves the separator picker, including whatever the custom box holds. */
+function selectedSeparator(): string {
+  const pick = str("textSeparator", "newline");
+  if (pick !== "custom") return SEPARATORS[pick] ?? "\n";
+  // An empty custom box is a separator of nothing, which would glue every row
+  // together. A newline is the least surprising thing a blank box can mean.
+  return $<HTMLInputElement>("#textSeparatorCustom").value || "\n";
+}
+
+/** What the text tab is currently set to generate. */
+function readTextSpec(): TextSpec {
+  const raw = num("textCount", DEFAULT_COUNT);
+  return {
+    preset: str("textPreset", PRESET_KEYS[0] ?? ""),
+    category: str("textCategory", "lorem") as CategoryKey,
+    generator: str("textGenerator", GENERATORS[0] ?? ("lorem.sentence" as GeneratorKey)) as GeneratorKey,
+    locale: str("textLocale", "en") as TextLocale,
+    // The box has min and max, but a value can arrive pasted, typed over or from
+    // an agent, and generating a million rows would lock the tab up.
+    count: Math.min(COUNT_MAX, Math.max(COUNT_MIN, Number.isFinite(raw) ? raw : DEFAULT_COUNT)),
+    format: str("textFormat", "plain") as TextFormat,
+    separator: selectedSeparator(),
+  };
+}
+
+/**
+ * Fills the preset and generator pickers from the registry.
+ *
+ * Nothing about the catalog is written in the markup: the options are built
+ * here so adding a faker method to `text-generators.ts` is the only edit a new
+ * generator needs. The `value` of a generator option is the full `category.key`
+ * because that is the key the registry is looked up by and the key an agent
+ * reads in the schema.
+ */
+function populateTextControls(): void {
+  const preset = $<HTMLSelectElement>("#textPreset");
+  for (const key of PRESET_KEYS) {
+    const presetDef = PRESETS[key];
+    const option = document.createElement("option");
+    option.value = key;
+    option.textContent = presetDef ? presetDef.label : key;
+    preset.append(option);
+  }
+  // The hand-off back to the person. It is a real option because a select always
+  // has something selected, and "nothing" would have to be an invisible value.
+  const custom = document.createElement("option");
+  custom.value = CUSTOM_PRESET;
+  custom.textContent = "Custom…";
+  preset.append(custom);
+
+  const category = $<HTMLSelectElement>("#textCategory");
+  for (const key of Object.keys(CATEGORIES) as CategoryKey[]) {
+    const option = document.createElement("option");
+    option.value = key;
+    option.textContent = CATEGORIES[key].label;
+    category.append(option);
+  }
+  // The generator list depends on the category, so it is built last and from
+  // whatever the category select landed on.
+  refreshGeneratorOptions(category.value);
+}
+
+/**
+ * Rebuilds the generator picker for a category.
+ *
+ * The category is a grouping for the person; the generator is what actually
+ * runs. Rebuilding on every category change is the whole reason the catalog can
+ * stay a plain data structure instead of needing an index built at startup.
+ */
+function refreshGeneratorOptions(category: string): void {
+  const select = $<HTMLSelectElement>("#textGenerator");
+  const def = CATEGORIES[category as CategoryKey];
+  const previous = select.value;
+  select.replaceChildren();
+  for (const name of def?.gens ?? []) {
+    const option = document.createElement("option");
+    option.value = `${category}.${name}`;
+    option.textContent = name;
+    select.append(option);
+  }
+  // Switching category throws the old pick away on purpose: it belonged to the
+  // other group. When the same generator survives, it is restored instead.
+  if ([...select.options].some((option) => option.value === previous)) {
+    select.value = previous;
+  }
+}
+
+/** Points the category and generator pickers at a generator from a preset. */
+function revealGenerator(generator: GeneratorKey): void {
+  const category = categoryOf(generator);
+  $<HTMLSelectElement>("#textCategory").value = category;
+  refreshGeneratorOptions(category);
+  $<HTMLSelectElement>("#textGenerator").value = generator;
+}
+
+/**
+ * Keeps the text tab in step with its own controls.
+ *
+ * Two things are decided here rather than on every event: which pickers matter,
+ * because a preset answers for them, and whether the output starts with a
+ * header, which is the one difference the person cannot guess from the format
+ * name alone.
+ */
+function refreshTextUi(): void {
+  const spec = readTextSpec();
+  const custom = spec.preset === CUSTOM_PRESET;
+  // A preset is a bundle of generators, so the pickers below it would either
+  // lie about what is being generated or sit there contradicting it.
+  $<HTMLSelectElement>("#textCategory").disabled = !custom;
+  $<HTMLSelectElement>("#textGenerator").disabled = !custom;
+
+  const customBox = $<HTMLInputElement>("#textSeparatorCustom");
+  customBox.hidden = str("textSeparator", "newline") !== "custom";
+
+  // The preview is the output verbatim, so whatever is generated is what gets
+  // copied and downloaded. It is regenerated here because this runs on every
+  // text control change, and a preview that lags behind the controls is a
+  // preview nobody trusts.
+  renderText();
+}
+
+/** Generates the current spec and shows it. */
+function renderText(): void {
+  const spec = readTextSpec();
+  let text: string;
+  try {
+    text = formatRows(generateRows(spec), spec.format, spec.separator);
+  } catch (err) {
+    // A generator the catalog lists but the installed faker does not have would
+    // throw here. It is said in the note rather than left as a dead preview,
+    // since the rest of the tab still works.
+    $("#textNote").textContent = err instanceof Error ? err.message : String(err);
+    $("#textPreview").textContent = "";
+    updateTextMetaLine(0);
+    return;
+  }
+  $("#textPreview").textContent = text;
+  $("#textNote").textContent = "";
+  updateTextMetaLine(spec.count);
+  textOutput = text;
+}
+
+/** The size of the current text output, said the way the media tabs say theirs. */
+function updateTextMetaLine(count: number): void {
+  const spec = readTextSpec();
+  const label = TEXT_FORMAT_INFO[spec.format].label;
+  $("#dimsLabel").textContent = `${count} ${count === 1 ? "row" : "rows"}`;
+  $("#metaLine").textContent = `${label} · ${spec.locale} · ${textFilename(spec)}`;
+}
+
+/** The last output rendered, kept so Copy has something to hand the clipboard. */
+let textOutput = "";
+
+/** Puts the preview on the clipboard, with a fallback for denied permission. */
+async function copyText(): Promise<void> {
+  if (!textOutput) return;
+  try {
+    await navigator.clipboard.writeText(textOutput);
+    showMessage("Copied to the clipboard", "success");
+  } catch {
+    // The async clipboard needs a secure context, which a file:// page is not.
+    // Selecting the text is the one thing that works everywhere, so the person
+    // is told to press the keys rather than left with a button that did nothing.
+    const preview = $<HTMLElement>("#textPreview");
+    const range = document.createRange();
+    range.selectNodeContents(preview);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    preview.focus();
+    showMessage("The browser would not give the clipboard. The text is selected: press Ctrl or Cmd + C.", "error");
+  }
+}
+
+/** Wraps the current output in a file and hands it to the download path. */
+function downloadText(): void {
+  const spec = readTextSpec();
+  if (!textOutput) return;
+  const blob = new Blob([textOutput], { type: TEXT_FORMAT_INFO[spec.format].mime });
+  downloadBlob(blob, textFilename(spec));
+  showMessage(`Downloaded ${textFilename(spec)} · ${(blob.size / 1024).toFixed(1)} KB`, "success");
+}
+
 // ── Generating ────────────────────────────────────────────────────────
 
 function showMessage(
@@ -907,6 +1172,13 @@ function onProgress(info: ProgressInfo): void {
 async function generate(): Promise<void> {
   clearMessage();
   const kind = currentKind();
+  // Text has no encoding and no timeline, so it does not go near the busy state,
+  // the progress bar or the cancel button: it is a string that already exists by
+  // the time the click is handled.
+  if (kind === "text") {
+    downloadText();
+    return;
+  }
   const spec = readSpec();
   abortController = new AbortController();
   setBusy(true);
@@ -966,10 +1238,39 @@ async function exportTimeline(
 
 // ── WebMCP: what an agent can drive ───────────────────────────────────
 
+/** The settings that only mean something to a canvas, refused by the text tab. */
+const PIXEL_PARAMS = [
+  "width",
+  "height",
+  "imageFormat",
+  "videoFormat",
+  "duration",
+  "fps",
+  "texture",
+  "palette",
+  "background",
+  "foreground",
+] as const;
+
 function applySettings(
   input: Record<string, unknown>,
 ): { ok: true } | { ok: false; error: string } {
   try {
+    // Before anything is written, not after. An agent that asks for
+    // `kind: text` together with a width should get the refusal and an
+    // untouched form: applying half the input first would leave the tab
+    // holding a width it was just told does not matter.
+    if (input.kind === "text") {
+      for (const name of PIXEL_PARAMS) {
+        if (input[name] !== undefined) {
+          return {
+            ok: false,
+            error: `"${name}" does not apply to kind "text", which has no pixels; use textPreset, textCategory, textGenerator, textLocale, textCount, textFormat or textSeparator`,
+          };
+        }
+      }
+    }
+
     if (input.width !== undefined) setNum("width", Number(input.width));
     if (input.height !== undefined) setNum("height", Number(input.height));
     if (input.duration !== undefined)
@@ -979,6 +1280,64 @@ function applySettings(
     if (typeof input.kind === "string") {
       setRadio("kind", input.kind);
     }
+    // Text is driven through its own controls rather than through the canvas
+    // ones, and each is validated against the registry the tab was built from,
+    // because a bad key would otherwise be silently ignored and the agent would
+    // get a file that is not what it asked for.
+    if (typeof input.textPreset === "string") {
+      const key = input.textPreset;
+      if (key !== CUSTOM_PRESET && !(key in PRESETS)) {
+        return {
+          ok: false,
+          error: `unknown text preset "${key}", expected one of ${PRESET_KEYS.join(", ")}`,
+        };
+      }
+      setSelect("textPreset", key);
+      const preset = PRESETS[key];
+      if (preset) revealGenerator(preset.fields[0]?.gen ?? GENERATORS[0]!);
+    }
+    if (typeof input.textGenerator === "string") {
+      const key = input.textGenerator as GeneratorKey;
+      if (!GENERATORS.includes(key)) {
+        return {
+          ok: false,
+          error: `unknown generator "${key}", expected category.method, one of ${GENERATORS.length} in the catalog`,
+        };
+      }
+      setSelect("textPreset", CUSTOM_PRESET);
+      revealGenerator(key);
+    } else if (typeof input.textCategory === "string") {
+      const key = input.textCategory;
+      if (!(key in CATEGORIES)) {
+        return {
+          ok: false,
+          error: `unknown category "${key}", expected one of ${Object.keys(CATEGORIES).join(", ")}`,
+        };
+      }
+      setSelect("textCategory", key);
+      refreshGeneratorOptions(key);
+    }
+    if (typeof input.textFormat === "string") {
+      if (!TEXT_FORMATS.includes(input.textFormat as TextFormat)) {
+        return {
+          ok: false,
+          error: `unknown text format "${input.textFormat}", expected one of ${TEXT_FORMATS.join(", ")}`,
+        };
+      }
+      setRadio("textFormat", input.textFormat);
+    }
+    if (typeof input.textLocale === "string") {
+      const key = input.textLocale;
+      if (key !== "en" && key !== "es") {
+        return {
+          ok: false,
+          error: `unknown text locale "${key}", expected "en" or "es"`,
+        };
+      }
+      setSelect("textLocale", key);
+    }
+    if (input.textCount !== undefined) setNum("textCount", Number(input.textCount));
+
     if (typeof input.imageFormat === "string") {
       setRadio("imageFormat", input.imageFormat);
     }
@@ -1087,10 +1446,29 @@ function setSelect(name: string, value: string): void {
 }
 /** Stores the background of the active tab, so switching tabs can restore it. */
 function rememberBackground(): void {
-  BACKGROUND_BY_KIND.set(currentKind(), selectedBackground());
+  BACKGROUND_BY_KIND.set(mediaKind(), selectedBackground());
 }
 
 function describe(): Record<string, unknown> {
+  // Text answers with its own settings only. Reporting the size, the palette and
+  // the contrast of a picture that is not being generated would tell the agent
+  // the canvas is configured, and it would believe it.
+  if (currentKind() === "text") {
+    const spec = readTextSpec();
+    const preset = PRESETS[spec.preset];
+    return {
+      kind: "text",
+      format: spec.format,
+      locale: spec.locale,
+      count: spec.count,
+      ...(spec.preset ? { preset: spec.preset } : {}),
+      ...(preset ? { columns: preset.fields.map((field) => field.as) } : {}),
+      ...(preset ? {} : { category: spec.category, generator: spec.generator }),
+      // What the file on disk will be called, which is the part an agent that
+      // saves the result has to write down.
+      filename: textFilename(spec),
+    };
+  }
   const spec = readSpec();
   return {
     width: spec.width,
@@ -1172,10 +1550,12 @@ function wireEvents(): void {
         // Each tab has its own background, and this is where the other one comes
         // back. `refreshDependentUi` already decides whether the preview
         // animates.
-        setRadio(
-          "background",
-          BACKGROUND_BY_KIND.get(currentKind()) ?? "solid",
-        );
+        if (currentKind() !== "text") {
+          setRadio(
+            "background",
+            BACKGROUND_BY_KIND.get(mediaKind()) ?? "solid",
+          );
+        }
         refreshDependentUi();
         void syncVideoAvailability();
         return;
@@ -1186,9 +1566,45 @@ function wireEvents(): void {
     refreshDependentUi();
   });
 
-  form.addEventListener("change", () => {
+  form.addEventListener("change", (ev) => {
+    const target = ev.target;
+    // The text pickers have to settle before the tab is refreshed, because the
+    // refresh generates from whatever they say. The generic `refreshDependentUi`
+    // below runs last for that reason.
+    if (target instanceof HTMLSelectElement) {
+      switch (target.name) {
+        case "textCategory":
+          refreshGeneratorOptions(target.value);
+          break;
+        case "textPreset": {
+          const preset = PRESETS[target.value];
+          // The pickers point at the first generator of the bundle so they agree
+          // with what is being generated instead of contradicting it. On
+          // `Custom…` they are left alone: that is the one option that means the
+          // person is choosing.
+          if (preset) revealGenerator(preset.fields[0]?.gen ?? GENERATORS[0]!);
+          break;
+        }
+        case "textSeparator":
+          // The custom box belongs to the option that asks for it, so it is
+          // revealed here rather than on every refresh of the tab.
+          $<HTMLInputElement>("#textSeparatorCustom").hidden = target.value !== "custom";
+          break;
+      }
+    }
     refreshContrast();
     refreshDependentUi();
+  });
+
+  // Regenerating is its own button because for text, unlike a picture, the only
+  // reason to want a new one is to want a different one. Every control already
+  // regenerates on change; this changes nothing and rerolls.
+  $("#textRegenerate").addEventListener("click", () => {
+    clearMessage();
+    renderText();
+  });
+  $("#textCopy").addEventListener("click", () => {
+    void copyText();
   });
 
   // Pasting a size into either field fills both. A `type="number"` input runs
@@ -1249,6 +1665,10 @@ async function main(): Promise<void> {
   if (!start) throw new Error("No palette found");
   applyColors(start.bg, start.fg, "none", start);
 
+  // The text pickers start empty because the catalog is not written in the
+  // markup, so they are filled before the first refresh reads them.
+  populateTextControls();
+
   wireEvents();
   refreshDependentUi();
   void syncVideoAvailability();
@@ -1261,6 +1681,7 @@ async function main(): Promise<void> {
       return el.hidden ? "Generated." : (el.textContent ?? "Generated.");
     },
     describe,
+    text: () => textOutput,
   });
 
   const status = $("#webmcpStatus");

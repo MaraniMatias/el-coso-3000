@@ -16,6 +16,12 @@
  */
 import { palette } from "../core/color";
 import { TIMELINE_FORMATS, VIDEO_TONES } from "../core/types";
+import {
+  GENERATORS,
+  PRESET_KEYS,
+  TEXT_FORMATS,
+  TEXT_FORMAT_INFO,
+} from "./text-generators";
 
 /** The subset of the API we use. It is not in the DOM types yet. */
 interface ModelContext {
@@ -38,6 +44,15 @@ export interface WebMcpHost {
   generate(): Promise<string>;
   /** Reads the current configuration, so the agent knows the state. */
   describe(): Record<string, unknown>;
+  /**
+   * The text the text tab is currently showing.
+   *
+   * It exists because the other two tabs hand the agent a file it cannot read,
+   * and that is the right answer for a picture. Text is the data itself: an
+   * agent that generated a hundred fake emails and got back "Downloaded
+   * fake-user.json" would have nothing to show for it.
+   */
+  text(): string;
 }
 
 function modelContext(): ModelContext | null {
@@ -68,8 +83,9 @@ const SCHEMA = {
     },
     kind: {
       type: "string",
-      enum: ["image", "video"],
-      description: "Generate a still image or a looping output.",
+      enum: ["image", "video", "text"],
+      description:
+        "Generate a still image, a looping output, or a file of fake placeholder data. kind=text ignores every pixel setting below and uses the text* ones instead.",
     },
     imageFormat: {
       type: "string",
@@ -133,6 +149,40 @@ const SCHEMA = {
       description:
         "Which soundtrack: 'tango' is a synthesized tango nuevo at 100 BPM, 'beep' is a soft 440 Hz beep every second, 'tone' is the same pitch held quietly for the whole video, and 'noise' is white noise. Defaults to tango.",
     },
+    textPreset: {
+      type: "string",
+      enum: [...PRESET_KEYS, "custom"],
+      description:
+        "A bundle of generators for kind=text: a lorem sentence or paragraph, a user profile, a company, a product, an address, a payment card, or an API response. 'custom' uses textCategory and textGenerator instead. Defaults to a lorem sentence.",
+    },
+    textCategory: {
+      type: "string",
+      description:
+        "Group of generators for kind=text, for example lorem, person, internet, location, company, commerce, finance or string. Only with textPreset=custom.",
+    },
+    textGenerator: {
+      type: "string",
+      description:
+        "The single generator to call for kind=text, written as category.method, for example internet.email or location.city. Only with textPreset=custom.",
+    },
+    textLocale: {
+      type: "string",
+      enum: ["en", "es"],
+      description:
+        "Which set of names, addresses and words kind=text draws on. A few generators come out the same in both: the lorem filler is latin in any language, and IBANs have no Spanish dataset, so finance.iban returns a Belgian one either way. Defaults to en.",
+    },
+    textCount: {
+      type: "integer",
+      minimum: 1,
+      maximum: 1000,
+      description: "How many rows to generate for kind=text. Defaults to 10.",
+    },
+    textFormat: {
+      type: "string",
+      enum: [...TEXT_FORMATS],
+      description:
+        "How the rows are written for kind=text. plain is one value per line with no header, json is a single object from the first row, array is one object per row, csv and md are tables with a header row. Defaults to plain.",
+    },
     download: {
       type: "boolean",
       description:
@@ -142,13 +192,31 @@ const SCHEMA = {
 } as const;
 
 const DESCRIPTION = [
-  "Generates an image or video placeholder. Give a background and the text color",
-  "is derived from it to guarantee WCAG contrast; pass foreground as well to choose",
-  "both yourself, and read the reported contrast to know how the pair came out.",
-  "The text of the placeholder is the dimensions.",
+  "Generates an image or video placeholder, or a file of fake placeholder data.",
+  "For kind=image and kind=video: give a background and the text color is derived",
+  "from it to guarantee WCAG contrast; pass foreground as well to choose both",
+  "yourself, and read the reported contrast to know how the pair came out. The",
+  "text of the placeholder is the dimensions.",
   // The list comes from the real palette, so it cannot go stale.
   `Pastel palettes available: ${palette()
     .map((p) => p.label.toLowerCase())
+    .join(", ")}.`,
+  "For kind=text: writes fake data instead of pixels, so width, height, palette,",
+  "background and foreground do not apply and are refused. Use textPreset for a",
+  "ready-made bundle such as a user profile or an API response, or textPreset=custom",
+  "with textCategory and textGenerator for one specific value.",
+  // A count is not a list: the catalog has a few hundred entries and an agent
+  // would spend its whole budget reading them. The useful ones are named here.
+  "The catalog spans person, internet, location, company, commerce, phone, date,",
+  "finance, string, color, number, word, git, system, database, vehicle, airline,",
+  "book, music, food, animal, science and lorem. Common ones:",
+  "internet.email, internet.url, person.fullName, person.jobTitle,",
+  "location.city, location.country, location.zipCode, company.name,",
+  "commerce.productName, finance.amount, string.uuid, lorem.paragraph.",
+  // Said here because it is the one thing about the output that is not what the
+  // format name suggests.
+  `The file extension follows textFormat: ${Object.values(TEXT_FORMAT_INFO)
+    .map((info) => `.${info.extension}`)
     .join(", ")}.`,
 ].join(" ");
 
@@ -177,14 +245,21 @@ export async function setupWebMcp(host: WebMcpHost): Promise<boolean> {
         const applied = host.applySettings(input);
         if (!applied.ok)
           return `Could not apply the configuration: ${applied.error}`;
+        const isText = host.describe().kind === "text";
         if (input.download === false) {
-          return `Configured without downloading: ${JSON.stringify(host.describe())}`;
+          // Text is returned either way: asking for the configuration without the
+          // file is exactly how an agent reads the data without saving it.
+          return isText
+            ? host.text()
+            : `Configured without downloading: ${JSON.stringify(host.describe())}`;
         }
         try {
-          return await host.generate();
+          await host.generate();
         } catch (err) {
           return `Generation failed: ${err instanceof Error ? err.message : String(err)}`;
         }
+        if (isText) return host.text();
+        return `Generated ${JSON.stringify(host.describe())}.`;
       },
     });
     return true;
