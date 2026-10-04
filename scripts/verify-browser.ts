@@ -168,7 +168,11 @@ try {
   check('no console errors', consoleErrors.length === 0, consoleErrors[0]?.slice(0, 160) ?? '');
 
   // ── The canvas render ──────────────────────────────────────────────
+  // On a solid background, because that is what makes "how much of the frame is
+  // not the background" mean "how much of it is text". A texture covers the
+  // whole frame and the count would be the entire canvas.
   console.log('\nrender:');
+  await evaluate<string>(`document.querySelector('input[name="background"][value="solid"]').click()`);
   const render = await evaluate<{
     bg: [number, number, number]; fg: [number, number, number];
     width: number; height: number; nonBg: number; total: number;
@@ -200,12 +204,21 @@ try {
     });
     const before = read();
     const swatches = [...document.querySelectorAll('.swatch')];
-    const last = swatches[swatches.length - 1];
+    // The custom one is the last, and clicking it opens a dialog instead of
+    // picking a palette, so this picks the last of the measured ones.
+    const measured = swatches.filter((s) => s.dataset.name !== 'custom');
+    const last = measured[measured.length - 1];
     last.click();
-    return { ...read(), before: JSON.stringify(before), count: String(swatches.length), name: last.dataset.name };
+    return {
+      ...read(),
+      before: JSON.stringify(before),
+      count: String(measured.length),
+      swatches: String(swatches.length),
+      name: last.dataset.name,
+    };
   })()`);
   const themeBefore = JSON.parse(theme.before ?? '{}') as Record<string, string>;
-  check('the grid shows the whole palette', Number(theme.count) === 9, `${theme.count} colors`);
+  check('the grid shows the whole palette plus the custom one', Number(theme.count) === 9 && Number(theme.swatches) === 10, `${theme.count} colors, ${theme.swatches} swatches`);
   check('picking another palette changes the placeholder color', theme.bg !== themeBefore.bg, `${themeBefore.bg} → ${theme.bg} (${theme.name})`);
   check('the page gets re-tinted with the palette', theme.tint !== themeBefore.tint && theme.body !== themeBefore.body, `hue ${themeBefore.tint} → ${theme.tint}°`);
   check('the panel and the accent follow the palette', theme.panel !== themeBefore.panel && theme.accent !== themeBefore.accent, theme.accent);
@@ -259,27 +272,7 @@ try {
     check(`choosing ${format} stays selected`, got === format, `stuck on ${got}`);
   }
 
-  // The preset dropdown is the other half of the same contract: it has to
-  // fill the two fields, and it has to follow them when they are typed by hand.
-  const preset = await evaluate<{ w: string; h: string; cw: number; ch: number; matched: string; custom: string; options: number }>(`(() => {
-    const s = document.querySelector('#presetSize');
-    s.value = '300x250';
-    s.dispatchEvent(new Event('change', { bubbles: true }));
-    const canvas = document.querySelector('#canvas');
-    const picked = { w: document.querySelector('#width').value, h: document.querySelector('#height').value, cw: canvas.width, ch: canvas.height };
-    const wi = document.querySelector('#width'), hi = document.querySelector('#height');
-    hi.value = '600';
-    wi.dispatchEvent(new Event('input', { bubbles: true }));
-    const matched = s.value;
-    wi.value = '301';
-    wi.dispatchEvent(new Event('input', { bubbles: true }));
-    return { ...picked, matched, custom: s.value, options: s.options.length };
-  })()`);
-  check('choosing a preset fills width and height', preset.w === '300' && preset.h === '250', `${preset.w}×${preset.h}`);
-  check('the preview takes the preset size', preset.cw === 300 && preset.ch === 250, `${preset.cw}×${preset.ch}`);
-  check('typing a size that is a preset selects it', preset.matched === '300x600', preset.matched);
-  check('a size that is not a preset falls back to Custom', preset.custom === '', `"${preset.custom}"`);
-  check('the dropdown carries every standard size', preset.options >= 15, `${preset.options} options`);
+  check('size presets are not offered', await evaluate<boolean>(`document.querySelector('#presetSize') === null`));
 
   // Pasting a size into either field has to fill both. The inputs are
   // `type="number"`, so the browser would sanitize "1629×420" into an empty
@@ -485,44 +478,84 @@ try {
     (b) => new TextDecoder('latin1').decode(b.slice(0, 4)) === 'RIFF' && new TextDecoder('latin1').decode(b.slice(8, 12)) === 'WEBP',
   );
 
-  // ── The transparent background ────────────────────────────────────
-  // The only place this can be proven: Bun has no canvas, and the difference
-  // lives in the pixels the preview leaves at alpha 0 and in the color type the
-  // PNG declares.
-  console.log('\nthe transparent background:');
-  const alpha = await evaluate<{
-    boxVisible: boolean;
-    defaultOff: boolean;
-    corner: number;
-    flag: string;
-    checker: string;
-    noteVisible: boolean;
-  }>(`(() => {
-    const pick = (f) => document.querySelector('input[name="imageFormat"][value="' + f + '"]').click();
-    const box = document.querySelector('input[name="transparent"]');
-    pick('png');
-    const boxVisible = !document.querySelector('#alphaBox').hidden;
-    const defaultOff = !box.checked;
-    box.click();
+  // ── The background control ────────────────────────────────────────
+  // The only place this can be proven: Bun has no canvas, and both halves of
+  // this live in the pixels the preview leaves on the canvas and in the pixels
+  // that reach the file.
+  console.log('\nthe background control:');
+  const bgState = await evaluate<{
+    defaultFog: boolean;
+    defaultTile: string;
+    tileAlpha: boolean;
+    transparentAlpha: number;
+    transparentFlag: string;
+    transparentChecker: string;
+    jpegOff: boolean;
+    jpegTitle: string;
+    backOn: boolean;
+    svgOff: boolean;
+    svgTitle: string;
+  }>(`(async () => {
+    const pill = (v) => document.querySelector('input[name="background"][value="' + v + '"]');
+    const format = (f) => document.querySelector('input[name="imageFormat"][value="' + f + '"]');
+    // What the page ships with, read from the markup: the live selection has
+    // already been moved around by the blocks above.
+    const defaultFog = document.querySelector('input[name="background"][value="fog"]').hasAttribute('checked');
+    // From a known start, because the formats follow the background and
+    // whatever the previous block left selected is part of what is tested here.
+    format('png').click();
+    pill('fog').click();
+    const defaultTile = pill('fog').nextElementSibling.querySelector('img').getAttribute('src') ?? '';
+    pill('transparent').click();
     const c = document.querySelector('#canvas');
     const g = c.getContext('2d');
+    const transparentAlpha = g.getImageData(0, 0, 1, 1).data[3];
+    const transparentFlag = c.dataset.transparent;
+    const transparentChecker = getComputedStyle(c).backgroundImage;
+    // A transparent background turns off the formats that cannot store it, and
+    // says which of the two reasons applies on the one that went off.
+    const jpeg = format('jpeg');
+    const jpegOff = jpeg.disabled;
+    const jpegTitle = jpeg.nextElementSibling.title;
+    pill('fog').click();
+    const backOn = !format('jpeg').disabled;
+    // The other way around: SVG is written as text, so the textures go off.
+    format('svg').click();
+    const svgOff = pill('focus').disabled;
+    const svgTitle = pill('focus').nextElementSibling.title;
+    format('png').click();
+    pill('fog').click();
     return {
-      boxVisible,
-      defaultOff,
-      corner: g.getImageData(0, 0, 1, 1).data[3],
-      flag: c.dataset.transparent,
-      checker: getComputedStyle(c).backgroundImage,
-      noteVisible: !document.querySelector('#alphaNote').hidden,
+      defaultFog, defaultTile,
+      transparentAlpha, transparentFlag, transparentChecker,
+      // The transparent tile has to carry a real image and that image has to be
+      // transparent: an img with no src shows a broken-image icon instead of
+      // letting the checkerboard through.
+      tileAlpha: await new Promise((resolve) => {
+        const img = document.querySelector('img[data-preview="transparent"]');
+        const probe = document.createElement('canvas');
+        probe.width = 1;
+        probe.height = 1;
+        const g = probe.getContext('2d');
+        g.drawImage(img, 0, 0);
+        resolve(g.getImageData(0, 0, 1, 1).data[3] === 0);
+      }),
+      jpegOff, jpegTitle, backOn, svgOff, svgTitle,
     };
   })()`);
-  check('the box is offered for PNG', alpha.boxVisible);
-  check('it is off by default', alpha.defaultOff);
+  check('the image tab starts on fog', bgState.defaultFog);
+  check('and its tile carries a rendered image', bgState.defaultTile.startsWith('data:image/png'), bgState.defaultTile.slice(0, 24));
+  check('a transparent background turns JPEG off', bgState.jpegOff);
+  check('and the pill says it is the transparency', /alpha/.test(bgState.jpegTitle), bgState.jpegTitle);
+  check('going back to a texture turns it on again', bgState.backOn);
+  check('SVG turns the textures off instead', bgState.svgOff);
+  check('and its tile says why', bgState.svgTitle.length > 0, bgState.svgTitle);
   // The corner is where the text never reaches, so anything but 0 means the
   // background was painted anyway.
-  check('the preview really leaves the corner transparent', alpha.corner === 0, `alpha ${alpha.corner}`);
-  check('the canvas is told to show the checker', alpha.flag === 'true', `data-transparent="${alpha.flag}"`);
-  check('the checkerboard is a real gradient', alpha.checker.includes('conic-gradient'), alpha.checker.slice(0, 60));
-  check('the note explains what happens to the color', alpha.noteVisible);
+  check('the preview really leaves the corner transparent', bgState.transparentAlpha === 0, `alpha ${bgState.transparentAlpha}`);
+  check('the canvas is told to show the checker', bgState.transparentFlag === 'true', `data-transparent="${bgState.transparentFlag}"`);
+  check('the checkerboard is a real gradient', bgState.transparentChecker.includes('conic-gradient'), bgState.transparentChecker.slice(0, 60));
+  check('and the transparent tile shows it too', bgState.tileAlpha);
 
   // The IHDR color type is the fact: 6 is truecolor with alpha, 2 is
   // truecolor without it. It sits after the 8-byte signature, the 4-byte
@@ -533,8 +566,7 @@ try {
     'PNG with a real alpha channel when the background is transparent',
     `document.querySelector('input[name="imageFormat"][value="png"]').click();
      const w = document.querySelector('#width'); w.value = '321'; w.dispatchEvent(new Event('input', { bubbles: true }));
-     const c = document.querySelector('input[name="transparent"]');
-     c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true }));`,
+     document.querySelector('input[name="background"][value="transparent"]').click();`,
     (b) => new TextDecoder('latin1').decode(b.slice(12, 16)) === 'IHDR' && b[25] === 6,
   );
 
@@ -548,26 +580,353 @@ try {
     },
   );
 
-  // A format that cannot store alpha has to ignore the box, which is still
-  // ticked: the file must not come out with a background nobody chose.
-  const forced = await evaluate<{ boxVisible: boolean; corner: number; flag: string }>(`(() => {
-    document.querySelector('input[name="imageFormat"][value="jpeg"]').click();
+  // Being on a format that cannot store alpha and asking for a transparent
+  // background has to land somewhere real: the format moves to one that can,
+  // instead of the choice being dropped or a file coming out opaque.
+  const forced = await evaluate<{ from: string; moved: string; corner: number; flag: string; jpegOff: boolean }>(`(() => {
+    const format = (f) => document.querySelector('input[name="imageFormat"][value="' + f + '"]');
+    const pill = (v) => document.querySelector('input[name="background"][value="' + v + '"]');
+    // A known start, and the order matters: the previous block left a transparent
+    // background on SVG, which has every texture turned off, and a disabled
+    // radio cannot be clicked at all. PNG can carry the alpha, so it comes
+    // first and lets the texture be picked again.
+    format('png').click();
+    pill('fog').click();
+    // Now a format that cannot carry alpha, with a texture over it, so asking
+    // for transparency is the only thing that can move the format.
+    format('jpeg').click();
+    const from = [...document.querySelectorAll('input[name="imageFormat"]')].find((i) => i.checked).value;
+    pill('transparent').click();
     const c = document.querySelector('#canvas');
     return {
-      boxVisible: !document.querySelector('#alphaBox').hidden,
+      from,
+      moved: [...document.querySelectorAll('input[name="imageFormat"]')].find((i) => i.checked).value,
       corner: c.getContext('2d').getImageData(0, 0, 1, 1).data[3],
       flag: c.dataset.transparent,
+      jpegOff: format('jpeg').disabled,
     };
   })()`);
-  check('JPEG hides the box', !forced.boxVisible);
-  check('and exports an opaque background anyway', forced.corner === 255 && forced.flag === 'false', `alpha ${forced.corner}, flag ${forced.flag}`);
+  check('it really started on a format with no alpha channel', forced.from === 'jpeg', forced.from);
+  check('asking for transparency moves it to one that has it', forced.moved === 'png', forced.moved);
+  check('and JPEG stays off while the background needs an alpha channel', forced.jpegOff);
+  check('the corner really is transparent', forced.corner === 0 && forced.flag === 'true', `alpha ${forced.corner}`);
 
-  // Back to PNG the choice is still there: the box was never unchecked.
-  const restored = await evaluate<string>(`(() => {
-    document.querySelector('input[name="imageFormat"][value="png"]').click();
-    return document.querySelector('input[name="transparent"]').checked ? 'kept' : 'cleared';
+  // Leaving the transparent background gives the formats back.
+  const restored = await evaluate<{ background: string; jpegOn: boolean; pngOn: boolean }>(`(() => {
+    document.querySelector('input[name="background"][value="fog"]').click();
+    const format = (f) => document.querySelector('input[name="imageFormat"][value="' + f + '"]');
+    return {
+      background: [...document.querySelectorAll('input[name="background"]')].find((i) => i.checked).value,
+      jpegOn: !format('jpeg').disabled,
+      pngOn: !format('png').disabled,
+    };
   })()`);
-  check('going back to PNG restores the choice', restored === 'kept', restored);
+  check(
+    'leaving the transparent background gives every format back',
+    restored.background === 'fog' && restored.jpegOn && restored.pngOn,
+    `${restored.background}, jpeg on ${restored.jpegOn}, png on ${restored.pngOn}`,
+  );
+
+  console.log('\nthe textured background:');
+  const texture = await evaluate<{
+    changed: boolean;
+    solid: number[];
+    painted: number[];
+    svg: number[];
+    meta: string;
+    tiles: number;
+    tilesPainted: number;
+    tileChecker: boolean;
+    svgDisabled: boolean;
+    svgTitle: string;
+  }>(`(() => {
+    const pill = (v) => document.querySelector('input[name="background"][value="' + v + '"]');
+    const corner = () => [...document.querySelector('#canvas').getContext('2d').getImageData(0, 0, 1, 1).data];
+    const tiles = [...document.querySelectorAll('img[data-preview]')];
+    // A tile is a PNG the app painted, so it is not a flat color: a real render
+    // of a texture has more than one value in it.
+    const texturedTiles = ['mix', 'fog', 'focus', 'rise'].filter((v) => {
+      const src = document.querySelector('img[data-preview="' + v + '"]').getAttribute('src') ?? '';
+      return src.startsWith('data:image/png') && src.length > 2000;
+    });
+    pill('solid').click();
+    const solid = corner();
+    pill('mix').click();
+    const painted = corner();
+    const meta = document.querySelector('#metaLine').textContent;
+    const transparentTile = document.querySelector('img[data-preview="transparent"]');
+    const tileChecker = getComputedStyle(transparentTile).backgroundImage.includes('conic-gradient');
+    // SVG cannot carry it: the tile is disabled and the render stays flat.
+    document.querySelector('input[name="imageFormat"][value="svg"]').click();
+    const svgDisabled = [...document.querySelectorAll('input[name="background"][data-texture]')].every((p) => p.disabled);
+    const svgTitle = pill('mix').nextElementSibling.title;
+    const svg = corner();
+    document.querySelector('input[name="imageFormat"][value="png"]').click();
+    return {
+      changed: String(painted) !== String(solid),
+      solid, painted, svg, meta,
+      tiles: tiles.length,
+      tilesPainted: texturedTiles.length,
+      tileChecker,
+      svgDisabled,
+      svgTitle,
+    };
+  })()`);
+  check('a texture really paints over the flat color', texture.changed, `flat ${texture.solid.join()} vs ${texture.painted.join()}`);
+  check('the meta line says which background the file has', /bokeh/i.test(texture.meta), texture.meta);
+  check('every background has a tile', texture.tiles === 6, `${texture.tiles} tiles`);
+  check('and the four textures are rendered on them', texture.tilesPainted === 4, `${texture.tilesPainted} painted`);
+  check('the transparent tile shows the checkerboard', texture.tileChecker);
+  check('SVG does not offer the textures', texture.svgDisabled);
+  check('and the tile says why instead of pretending', texture.svgTitle.length > 0, texture.svgTitle);
+  check('picking one and then choosing SVG exports the flat color', String(texture.svg) === String(texture.solid), `${texture.svg.join()} vs ${texture.solid.join()}`);
+
+  // The custom swatch is the way out of the palette, and it is the one tile that
+  // changes with what the person does: a measured pair under the palette icon
+  // until a color of their own is picked, then that color and no icon.
+  const custom = await evaluate<{
+    isLast: boolean;
+    isButton: boolean;
+    iconAtStart: boolean;
+    offered: string;
+    iconAfterPick: boolean;
+    isOwnColor: boolean;
+    pressedAfterPick: string | null;
+    pressedAfterPalette: string | null;
+    openedPicker: boolean;
+    pickedValue: string;
+    contrastStillMeasured: string;
+  }>(`(async () => {
+    const swatches = [...document.querySelectorAll('.swatch')];
+    const btn = document.querySelector('.swatch.custom');
+    const icon = btn.querySelector('svg');
+    const bg = document.querySelector('#bg');
+    // The picker is a native dialog: it cannot be opened from here, so what it
+    // does instead of opening is watched, and the fallback is what makes the
+    // test pass rather than the dialog appearing.
+    let openedPicker = false;
+    bg.showPicker = () => { openedPicker = true; };
+    const iconAtStart = !icon.hasAttribute('hidden');
+    const offered = btn.style.background;
+    btn.click();
+    bg.value = '#3366AA';
+    bg.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    return {
+      isLast: swatches.at(-1) === btn,
+      isButton: btn.tagName === 'BUTTON',
+      iconAtStart,
+      offered,
+      iconAfterPick: !icon.hasAttribute('hidden'),
+      // The picker dropped the palette, which is how the swatch knows the color
+      // is one of their own.
+      isOwnColor: btn.style.background !== offered,
+      pressedAfterPick: btn.getAttribute('aria-pressed'),
+      // Read before going back to a palette, because that changes the field.
+      pickedValue: bg.value.toUpperCase(),
+      pressedAfterPalette: (() => {
+        const measured = swatches.filter((s) => s.dataset.name !== 'custom');
+        measured[measured.length - 1].click();
+        return btn.getAttribute('aria-pressed');
+      })(),
+      openedPicker,
+      // The derived text color and the ratio keep working with the fields off
+      // the screen: they are what the whole app reads.
+      contrastStillMeasured: document.querySelector('#ratio').textContent,
+    };
+  })()`);
+  check('the custom swatch is the last of the row', custom.isLast);
+  check('and a button, so the keyboard can reach it', custom.isButton);
+  check('it shows the palette icon until a color is picked', custom.iconAtStart);
+  check('over a pair nobody has chosen yet', custom.offered.startsWith('linear-gradient'), custom.offered.slice(0, 40));
+  check('clicking it opens the color picker', custom.openedPicker);
+  check('and a color of its own takes the icon away', !custom.iconAfterPick && custom.isOwnColor);
+  check('the swatch is the pressed one while it is a custom color', custom.pressedAfterPick === 'true', custom.pressedAfterPick ?? '');
+  check('and goes back to pressed=false on a palette', custom.pressedAfterPalette === 'false', custom.pressedAfterPalette ?? '');
+  check('the picked color reaches the field the app reads', custom.pickedValue === '#3366AA', custom.pickedValue);
+  check('and the contrast is still measured off the screen', /:/.test(custom.contrastStillMeasured), custom.contrastStillMeasured);
+
+  // The metadata of the file is the last place a texture can be proven to exist:
+  // the pixels are the same either way on a still image. The PNG carries it as
+  // an `iTXt` keyword, so the keyword is what the file has to contain.
+  await exportAndCheck(
+    'PNG with a texture, recorded in its metadata',
+    `document.querySelector('input[name="background"][value="mix"]').click();
+     const w = document.querySelector('#width'); w.value = '323'; w.dispatchEvent(new Event('input', { bubbles: true }));`,
+    (b) => new TextDecoder('latin1').decode(b).includes('ElCoso3000:Texture'),
+  );
+
+  // Each tab has its own background, and switching does not throw it away.
+  const backgroundTabs = await evaluate<{ videoDefault: string; imageKept: string; videoKept: string }>(`(() => {
+    const pill = (v) => document.querySelector('input[name="background"][value="' + v + '"]');
+    const picked = () => ['solid', 'transparent', 'mix', 'fog', 'focus', 'rise']
+      .find((v) => pill(v).checked) ?? 'none';
+    document.querySelector('input[name="kind"][value="video"]').click();
+    const videoDefault = picked();
+    pill('rise').click();
+    document.querySelector('input[name="kind"][value="image"]').click();
+    const imageKept = picked();
+    document.querySelector('input[name="kind"][value="video"]').click();
+    const videoKept = picked();
+    return { videoDefault, imageKept, videoKept };
+  })()`);
+  check('the video tab starts on bokeh', backgroundTabs.videoDefault === 'mix', backgroundTabs.videoDefault);
+  check('the image tab keeps its own choice', backgroundTabs.imageKept === 'mix', backgroundTabs.imageKept);
+  check('and so does the video one', backgroundTabs.videoKept === 'rise', backgroundTabs.videoKept);
+
+  // The texture has to move, or a video with one is a still image with extra
+  // steps. Two frames apart is enough to prove it, and the preview is the only
+  // place a frame of a video is visible.
+  const moving = await evaluate<{ changed: boolean }>(`(async () => {
+    const c = document.querySelector('#canvas');
+    const g = c.getContext('2d');
+    const frame = () => g.getImageData(0, 0, c.width, c.height).data.join();
+    const set = (id, v) => { const e = document.querySelector(id); e.value = String(v); e.dispatchEvent(new Event('input', { bubbles: true })); };
+    set('#duration', 5); set('#fps', 15);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const before = frame();
+    await new Promise((r) => setTimeout(r, 350));
+    return { changed: frame() !== before };
+  })()`);
+  check('the preview of a video moves', moving.changed);
+
+  // The speed is the one control that can only be checked by watching: the same
+  // frame has to be reached sooner at 3x than at 1x, or it is a label.
+  const speed = await evaluate<{
+    options: string[];
+    default: string;
+    hiddenForImage: boolean;
+    hiddenForFlat: boolean;
+    titleForFlat: string;
+    hiddenForSingleFrame: boolean;
+    movesAt1: boolean;
+    movesAt3: boolean;
+    heldWithBoxOff: boolean;
+    selectOffWithoutBox: boolean;
+    moveDefault: boolean;
+    moveDisabledForFlat: boolean;
+    nextToSound: boolean;
+  }>(`(async () => {
+    const set = (id, v) => { const e = document.querySelector(id); e.value = String(v); e.dispatchEvent(new Event('input', { bubbles: true })); };
+    const pick = (v) => document.querySelector('input[name="background"][value="' + v + '"]').click();
+    const select = document.querySelector('#textureSpeed');
+    const move = document.querySelector('input[name="textureMove"]');
+    const field = document.querySelector('#textureSpeedField');
+    const c = document.querySelector('#canvas');
+    const g = c.getContext('2d');
+    // A corner patch, and not the whole frame: the progress bar and the clock
+    // keep moving at 0x too, so reading everything would prove nothing about the
+    // background. The corner has nothing on it but background.
+    const patch = () => g.getImageData(0, 0, 24, 24).data.join();
+    // Two reads of the same speed, far enough apart for the animation to have
+    // gone somewhere. A speed that moves changes; one that holds does not.
+    const driftOver = async (v) => {
+      select.value = v;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      set('#duration', 5); set('#fps', 15);
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const before = patch();
+      await new Promise((r) => setTimeout(r, 400));
+      return before !== patch();
+    };
+    // Unchecking the movement box is a speed of 0: the same background, painted
+    // and held. It is the other way to say it, and the two have to agree.
+    const driftWithMovementOff = async () => {
+      move.click();
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const before = patch();
+      await new Promise((r) => setTimeout(r, 400));
+      const still = before === patch();
+      move.click();
+      return still;
+    };
+    // It sits right under the sound picker and shares its two-column shape.
+    const nextToSound = field.previousElementSibling?.classList.contains('sound') === true
+      && field.classList.contains('sound');
+    const options = [...select.options].map((o) => o.value);
+    const fallback = select.value;
+    const moveDefault = move.checked;
+    document.querySelector('input[name="kind"][value="video"]').click();
+    pick('focus');
+    set('#duration', 5); set('#fps', 15);
+    const movesAt1 = await driftOver('1');
+    const movesAt3 = await driftOver('3');
+    const heldWithBoxOff = await driftWithMovementOff();
+    const selectOffWithoutBox = (() => {
+      move.click();
+      const off = select.disabled;
+      move.click();
+      return off;
+    })();
+    document.querySelector('input[name="kind"][value="image"]').click();
+    const hiddenForImage = field.hidden;
+    document.querySelector('input[name="kind"][value="video"]').click();
+    pick('solid');
+    const hiddenForFlat = field.hidden;
+    const titleForFlat = select.title;
+    const moveDisabledForFlat = move.disabled;
+    pick('rise');
+    set('#fps', 1); set('#duration', 1);
+    const hiddenForSingleFrame = field.hidden;
+    return {
+      options, default: fallback, hiddenForImage, hiddenForFlat,
+      titleForFlat, hiddenForSingleFrame, nextToSound, moveDefault,
+      moveDisabledForFlat, heldWithBoxOff, selectOffWithoutBox,
+      movesAt1, movesAt3,
+    };
+  })()`);
+  check('it sits under Include sound, in the same two-column shape', speed.nextToSound);
+  check('it offers 1, 1.5, 2, 2.5 and 3', speed.options.join() === '1,1.5,2,2.5,3', speed.options.join());
+  check('and asks for 2', speed.default === '2', speed.default);
+  check('the movement box is on by default', speed.moveDefault);
+  check('the image tab has no speed to pick', speed.hiddenForImage);
+  check('nor has a flat background', speed.hiddenForFlat);
+  check('and it says why instead of showing a dead control', speed.titleForFlat.length > 0, speed.titleForFlat);
+  check('and the movement box goes off with it', speed.moveDisabledForFlat);
+  check('nor has a single-frame output', speed.hiddenForSingleFrame);
+  check('1x moves the background', speed.movesAt1);
+  check('and so does 3x', speed.movesAt3);
+  check('unchecking the movement box holds it still', speed.heldWithBoxOff);
+  check('and takes the speed picker out of reach while it is off', speed.selectOffWithoutBox);
+
+  // The file has to carry the speed it was made at, or two videos that differ
+  // only in it are indistinguishable afterwards.
+  await exportAndCheck(
+    'GIF at 3x, recorded in its metadata',
+    `document.querySelector('input[name="kind"][value="video"]').click();
+     document.querySelector('input[name="videoFormat"][value="gif"]').click();
+     const set = (id, v) => { const e = document.querySelector(id); e.value = String(v); e.dispatchEvent(new Event('input', { bubbles: true })); };
+     set('#duration', 1); set('#fps', 4);
+     document.querySelector('input[name="background"][value="rise"]').click();
+     const s = document.querySelector('#textureSpeed');
+     s.value = '3'; s.dispatchEvent(new Event('change', { bubbles: true }));`,
+    // The GIF carries the whole block as text in its comment, so the line is
+    // what the file has to contain. The PNG above carries the same fact as an
+    // `iTXt` keyword.
+    (b) => new TextDecoder('latin1').decode(b).includes('El Coso 3000 Texture Speed: 3x'),
+  );
+
+  // And it has to stay cheap enough to keep moving. The orbs are composed on a
+  // small offscreen and the grain is one pattern fill, so a full-HD frame should
+  // cost a few milliseconds. The budget is deliberately loose: it is here to
+  // catch a texture that went quadratic, not to police the last millisecond.
+  const perf = await evaluate<{ ms: number; frames: number }>(`(() => {
+    const set = (id, v) => { const e = document.querySelector(id); e.value = String(v); e.dispatchEvent(new Event('input', { bubbles: true })); };
+    document.querySelector('input[name="kind"][value="image"]').click();
+    document.querySelector('input[name="background"][value="fog"]').click();
+    set('#width', 1920); set('#height', 1080);
+    const field = document.querySelector('#duration');
+    field.dispatchEvent(new Event('input', { bubbles: true })); // warm-up frame
+    const frames = 5;
+    const t0 = performance.now();
+    for (let i = 0; i < frames; i++) field.dispatchEvent(new Event('input', { bubbles: true }));
+    return { ms: (performance.now() - t0) / frames, frames };
+  })()`);
+  check(
+    'a textured 1920x1080 frame is drawn in a few milliseconds',
+    perf.ms < 120,
+    `${perf.ms.toFixed(1)} ms/frame`,
+  );
 
   const pickTimeline = (f: string) => `
     document.querySelector('input[name="kind"][value="video"]').click();

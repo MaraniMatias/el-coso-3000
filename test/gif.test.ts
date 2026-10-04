@@ -11,7 +11,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import { buildMetadata, metadataAsText } from '../src/core/metadata';
-import type { Spec } from '../src/core/types';
+import { DEFAULT_TEXTURE_SPEED, type Spec } from '../src/core/types';
 import { writeGifFrame, writeGifHeader, writeGifTrailer, type GifHeader } from '../src/encoders/gif';
 import { ByteWriter, lzwCompress } from '../src/encoders/lzw';
 import { buildPalette, createPaletteMapper } from '../src/encoders/quantize';
@@ -312,6 +312,8 @@ const SPEC: Spec = {
   height: 2,
   bg: 'FFE4E4',
   fg: '333333',
+  texture: 'none',
+  textureSpeed: DEFAULT_TEXTURE_SPEED,
   paletteName: 'rose',
   duration: 1,
   fps: 30,

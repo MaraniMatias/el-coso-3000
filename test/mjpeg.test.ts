@@ -12,7 +12,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { buildMetadata, metadataAsText } from '../src/core/metadata';
-import { AUTHOR, REPO_URL, type Spec } from '../src/core/types';
+import { AUTHOR, DEFAULT_TEXTURE_SPEED, REPO_URL, type Spec } from '../src/core/types';
 import { crc32 } from '../src/encoders/image';
 import { buildJpegZip, buildMjpegAvi, type JpegZipEntry } from '../src/encoders/mjpeg';
 
@@ -55,6 +55,8 @@ const SAMPLE: Spec = {
   height: 360,
   bg: 'FFE4E4',
   fg: '3A2E2E',
+  texture: 'none',
+  textureSpeed: DEFAULT_TEXTURE_SPEED,
   paletteName: 'rose',
   duration: 2,
   fps: 24,

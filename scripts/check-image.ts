@@ -23,7 +23,7 @@ import {
   pngXmpChunk,
 } from '../src/encoders/image';
 import { FONT_DATA_URL, FONT_FACE_CSS } from '../src/core/font';
-import { FONT_FAMILY, FONT_WEIGHT, type Spec } from '../src/core/types';
+import { DEFAULT_TEXTURE_SPEED, FONT_FAMILY, FONT_WEIGHT, type Spec } from '../src/core/types';
 import { buildMetadata, metadataAsPairs, metadataAsText, metadataAsXmp } from '../src/core/metadata';
 import { frameGeometry, timecode } from '../src/core/draw-frame';
 import { dimensionCandidates, layoutDimensions, layoutLine, paddingFor } from '../src/core/fit-text';
@@ -61,6 +61,8 @@ const spec = (over: Partial<Spec> = {}): Spec => ({
   showProgressBar: false,
   showTime: false,
   transparent: false,
+  texture: 'none',
+  textureSpeed: DEFAULT_TEXTURE_SPEED,
   quality: 0.92,
   ...over,
 });
@@ -784,6 +786,42 @@ section('SVG: a transparent background is the absence of the background rect');
     'the metadata still records the background color the text was derived from',
   );
 }
+
+// ── The texture ───────────────────────────────────────────────────────────
+// The SVG is written as text and stays flat: a texture is painted with a
+// canvas, and this file cannot. What it can do is say so honestly — nowhere in
+// the drawing — and record what was asked for in the metadata.
+section('SVG: a texture is not drawn');
+const textured = spec({ texture: 'focus' });
+const texturedSvg = buildSvg(textured, measure);
+const flatSvg = buildSvg(spec(), measure);
+const strip = (svg: string) => svg.replace(/<metadata>[\s\S]*?<\/metadata>/, '');
+check(
+  strip(texturedSvg) === strip(flatSvg),
+  'a textured spec produces exactly the flat SVG',
+);
+check(!/<circle|<radialGradient|<filter/.test(texturedSvg), 'and no shape of the texture leaked in');
+check(xmlProblem(texturedSvg) === null, 'it is still valid XML', String(xmlProblem(texturedSvg)));
+check(
+  unescapeXml(/<metadata>([\s\S]*?)<\/metadata>/.exec(texturedSvg)?.[1] ?? '').includes('Texture: focus'),
+  'the metadata still records which texture was asked for',
+);
+check(
+  !/Texture:/.test(unescapeXml(/<metadata>([\s\S]*?)<\/metadata>/.exec(flatSvg)?.[1] ?? '')),
+  'and a flat file has no texture to record',
+);
+
+// The speed is a property of the animation, so it is only a fact about a file
+// that has frames to animate. A still image is the same picture at any speed.
+const speedStill = buildSvg(textured, measure);
+const speedVideo = buildSvg({ ...textured, duration: 5, fps: 15, textureSpeed: 3 }, measure);
+const block = (svg: string) => unescapeXml(/<metadata>([\s\S]*?)<\/metadata>/.exec(svg)?.[1] ?? '');
+check(!block(speedStill).includes('Texture Speed'), 'a still image records no speed');
+check(block(speedVideo).includes('Texture Speed: 3x'), 'an animated one does', block(speedVideo));
+check(
+  block(speedStill) === block(buildSvg(textured, measure)),
+  'and the speed does not reach the drawing of a still image',
+);
 
 console.log(failures === 0 ? '\n✔ image encoder OK' : `\n✘ ${failures} failure(s)`);
 process.exit(failures === 0 ? 0 : 1);

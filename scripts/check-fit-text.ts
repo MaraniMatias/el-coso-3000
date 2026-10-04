@@ -9,7 +9,7 @@
  */
 import { ABSOLUTE_FLOOR, DIMENSION_FONT_RATIO, layoutDimensions, layoutLine, paddingFor, MAX_BLOCK_H, MAX_BLOCK_W } from '../src/core/fit-text';
 import { frameGeometry } from '../src/core/draw-frame';
-import type { Spec } from '../src/core/types';
+import { DEFAULT_TEXTURE_SPEED, type Spec } from '../src/core/types';
 
 const ADVANCE = 0.58; // average width per character, in em
 const SPACE = 0.28;
@@ -52,6 +52,8 @@ function spec(w: number, h: number): Spec {
     height: h,
     bg: 'F2DEE2',
     fg: '962C41',
+    texture: 'none',
+    textureSpeed: DEFAULT_TEXTURE_SPEED,
     paletteName: 'rose',
     duration: 5,
     fps: 15,

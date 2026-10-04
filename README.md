@@ -37,9 +37,26 @@ Not random. Nine pre-measured pairs with **WCAG AA** contrast (≥ 4.5:1):
 | violet | `#EDE9FE` | `#5B21B6` | 7.57:1 |
 | rose | `#FCE7F3` | `#9D174D` | 6.71:1 |
 
-If you pick a custom background color, the text color is computed automatically to keep contrast. The text field is read-only on purpose.
+Pick one of the nine swatches, or the last one to bring up the color picker for a color of your own: the text color is then computed from it to keep the contrast, and it is never edited by hand.
 
-A **Random** button only picks already verified combinations.
+### Textured backgrounds
+
+The background can also be one of four animated textures, drawn with the two colors you picked:
+
+| Texture | What it is |
+|---------|------------|
+| Bokeh + grain | Blurred spheres over soft blobs, with film grain. The default for video. |
+| Fog | Huge very slow blobs, with heavier film grain. The default for images. |
+| Center focus | A clean light center with a vignette in the text color. |
+| Rise | Blurred spheres that come up from the bottom and fade out. |
+
+They are painted on the canvas, so they are baked into the file: PNG, JPEG, WebP, GIF, the JPEG sequences and every video container all carry the animation. **SVG stays flat** — it is written as text, and it says so instead of pretending.
+
+The last swatch of the color row opens the color picker and then shows whatever color came out of it, so a color of your own is one click from the palette. Until you pick one it offers a measured pair with the palette icon on it.
+
+On a video you can pick how fast they move: **1× to 3×**, 2× by default, as a multiple of the timing in the [`docs/`](docs/) demo they come from. Unchecking **Texture movement** holds the first frame for the whole clip — a texture that is painted and never moves, which is a speed of 0. The control only appears when there is something to move: an animated texture, on a format with more than one frame. A still image is the same picture at any speed.
+
+Two consequences worth knowing: the loop of a video is not seamless, and the grain is expensive for a still compressor, so a textured PNG is much larger than a flat one.
 
 ### File names
 

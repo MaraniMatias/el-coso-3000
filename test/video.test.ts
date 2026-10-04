@@ -14,7 +14,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import { filenameForSpec, mimeFor } from '../src/core/filename';
-import { APP_NAME, AUTHOR, REPO_URL, VIDEO_FORMATS, VIDEO_TONES, type Spec } from '../src/core/types';
+import { APP_NAME, AUTHOR, DEFAULT_TEXTURE_SPEED, REPO_URL, VIDEO_FORMATS, VIDEO_TONES, type Spec } from '../src/core/types';
 import {
   MAX_TOTAL_FRAMES,
   MAX_VIDEO_DIMENSION,
@@ -48,6 +48,8 @@ const spec = (over: Partial<Spec> = {}): Spec => ({
   showProgressBar: true,
   showTime: true,
   transparent: false,
+  texture: 'none',
+  textureSpeed: DEFAULT_TEXTURE_SPEED,
   quality: 0.92,
   ...over,
 });

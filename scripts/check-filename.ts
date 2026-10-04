@@ -8,7 +8,7 @@
  * zero duration that looks like a misconfigured video.
  */
 import { buildFilename, filenameForSpec, evenDimensions, trimNumber, mimeFor } from '../src/core/filename';
-import type { Spec } from '../src/core/types';
+import { DEFAULT_TEXTURE_SPEED, type Spec } from '../src/core/types';
 
 let fails = 0;
 const check = (name: string, ok: boolean, detail = ''): void => {
@@ -24,6 +24,8 @@ function spec(over: Partial<Spec> = {}): Spec {
     height: 1080,
     bg: 'F2DEE2',
     fg: '962C41',
+    texture: 'none',
+    textureSpeed: DEFAULT_TEXTURE_SPEED,
     paletteName: 'rose',
     duration: 0,
     fps: 15,

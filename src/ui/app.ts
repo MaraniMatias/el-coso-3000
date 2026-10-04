@@ -5,9 +5,11 @@ import {
   hexToRgb,
   normalizeHex,
   palette,
+  randomPalette,
   rgbToHsl,
 } from "../core/color";
 import { drawFrame } from "../core/draw-frame";
+import { paintTexture } from "../core/texture";
 import { downloadBlob } from "../core/download";
 import { evenDimensions } from "../core/filename";
 import { ensureFontLoaded } from "../core/font";
@@ -24,7 +26,19 @@ import type {
   VideoFormat,
   VideoTone,
 } from "../core/types";
-import { DEFAULT_VIDEO_TONE, supportsAlpha, VIDEO_TONES } from "../core/types";
+import {
+  DEFAULT_IMAGE_TEXTURE,
+  DEFAULT_TEXTURE_SPEED,
+  DEFAULT_VIDEO_TEXTURE,
+  DEFAULT_VIDEO_TONE,
+  supportsAlpha,
+  supportsTexture,
+  TEXTURES,
+  TEXTURE_SPEEDS,
+  VIDEO_TONES,
+  type Texture,
+  type TextureSpeed,
+} from "../core/types";
 import { setupWebMcp, webmcpStatusText } from "./webmcp";
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string): T => {
@@ -49,6 +63,30 @@ const ctx2d: CanvasRenderingContext2D = (() => {
 let selectedPalette: PaletteEntry | null = null;
 let abortController: AbortController | null = null;
 let previewAnimation = 0;
+
+/**
+ * What each tab chose for the background, so switching tabs does not throw the
+ * choice away: the image tab keeps the background it started with while the
+ * video one keeps its own.
+ *
+ * An image gets `fog`, which is soft enough to stay behind the dimensions. A
+ * video gets `mix`, which is the liveliest of the four and has the grain to
+ * make the movement read on a small frame.
+ */
+const BACKGROUND_BY_KIND = new Map<'image' | 'video', string>([
+  ['image', DEFAULT_IMAGE_TEXTURE],
+  ['video', DEFAULT_VIDEO_TEXTURE],
+]);
+
+/** Names of the background kinds. The first two are the flat ones. */
+const BACKGROUND_LABEL: Record<string, string> = {
+  solid: 'Solid',
+  transparent: 'Transparent',
+  mix: 'Bokeh + grain',
+  fog: 'Fog',
+  focus: 'Center focus',
+  rise: 'Rise',
+};
 
 /** Image formats that carry a timeline of their own, now offered in the video tab. */
 const ANIMATED_IMAGE_FORMATS: ReadonlySet<ImageFormat> = new Set<ImageFormat>([
@@ -111,6 +149,24 @@ function checked(name: string): boolean {
   return el instanceof HTMLInputElement && el.checked;
 }
 
+/**
+ * The kind of background the form asks for.
+ *
+ * It is a single radio group with the two flat backgrounds and the four
+ * textures in it, because they answer the same question: what is behind the
+ * text. Splitting them would have made the user cross two controls for one
+ * decision.
+ */
+function selectedBackground(): string {
+  return str('background', BACKGROUND_BY_KIND.get(currentKind()) ?? 'solid');
+}
+
+/** The texture that kind means. Both flat backgrounds are `none`. */
+function selectedTexture(): Texture {
+  const value = selectedBackground();
+  return TEXTURES.includes(value as Texture) ? (value as Texture) : 'none';
+}
+
 function currentKind(): "image" | "video" {
   return str("kind", "image") === "video" ? "video" : "image";
 }
@@ -128,6 +184,14 @@ function selectedTone(): VideoTone {
   return VIDEO_TONES.includes(value as VideoTone)
     ? (value as VideoTone)
     : DEFAULT_VIDEO_TONE;
+}
+
+/** How fast the background moves, defaulting to the one the app asks for. */
+function selectedTextureSpeed(): TextureSpeed {
+  const value = Number.parseFloat(str("textureSpeed", String(DEFAULT_TEXTURE_SPEED)));
+  return TEXTURE_SPEEDS.includes(value as TextureSpeed)
+    ? (value as TextureSpeed)
+    : DEFAULT_TEXTURE_SPEED;
 }
 
 function readSpec(): Spec {
@@ -149,10 +213,22 @@ function readSpec(): Spec {
     // Sound is an extra that has to be turned on, and only the video
     // containers can take it.
     tone: timed && checked("sound") ? selectedTone() : undefined,
-    // Formats that cannot store alpha never get it, whatever the box says. The
-    // box stays checked so going back to PNG restores the choice, but the spec
-    // is what the encoders read.
-    transparent: checked("transparent") && supportsAlpha(currentFormat()),
+    // Formats that cannot store alpha never get it, whatever is selected. The
+    // radio stays on Transparent so going back to PNG restores the choice, but
+    // the spec is what the encoders read.
+    transparent:
+      selectedBackground() === "transparent" && supportsAlpha(currentFormat()),
+    // A texture paints every pixel, so it is only offered where the file is
+    // drawn: the SVG is written as text and stays flat.
+    texture: supportsTexture(currentFormat()) ? selectedTexture() : "none",
+    // A single frame is the same picture at every speed, so the value only
+    // travels with an output that has more than one. Unchecked movement is a
+    // speed of 0: painted, and held still.
+    textureSpeed: !timed
+      ? DEFAULT_TEXTURE_SPEED
+      : checked("textureMove")
+        ? selectedTextureSpeed()
+        : 0,
     quality,
   };
 }
@@ -180,6 +256,22 @@ function refreshContrast(): void {
   }[result.level];
 }
 
+/**
+ * Opens the color picker on the background field.
+ *
+ * `showPicker` is the way to open it without a click landing on the input, and
+ * it refuses to run without a gesture of the person's own. A click is the older
+ * path to the same dialog and works everywhere, so it is the fallback.
+ */
+function openBackgroundPicker(): void {
+  const input = $<HTMLInputElement>("#bg");
+  try {
+    input.showPicker();
+  } catch {
+    input.click();
+  }
+}
+
 function applyColors(bg: string, entry: PaletteEntry | null): void {
   const clean = normalizeHex(bg);
   // A palette swatch carries the text that was measured with it, so it is used
@@ -190,14 +282,28 @@ function applyColors(bg: string, entry: PaletteEntry | null): void {
   $<HTMLInputElement>("#bg").value = `#${clean}`;
   // The text is never picked by hand: it comes from the background or from the
   // pair of the swatch. That is the whole legibility guarantee of the app,
-  // which is why the input is readonly.
+  // which is why the input is never editable.
   $<HTMLInputElement>("#fg").value = `#${fg}`;
   applyPageTheme(clean);
   selectedPalette = entry;
+  // The custom swatch is the one that is not part of the palette, so it is the
+  // pressed one exactly when no palette is.
+  const pressed = entry === null ? "custom" : entry.name;
   for (const btn of document.querySelectorAll<HTMLButtonElement>(".swatch")) {
-    btn.setAttribute("aria-pressed", String(entry?.name === btn.dataset.name));
+    btn.setAttribute("aria-pressed", String(btn.dataset.name === pressed));
+  }
+  // Until a color of their own exists, the custom swatch offers a measured pair
+  // nobody asked for. Once one does, it is that color and the icon steps aside.
+  const custom = document.querySelector<HTMLButtonElement>(".swatch.custom");
+  if (custom) {
+    const shown =
+      entry === null ? { bg: clean, fg } : { bg: customTileColor.bg, fg: customTileColor.fg };
+    custom.style.background = swatchGradient(shown.bg, shown.fg);
+    custom.querySelector("svg")?.toggleAttribute("hidden", entry === null);
   }
   refreshContrast();
+  // The tiles are examples of these two colors, so they follow them.
+  renderBackgroundTiles();
   renderPreview();
 }
 
@@ -279,6 +385,10 @@ function updateMetaLine(spec: Spec): void {
   // The checkerboard alone can read as a texture, so the state is also said in
   // words.
   if (spec.transparent) parts.push("transparent background");
+  // The texture the file really has, which is not the one picked when the format
+  // cannot carry it.
+  if (spec.texture !== "none")
+    parts.push(`background ${BACKGROUND_LABEL[spec.texture]?.toLowerCase() ?? spec.texture}`);
   $("#metaLine").textContent = parts.join(" · ");
 }
 
@@ -305,6 +415,54 @@ function animatePreview(): void {
 
 // ── Palette ───────────────────────────────────────────────────────────
 
+/**
+ * The palette icon that sits on the custom swatch.
+ *
+ * Built here with the rest of the swatches instead of in the markup: the row is
+ * generated, and a tenth hardcoded tile next to nine generated ones is two
+ * sources of truth for the same thing.
+ */
+function paletteIcon(): SVGSVGElement {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("stroke-width", "2");
+  svg.setAttribute("class", "swatchicon");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute(
+    "d",
+    "M12 22a1 1 0 010-20 10 9 0 0110 9 5 5 0 01-5 5h-2.25a1.75 1.75 0 00-1.4 2.8l.3.4a1.75 1.75 0 01-1.4 2.8z",
+  );
+  svg.append(path);
+  for (const [cx, cy] of [
+    [13.5, 6.5],
+    [17.5, 10.5],
+    [6.5, 12.5],
+    [8.5, 7.5],
+  ]) {
+    const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    dot.setAttribute("cx", String(cx));
+    dot.setAttribute("cy", String(cy));
+    dot.setAttribute("r", ".5");
+    dot.setAttribute("fill", "currentColor");
+    svg.append(dot);
+  }
+  return svg;
+}
+
+/**
+ * The custom swatch: the way out of the palette.
+ *
+ * It opens the color picker on the background field and then shows whatever
+ * color came out of it. Until a color of the person's own exists, it offers a
+ * measured pair nobody asked for, under the palette icon that says there is
+ * something to pick. It is the last swatch because it is the one that is not
+ * part of the palette.
+ */
 function renderSwatches(): void {
   const host = $("#swatches");
   host.replaceChildren();
@@ -319,25 +477,89 @@ function renderSwatches(): void {
       `Palette ${entry.label}, contrast ${entry.contrast.label}`,
     );
     btn.setAttribute("aria-pressed", "false");
-    btn.style.background = `linear-gradient(135deg, ${cssColor(entry.bg)} 0 58%, ${cssColor(entry.fg)} 58% 100%)`;
+    btn.style.background = swatchGradient(entry.bg, entry.fg);
     btn.addEventListener("click", () => applyColors(entry.bg, entry));
     host.append(btn);
+  }
+
+  const custom = document.createElement("button");
+  custom.type = "button";
+  custom.className = "swatch custom";
+  custom.dataset.name = "custom";
+  custom.title = "Custom color";
+  custom.setAttribute("aria-label", "Custom color, opens the color picker");
+  custom.setAttribute("aria-pressed", "false");
+  custom.append(paletteIcon());
+  custom.addEventListener("click", openBackgroundPicker);
+  host.append(custom);
+}
+
+/** The diagonal split every swatch is painted with. */
+function swatchGradient(bg: string, fg: string): string {
+  return `linear-gradient(135deg, ${cssColor(bg)} 0 58%, ${cssColor(fg)} 58% 100%)`;
+}
+
+// ── Background tiles ───────────────────────────────────────────────────
+
+/** Tile size, the same shape the palette swatches have. */
+const TILE_WIDTH = 64;
+const TILE_HEIGHT = 64;
+
+/**
+ * The pair the custom swatch offers while nobody has picked a color of their own.
+ *
+ * It is drawn once, not on every render: a swatch that changed color every time
+ * the palette did would be noise, and the icon on top already says there is a
+ * picker behind it.
+ */
+let customTileColor = randomPalette();
+
+/**
+ * Puts one example of every background on its own tile.
+ *
+ * It is the real renderer at tile size, not an approximation: the same
+ * `paintTexture` the exports use, with the same seed, so a tile cannot promise
+ * something the file will not deliver. A texture is drawn at a fixed moment of
+ * its animation, and the transparent one gets no image at all, so the
+ * checkerboard behind the tile is the example.
+ *
+ * The result is a PNG in the `src` of an `<img>`, not a live canvas: a tile is a
+ * still of a moving thing, and it should not cost a repaint on every step of the
+ * preview.
+ *
+ * The canvas is built once and reused for the whole row: each render overwrites
+ * it and reads the data URL out, so the row costs one small surface.
+ */
+function renderBackgroundTiles(): void {
+  const spec = readSpec();
+  const surface = document.createElement("canvas");
+  surface.width = TILE_WIDTH;
+  surface.height = TILE_HEIGHT;
+  const ctx = surface.getContext("2d");
+  for (const img of document.querySelectorAll<HTMLImageElement>("img[data-preview]")) {
+    const value = img.dataset.preview ?? "solid";
+    // The transparent one keeps the transparent pixel it ships with: an `img`
+    // with no `src` is a broken image, not an empty one. The checkerboard behind
+    // it is the example.
+    if (value === "transparent") continue;
+    if (!ctx) break;
+    ctx.clearRect(0, 0, TILE_WIDTH, TILE_HEIGHT);
+    ctx.fillStyle = cssColor(spec.bg);
+    ctx.fillRect(0, 0, TILE_WIDTH, TILE_HEIGHT);
+    if (TEXTURES.includes(value as Texture) && value !== "none") {
+      paintTexture(
+        ctx,
+        { ...spec, width: TILE_WIDTH, height: TILE_HEIGHT, texture: value as Texture },
+        // A moment of the animation and not the first frame: `rise` spends the
+        // beginning of its cycle below the frame, where the tile would read empty.
+        2,
+      );
+    }
+    img.src = surface.toDataURL("image/png");
   }
 }
 
 // ── State derived from the controls ───────────────────────────────────
-
-/**
- * Shows the preset that matches the dimensions, or `Custom` when there is
- * none. The raw field values are used on purpose: an empty input must read as
- * Custom, not as the fallback size.
- */
-function syncPresetSelect(): void {
-  const select = $<HTMLSelectElement>("#presetSize");
-  const key = `${str("width", "")}x${str("height", "")}`;
-  const match = [...select.options].some((option) => option.value === key);
-  select.value = match ? key : "";
-}
 
 /** Names that differ from the upper-cased format id. */
 const FORMAT_LABEL: Readonly<Record<string, string>> = {
@@ -382,14 +604,58 @@ function refreshDependentUi(): void {
   const qualityField = form.querySelector<HTMLElement>(".quality");
   if (qualityField) qualityField.hidden = !LOSSY.has(format);
 
-  // The transparency box is the same deal: it belongs to the format, and only
-  // the formats that can store alpha show it. The note is only worth reading
-  // while the box is available.
-  const alphaBox = $("#alphaBox");
-  const canAlpha = supportsAlpha(format);
-  alphaBox.hidden = !canAlpha;
-  const alphaNote = $("#alphaNote");
-  alphaNote.hidden = !canAlpha || !checked("transparent");
+  // Transparency is a property of the background, so it is the formats that
+  // bend: picking `Transparent` turns off every format that cannot store an
+  // alpha channel, and picks one that can. The tile itself is never disabled,
+  // because refusing the background would leave the person with no way to ask
+  // for it. Textures are the other way around: SVG is written as text, so it
+  // cannot carry one and the tiles go off.
+  const canTexture = supportsTexture(format);
+  const transparent = selectedBackground() === "transparent";
+  for (const input of form.querySelectorAll<HTMLInputElement>('input[name="background"]')) {
+    const supported = !input.hasAttribute("data-texture") || canTexture;
+    input.disabled = !supported;
+    // The tiles carry no name under them, so this is where it is written. It
+    // goes on the tile because a disabled input does not take the hover.
+    const tile = input.nextElementSibling as HTMLElement | null;
+    const name = BACKGROUND_LABEL[input.value] ?? input.value;
+    if (tile) {
+      tile.title = supported ? name : `${name} — this format is written as text and stays flat`;
+    }
+  }
+
+  // The formats follow the background: a transparent one turns off every format
+  // that cannot store an alpha channel. The browser's own verdict is kept in a
+  // dataset, because reading `input.disabled` back here would make the two
+  // reasons indistinguishable and neither of them reversible.
+  const formatName = kind === "video" ? "videoFormat" : "imageFormat";
+  const formatInputs = [...form.querySelectorAll<HTMLInputElement>(`input[name="${formatName}"]`)];
+  for (const input of formatInputs) {
+    const encodable = input.dataset.encodable !== 'false';
+    const keepsAlpha = !transparent || supportsAlpha(input.value as ImageFormat);
+    input.disabled = !encodable || !keepsAlpha;
+    // Two reasons to be off, and the one that applies is the one said out loud.
+    const span = input.nextElementSibling as HTMLElement | null;
+    if (span) {
+      span.title = !encodable
+        ? "This browser cannot encode this format"
+        : keepsAlpha
+          ? ""
+          : "A transparent background needs a format with an alpha channel";
+    }
+  }
+  // A radio that is off cannot stay checked without leaving the form pointing
+  // at a format nobody can pick, so the selection moves to the first one that
+  // can still carry what was asked for.
+  const picked = formatInputs.find((input) => input.checked);
+  if (picked?.disabled) {
+    const fallback = formatInputs.find((input) => !input.disabled);
+    if (fallback) {
+      fallback.checked = true;
+      refreshDependentUi();
+      return;
+    }
+  }
 
   // Every format with a timeline lives in the video tab, so the section shows
   // up exactly there.
@@ -398,7 +664,6 @@ function refreshDependentUi(): void {
   timeline.hidden = !timed;
 
   const spec = readSpec();
-  syncPresetSelect();
   const even = evenDimensions(spec.width, spec.height);
   const evenWarning = $("#evenWarning");
   const rounds = kind === "video" && even.changed;
@@ -424,6 +689,24 @@ function refreshDependentUi(): void {
     const el = form.elements.namedItem(name);
     if (el instanceof HTMLInputElement) el.disabled = singleFrame;
   }
+
+  // The speed only has something to speed up: an animated texture, and a
+  // timeline to animate it on. A flat background or a single frame gives the
+  // same picture at 1× and at 3×, so the control does not come out for them.
+  const speedField = $("#textureSpeedField");
+  const speedSelect = $<HTMLSelectElement>("#textureSpeed");
+  const move = form.elements.namedItem("textureMove");
+  const canSpeed = timed && !singleFrame && spec.texture !== "none";
+  const moving = move instanceof HTMLInputElement && move.checked;
+  speedField.hidden = !canSpeed;
+  if (move instanceof HTMLInputElement) move.disabled = !canSpeed;
+  // The speed is a property of the movement, so it follows its own box.
+  speedSelect.disabled = !canSpeed || !moving;
+  speedSelect.title = !canSpeed
+    ? "Only an animated background on a format with more than one frame has a speed to pick."
+    : moving
+      ? ""
+      : "The background is held still, so there is no speed to pick";
 
   // Only the four containers can carry an audio track, the animated outputs
   // have no room for one, and a single frame has no timeline to put it on. The
@@ -575,8 +858,40 @@ function applySettings(
     if (typeof input.showTime === "boolean") {
       setCheckbox("showTime", input.showTime);
     }
+    // `background` is already the flat color in the MCP contract, so the
+    // treatment on top of it travels as `texture`. Its `none` is the flat
+    // background, which the interface calls `solid`.
+    if (typeof input.texture === "string") {
+      if (!TEXTURES.includes(input.texture as Texture)) {
+        return {
+          ok: false,
+          error: `unknown texture "${input.texture}", expected one of ${TEXTURES.join(", ")}`,
+        };
+      }
+      setRadio("background", input.texture === "none" ? "solid" : input.texture);
+      rememberBackground();
+    }
+    // Applied after `texture`, so asking for both ends with the transparent one,
+    // which is the more explicit of the two.
     if (typeof input.transparent === "boolean") {
-      setCheckbox("transparent", input.transparent);
+      setRadio("background", input.transparent ? "transparent" : "solid");
+      rememberBackground();
+    }
+    if (input.textureMove !== undefined) {
+      setCheckbox("textureMove", Boolean(input.textureMove));
+    }
+    if (input.textureSpeed !== undefined) {
+      const speed = Number(input.textureSpeed);
+      if (!TEXTURE_SPEEDS.includes(speed as TextureSpeed)) {
+        return {
+          ok: false,
+          error: `unknown texture speed "${String(input.textureSpeed)}", expected one of ${TEXTURE_SPEEDS.join(", ")}`,
+        };
+      }
+      // A speed of 0 is what the movement box says when it is off, so the two
+      // controls cannot end up telling the form different things.
+      setSelect("textureSpeed", String(speed || DEFAULT_TEXTURE_SPEED));
+      setCheckbox("textureMove", speed > 0);
     }
     if (typeof input.sound === "boolean") {
       setCheckbox("sound", input.sound);
@@ -631,6 +946,10 @@ function setSelect(name: string, value: string): void {
   const el = form.elements.namedItem(name);
   if (el instanceof HTMLSelectElement) el.value = value;
 }
+/** Stores the background of the active tab, so switching tabs can restore it. */
+function rememberBackground(): void {
+  BACKGROUND_BY_KIND.set(currentKind(), selectedBackground());
+}
 
 function describe(): Record<string, unknown> {
   const spec = readSpec();
@@ -646,6 +965,14 @@ function describe(): Record<string, unknown> {
     ...(spec.duration > 0 ? { duration: spec.duration, fps: spec.fps } : {}),
     ...(spec.tone ? { sound: spec.tone } : {}),
     transparent: spec.transparent,
+    // The texture the file really gets, which is not always the one asked for:
+    // a format that cannot carry it falls back to the flat background.
+    texture: spec.texture,
+    // Only worth reporting when it changes something: a flat background or a
+    // single frame looks the same at every speed.
+    ...(spec.texture !== "none" && spec.duration > 0
+      ? { textureSpeed: spec.textureSpeed, textureMove: spec.textureSpeed > 0 }
+      : {}),
   };
 }
 
@@ -662,11 +989,16 @@ async function syncVideoAvailability(): Promise<void> {
     const animated = ANIMATED_IMAGE_FORMATS.has(input.value as ImageFormat);
     const available =
       animated || supported.includes(input.value as VideoFormat);
+    // Recorded, not just applied: the background rules re-derive `disabled`
+    // from this, and a disabled input cannot say whether it was this browser
+    // or the background that turned it off.
+    input.dataset.encodable = String(available);
     input.disabled = !available;
     const span = input.nextElementSibling as HTMLElement | null;
     if (span)
       span.title = available ? "" : "This browser cannot encode this format";
   }
+  refreshDependentUi();
   const warn = $("#videoUnsupported");
   if (supported.length === 0) {
     warn.hidden = false;
@@ -694,10 +1026,19 @@ function wireEvents(): void {
         $("#qualityOut").textContent = `${target.value}%`;
         break;
       case "kind":
-        // `refreshDependentUi` already decides whether the preview animates.
+        // Each tab has its own background, and this is where the other one comes
+        // back. `refreshDependentUi` already decides whether the preview
+        // animates.
+        setRadio(
+          "background",
+          BACKGROUND_BY_KIND.get(currentKind()) ?? "solid",
+        );
         refreshDependentUi();
         void syncVideoAvailability();
         return;
+      case "background":
+        rememberBackground();
+        break;
     }
     refreshDependentUi();
   });
@@ -753,14 +1094,6 @@ function wireEvents(): void {
     refreshDependentUi();
   });
 
-  $("#presetSize").addEventListener("change", (ev) => {
-    const key = (ev.target as HTMLSelectElement).value;
-    if (!key) return;
-    const [w, h] = key.split("x");
-    setNum("width", Number(w));
-    setNum("height", Number(h));
-    refreshDependentUi();
-  });
 }
 
 async function main(): Promise<void> {

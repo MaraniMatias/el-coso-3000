@@ -1,5 +1,6 @@
 import { cssColor, hexToRgba } from './color';
 import { applyFont, layoutDimensions, layoutLine, paddingFor, type TextLayout } from './fit-text';
+import { paintTexture } from './texture';
 import { FONT_WEIGHT, type Spec } from './types';
 
 /** Strip reserved at the bottom for the progress bar and the clock. */
@@ -118,10 +119,20 @@ export function drawFrame(ctx: CanvasRenderingContext2D, spec: Spec, progress?: 
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, width, height);
-  // The `clearRect` above is the whole background when it is transparent: the
-  // pixels stay at alpha 0 and the file carries a real alpha channel. The text
-  // color is still the one derived from `bg`, so the pairing stays readable.
-  if (!spec.transparent) {
+  // The texture is a function of the frame's position in the timeline, so the
+  // preview and every frame of every exporter show the same thing. A still image
+  // has no timeline and lands on the first frame, at t = 0.
+  const t = (progress ?? 0) * spec.duration;
+  if (spec.texture !== 'none') {
+    // A texture is an opaque background by definition: it fills every pixel, so
+    // `transparent` does not apply while it is on.
+    ctx.fillStyle = cssColor(spec.bg);
+    ctx.fillRect(0, 0, width, height);
+    paintTexture(ctx, spec, t);
+  } else if (!spec.transparent) {
+    // The `clearRect` above is the whole background when it is transparent: the
+    // pixels stay at alpha 0 and the file carries a real alpha channel. The text
+    // color is still the one derived from `bg`, so the pairing stays readable.
     ctx.fillStyle = cssColor(spec.bg);
     ctx.fillRect(0, 0, width, height);
   }

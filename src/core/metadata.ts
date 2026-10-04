@@ -49,6 +49,10 @@ export interface FileMetadata {
   contrast: ContrastResult;
   /** What is actually drawn: the label, or the dimensions when there is none. */
   text: string;
+  /** Animated background over `background`, only when it is not the flat one. */
+  texture?: string;
+  /** How fast that background moves, only with a timeline to move it on. */
+  textureSpeed?: string;
   /** Encoder quality, only for the formats where it changes the bytes. */
   quality?: string;
   /** Video and animated formats only. */
@@ -102,6 +106,14 @@ export function buildMetadata(
     // Same normalization as `layoutDimensions`: newlines become spaces so the
     // value stays a single line, which the `iTXt` chunks need.
     text: spec.label ? spec.label.replace(/\s*\n+\s*/g, ' ').trim() : dims,
+    // Only worth a keyword when there is something to say: a flat background is
+    // what every file has had, and a flat background is not news.
+    ...(spec.texture !== 'none' ? { texture: spec.texture } : {}),
+    // The speed is only a fact about the file when there is a timeline to move
+    // it on: a single frame is the same picture at 1x and at 3x.
+    ...(spec.texture !== 'none' && isAnimated
+      ? { textureSpeed: `${spec.textureSpeed}x` }
+      : {}),
     ...(opts.quality === undefined
       ? {}
       : { quality: `${Math.round(opts.quality * 100)}%` }),
@@ -182,6 +194,8 @@ export function metadataAsPairs(meta: FileMetadata): Array<[string, string]> {
     ['Foreground', meta.foreground],
     ['Contrast', contrastText(meta)],
     ['Text', meta.text],
+    ...(meta.texture ? ([['Texture', meta.texture]] as Array<[string, string]>) : []),
+    ...(meta.textureSpeed ? ([['Texture Speed', meta.textureSpeed]] as Array<[string, string]>) : []),
     ...(meta.quality ? ([['Quality', meta.quality]] as Array<[string, string]>) : []),
     ...(meta.duration
       ? ([['Duration', meta.duration], ['FPS', meta.fps ?? '']] as Array<[string, string]>)
@@ -248,6 +262,8 @@ function xmpProperties(meta: FileMetadata): string {
     ['Foreground', meta.foreground],
     ['Contrast', contrastText(meta)],
     ['Text', meta.text],
+    ...(meta.texture ? ([['Texture', meta.texture]] as Array<[string, string]>) : []),
+    ...(meta.textureSpeed ? ([['TextureSpeed', meta.textureSpeed]] as Array<[string, string]>) : []),
     // No standard XMP property carries "this is not real content".
     ['Disclaimer', meta.disclaimer],
     ...(meta.quality ? ([['Quality', meta.quality]] as Array<[string, string]>) : []),

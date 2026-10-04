@@ -260,19 +260,36 @@ function yieldToEventLoop(): Promise<void> {
 }
 
 /**
- * Samples a few frames to build the global palette.
+ * Which frames to sample for the global palette.
  *
- * Take the first, middle, and last frames: in an animated placeholder, only the
- * progress bar and clock change between frames, so these three contain every
- * color that will appear. Sampling every frame for the palette would be wasted
- * work because the palette is the same.
+ * With a flat background the first, middle and last frame hold every color
+ * there will be: between them only the progress bar and the clock move. A
+ * texture changes the whole frame, so those three would leave most of the
+ * animation outside the palette, and it would show as bands. Then the frames
+ * are spread over the clip instead, and the texture is carried by as many
+ * samples as the palette can afford to describe.
+ */
+function paletteFrames(spec: Spec, totalFrames: number): number[] {
+  if (spec.texture === 'none') {
+    return [...new Set([0, Math.floor(totalFrames / 2), totalFrames - 1])];
+  }
+  const count = Math.min(9, totalFrames);
+  const picks = new Set<number>();
+  for (let i = 0; i < count; i++) {
+    picks.add(Math.round((i * (totalFrames - 1)) / (count - 1)));
+  }
+  return [...picks];
+}
+
+/**
+ * Samples a few frames to build the global palette.
  */
 function samplePalette(
   ctx: CanvasRenderingContext2D,
   spec: Spec,
   totalFrames: number,
 ): Uint8Array {
-  const picks = [...new Set([0, Math.floor(totalFrames / 2), totalFrames - 1])];
+  const picks = paletteFrames(spec, totalFrames);
   const pixels = spec.width * spec.height;
   const stride = Math.max(1, Math.ceil(pixels / MAX_SAMPLES_PER_FRAME));
 

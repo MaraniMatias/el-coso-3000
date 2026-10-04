@@ -73,7 +73,7 @@
         id="panel"
         class="panel"
         toolname="generate_placeholder"
-        tooldescription="Configures and generates an image or video placeholder in the browser. Adjusts dimensions, pastel palette and contrast, and returns the downloaded file."
+        tooldescription="Configures and generates an image or video placeholder in the browser. Adjusts dimensions, pastel palette, contrast and background (flat, transparent or an animated texture), and returns the downloaded file."
       >
         <div class="panel-body">
           <fieldset class="tabs">
@@ -144,36 +144,6 @@
               >
                 ⇅
               </button>
-              <div class="field preset">
-                <label for="presetSize">Preset</label>
-                <select
-                  id="presetSize"
-                  toolparamtitle="Preset size"
-                  toolparamdescription="Fills width and height with a standard ad size, for example 300x250. Any other size is Custom. Width and height are the real parameters."
-                >
-                  <option value="">Custom</option>
-                  <optgroup label="Standard display">
-                    <option value="300x250">Medium Rectangle — 300 × 250</option>
-                    <option value="728x90">Leaderboard — 728 × 90</option>
-                    <option value="160x600">Wide Skyscraper — 160 × 600</option>
-                    <option value="336x280">Large Rectangle — 336 × 280</option>
-                    <option value="300x600">Half Page / Filmstrip — 300 × 600</option>
-                    <option value="120x600">Skyscraper — 120 × 600 (legacy)</option>
-                    <option value="468x60">Main Banner / Full Banner — 468 × 60 (legacy)</option>
-                  </optgroup>
-                  <optgroup label="Mobile">
-                    <option value="320x50">Mobile Leaderboard — 320 × 50</option>
-                    <option value="320x100">Large Mobile Banner — 320 × 100</option>
-                    <option value="320x480">Mobile Fullscreen / Interstitial — 320 × 480</option>
-                    <option value="480x320">Mobile Fullscreen / Interstitial — 480 × 320</option>
-                  </optgroup>
-                  <optgroup label="High impact">
-                    <option value="970x250">Billboard — 970 × 250</option>
-                    <option value="970x90">Super Leaderboard / Pushdown — 970 × 90</option>
-                    <option value="300x1050">Portrait — 300 × 1050</option>
-                  </optgroup>
-                </select>
-              </div>
             </div>
             <p class="note warning" id="evenWarning" hidden></p>
           </section>
@@ -181,39 +151,129 @@
           <section class="group">
             <h2>Color</h2>
             <div class="swatches" id="swatches" role="group" aria-label="Pastel palette"></div>
-            <div class="colors">
-              <div class="field">
-                <label for="bg">Background</label>
-                <input
-                  type="color"
-                  id="bg"
-                  name="bg"
-                  value="#F0EDEB"
-                  toolparamtitle="Background color"
-                  toolparamdescription="Background color, in hex. The text is computed from it to guarantee contrast."
-                />
-              </div>
-              <div class="field derived">
-                <label for="fg">Text <span class="hint">automatic</span></label>
-                <!-- Disabled on purpose: `readonly` does nothing on a color input, and the
-                 contrast guarantee depends on this value never being edited by hand. -->
-                <input
-                  type="color"
-                  id="fg"
-                  name="fg"
-                  value="#5B544D"
-                  disabled
-                  title="Derived from the background to guarantee the contrast"
-                  toolparamtitle="Text color"
-                  toolparamdescription="Derived automatically from the background color to guarantee WCAG contrast. It is not edited: changing the background recomputes this value. The text of the placeholder is the dimensions."
-                />
-              </div>
-            </div>
+            <!-- The color fields stay in the form but not on screen: the native
+                 color picker belongs to the background one, and the whole app
+                 reads them from there. The last swatch is the control, and being
+                 a button it is something the keyboard can land on. -->
+            <input
+              type="color"
+              id="bg"
+              name="bg"
+              class="visually-hidden"
+              tabindex="-1"
+              aria-hidden="true"
+              value="#F0EDEB"
+              toolparamtitle="Background color"
+              toolparamdescription="Background color, in hex. The text is computed from it to guarantee contrast."
+            />
+            <input
+              type="color"
+              id="fg"
+              name="fg"
+              class="visually-hidden"
+              tabindex="-1"
+              aria-hidden="true"
+              disabled
+              value="#5B544D"
+              title="Derived from the background to guarantee the contrast"
+              toolparamtitle="Text color"
+              toolparamdescription="Derived automatically from the background color to guarantee WCAG contrast. It is not edited: changing the background recomputes this value. The text of the placeholder is the dimensions."
+            />
 
             <div class="contrast" id="contrast" role="status" aria-live="polite">
               <span class="ratio" id="ratio">6.39:1</span>
               <span class="level" id="level">AA</span>
               <span class="levelnote" id="levelNote">meets WCAG AA</span>
+            </div>
+          </section>
+
+          <section class="group">
+            <h2>Background</h2>
+            <!-- One tile per background, each a real render of it on the two
+                 colors picked above, the same size as the palette swatches
+                 above. The name is in the tooltip: the tile says what it looks
+                 like, which is the only thing worth seeing. -->
+            <div class="backgrounds" role="radiogroup" aria-label="Background">
+              <label
+                ><input
+                  type="radio"
+                  name="background"
+                  value="fog"
+                  data-texture
+                  checked
+                  toolparamtitle="Background"
+                  toolparamdescription="Fog: huge very slow blobs, with heavier film grain. The default for images."
+                /><span class="tile"
+                  ><img data-preview="fog" alt="Fog: huge very slow blobs, with heavier film grain"
+                /></span
+                ></label
+              >
+              <label
+                ><input
+                  type="radio"
+                  name="background"
+                  value="transparent"
+                  toolparamtitle="Background"
+                  toolparamdescription="Leaves the background unpainted so the file carries an alpha channel. The color above still decides the text color, to keep the contrast guarantee. Only PNG, WebP, SVG and the GIF can do this."
+                /><span class="tile"
+                  ><img
+                    data-preview="transparent"
+                    alt="Transparent: the background is not painted"
+                    src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+                /></span
+                ></label
+              >
+              <label
+                ><input
+                  type="radio"
+                  name="background"
+                  value="solid"
+                  toolparamtitle="Background"
+                  toolparamdescription="Flat background in the color picked above."
+                /><span class="tile"
+                  ><img data-preview="solid" alt="Solid: flat background in the color picked above"
+                /></span
+                ></label
+              >
+              <label
+                ><input
+                  type="radio"
+                  name="background"
+                  value="mix"
+                  data-texture
+                  toolparamtitle="Background"
+                  toolparamdescription="Bokeh: blurred spheres over soft blobs, with film grain. The default for video."
+                /><span class="tile"
+                  ><img data-preview="mix" alt="Bokeh and grain: blurred spheres over soft blobs"
+                /></span
+                ></label
+              >
+              <label
+                ><input
+                  type="radio"
+                  name="background"
+                  value="focus"
+                  data-texture
+                  toolparamtitle="Background"
+                  toolparamdescription="Center focus: a clean light center with a vignette in the text color."
+                /><span class="tile"
+                  ><img data-preview="focus" alt="Center focus: a clean light center with a vignette"
+                /></span
+                ></label
+              >
+              <label
+                ><input
+                  type="radio"
+                  name="background"
+                  value="rise"
+                  data-texture
+                  toolparamtitle="Background"
+                  toolparamdescription="Rise: blurred spheres that come up from the bottom and fade out."
+                /><span class="tile"
+                  ><img data-preview="rise" alt="Rise: blurred spheres coming up from the bottom"
+                /></span
+                ></label
+              >
             </div>
           </section>
 
@@ -333,23 +393,6 @@
             <p class="note warning" id="videoUnsupported" hidden></p>
           </section>
 
-          <div class="checkboxes" id="alphaBox" hidden>
-            <label
-              ><input
-                type="checkbox"
-                name="transparent"
-                id="transparent"
-                toolparamtitle="Transparent background"
-                toolparamdescription="Leaves the background unpainted so the file carries an alpha channel. The background color still decides the text color, to keep the contrast guarantee. Only PNG, WebP, SVG and the GIF can do this."
-              />
-              <span>Transparent background</span></label
-            >
-            <p class="note" id="alphaNote">
-              The background is not painted. The color above still picks the text
-              color, so the contrast guarantee is unchanged.
-            </p>
-          </div>
-
           <div class="field quality" hidden>
             <label for="quality">Quality <output id="qualityOut">90%</output></label>
             <input
@@ -445,6 +488,32 @@
                   <option value="noise">White noise</option>
                 </select>
               </div>
+              <div class="sound" id="textureSpeedField" hidden>
+                <label
+                  ><input
+                    type="checkbox"
+                    name="textureMove"
+                    checked
+                    toolparamtitle="Texture movement"
+                    toolparamdescription="Animates the background over the clip. When it is off, the background is painted and held still, which is the same as a speed of 0."
+                  />
+                  <span>Texture movement</span></label
+                >
+                <select
+                  id="textureSpeed"
+                  name="textureSpeed"
+                  aria-label="Texture speed"
+                  disabled
+                  toolparamtitle="Texture speed"
+                  toolparamdescription="How fast an animated background moves, from 1 to 3, as a multiple of its original speed. 1, 1.5, 2, 2.5 or 3; 2 is the default. Only for an animated background on an output with more than one frame."
+                >
+                  <option value="1">1× — slow</option>
+                  <option value="1.5">1.5×</option>
+                  <option value="2" selected>2×</option>
+                  <option value="2.5">2.5×</option>
+                  <option value="3">3× — fast</option>
+                </select>
+              </div>
             </div>
           </section>
         </div>
@@ -484,20 +553,22 @@
     <article class="seo-content">
       <section aria-labelledby="about-heading">
         <h2 id="about-heading">Image and video placeholders for design and development</h2>
-        <p>Make dimension-labeled placeholder assets for wireframes, mockups, prototypes, demos, visual tests, and temporary media. Set a custom size or choose a preset, pick a background color, then download the result.</p>
+        <p>Make dimension-labeled placeholder assets for wireframes, mockups, prototypes, demos, visual tests, and temporary media. Set a custom size, pick a background color, then download the result.</p>
         <ul>
           <li><strong>Still images:</strong> PNG, JPEG, WebP, and SVG. PNG, WebP, and SVG support transparency; GIF supports binary transparency.</li>
           <li><strong>Animated and video outputs:</strong> GIF, Motion JPEG AVI, ZIP files of numbered JPEG frames, MP4, WebM, MOV, and MKV. MP4, WebM, MOV, and MKV can include an optional generated soundtrack.</li>
         </ul>
-        <p>The placeholder displays its dimensions. Choose a palette or custom background; the text color is calculated for contrast against that color. With transparency enabled, visible contrast depends on the background beneath the image.</p>
+        <p>The placeholder displays its dimensions. Choose a palette or custom background; the text color is calculated for contrast against that color. With transparency enabled, visible contrast depends on the background beneath the image. The background can also be one of four animated textures, in which case the contrast is measured against the flat color it is drawn over.</p>
       </section>
 
       <section aria-labelledby="how-heading">
         <h2 id="how-heading">How to make a placeholder</h2>
         <ol>
           <li>Choose Image or Video.</li>
-          <li>Enter the width and height in pixels, or select a size preset, then choose a background color.</li>
-          <li>Select an output format. Enable the transparent background for PNG, WebP, SVG, or GIF. For animated and video outputs, set the duration, frame rate, and optional progress bar or clock.</li>
+          <li>Enter the width and height in pixels, then choose a background color.</li>
+          <li>Pick the background: solid, transparent, or one of the four animated textures. Textures are painted into every format except SVG, which stays flat.</li>
+          <li>On a video, set how fast an animated background moves: from 1× to 3×.</li>
+          <li>Select an output format. For animated and video outputs, set the duration, frame rate, and optional progress bar or clock.</li>
           <li>To give a video a soundtrack, tick Include sound and pick one: a synthesized tango, a test beep, a held tone, or noise. MP4, MOV, WebM, and MKV support it; GIF, AVI, and ZIP stay silent.</li>
           <li>Select Download to save the generated file.</li>
         </ol>
@@ -526,9 +597,15 @@
           <dt>Can I use the generator without internet?</dt>
           <dd>Yes. Use the page after it has loaded, or download the standalone HTML file to open offline.</dd>
           <dt>Can I create a custom size?</dt>
-          <dd>Yes. Enter any width and height from 1 to 4,096 pixels, or start with a preset and edit it.</dd>
+          <dd>Yes. Enter any width and height from 1 to 4,096 pixels.</dd>
           <dt>Can I make a transparent placeholder?</dt>
           <dd>Yes. PNG, WebP, and SVG support transparency, and GIF supports binary transparency. JPEG and the video containers do not. When transparency is enabled, visible text contrast depends on the background behind the file.</dd>
+          <dt>Can the background be animated?</dt>
+          <dd>Yes. Besides the flat and transparent backgrounds, four animated textures are available: bokeh with grain, fog, center focus, and rising spheres. They are baked into the file for every canvas-based format, including the video containers. SVG is written as text and stays flat, and the loop of a video is not seamless.</dd>
+          <dt>Can I pick a color of my own?</dt>
+          <dd>Yes. The last swatch of the color row, after the nine palettes, opens the color picker. It then shows the color you chose instead of the palette icon, and the text color is calculated from it as always.</dd>
+          <dt>Can I change how fast the background moves?</dt>
+          <dd>Yes, on any output with more than one frame. Pick from 1× to 3×, and 2× is the default. Turning Texture movement off holds the background still for the whole clip. A still image is the same picture at any speed, so the control only appears when it would change something.</dd>
           <dt>Can a video placeholder include sound?</dt>
           <dd>Yes. MP4, WebM, MOV, and MKV can include an optional synthesized tango, beep, tone, or noise soundtrack. Audio encoding support varies by browser; GIF, AVI, and ZIP exports are silent.</dd>
           <dt>Why might video export be unavailable?</dt>

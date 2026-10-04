@@ -18,6 +18,7 @@ import {
   APP_NAME,
   APP_VERSION,
   AUTHOR,
+  DEFAULT_TEXTURE_SPEED,
   LICENSE,
   REPO_URL,
   type Spec,
@@ -34,6 +35,8 @@ const spec = (over: Partial<Spec> = {}): Spec => ({
   showProgressBar: false,
   showTime: false,
   transparent: false,
+  texture: 'none',
+  textureSpeed: DEFAULT_TEXTURE_SPEED,
   quality: 0.92,
   ...over,
 });
@@ -77,6 +80,29 @@ describe('buildMetadata', () => {
     const meta = at(spec());
     expect(meta.contrast).toEqual(checkContrast('991B1B', 'FEE2E2'));
     expect(meta.contrast.level).toBe('AA');
+  });
+
+  test('the texture is recorded only when there is one', () => {
+    // A flat background is what every file has had: a keyword saying so would
+    // be noise. A texture is a decision someone made, so it is stated.
+    expect(at(spec()).texture).toBeUndefined();
+    expect(flat(at(spec())).has('ElCoso3000:Texture')).toBe(false);
+    expect(at(spec({ texture: 'mix' })).texture).toBe('mix');
+    expect(flat(at(spec({ texture: 'mix' }))).get('ElCoso3000:Texture')).toBe('mix');
+  });
+
+  test('the speed is recorded only when the file can move', () => {
+    // The same frame comes out at 1x and at 3x, so on a still image the speed
+    // says nothing about the file. With a timeline it is the whole difference
+    // between two videos that look identical frame by frame.
+    const still = spec({ texture: 'mix' });
+    expect(at(still).textureSpeed).toBeUndefined();
+    expect(at({ ...still, duration: 5 }).textureSpeed).toBe('2x');
+    expect(
+      flat(at({ ...still, duration: 5, textureSpeed: 3 })).get('ElCoso3000:Texture Speed'),
+    ).toBe('3x');
+    // A flat background has no animation to be fast or slow.
+    expect(at(spec({ duration: 5, textureSpeed: 3 })).textureSpeed).toBeUndefined();
   });
 
   test('the drawn text is the label, or the dimensions when there is none', () => {

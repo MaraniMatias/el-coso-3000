@@ -27,6 +27,14 @@
      introducing a color that does not belong to the chosen palette. */
   --checker-a: hsl(var(--tint-h) calc(var(--tint-s) * 0.6) 88%);
   --checker-b: hsl(var(--tint-h) calc(var(--tint-s) * 0.8) 96%);
+  /* How a control that cannot be used right now is dimmed. One number for the
+     whole interface: a row of formats, a tile of backgrounds and a checkbox all
+     read as "off" in the same way, so the eye does not have to learn it twice. */
+  --off: 0.4;
+  /* A control that is only waiting for its own checkbox is one click away, which
+     is not the same as one the format cannot take. It says so by being less
+     faded. */
+  --waiting: 0.65;
   --radius: 10px;
   --gap: 16px;
   color-scheme: light dark;
@@ -313,7 +321,7 @@ body {
   outline-offset: 1px;
 }
 .choices input:disabled + span {
-  opacity: 0.35;
+  opacity: var(--off);
   cursor: not-allowed;
 }
 
@@ -393,12 +401,6 @@ button:focus-visible {
   color: var(--ink-faint);
   padding-bottom: 9px;
 }
-/* The preset fills the whole row: its labels do not fit in a column of the
-   grid without being cut. */
-.preset {
-  grid-column: 1 / -1;
-}
-
 .pair {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -419,6 +421,31 @@ button:focus-visible {
 .checkboxes input {
   accent-color: var(--accent);
 }
+/* A control that cannot be used right now has to look like it. The format pills
+   and the background tiles dim their own label already; a checkbox keeps the
+   same box either way, so the words are the only thing that can say it. */
+.checkboxes input:disabled,
+.checkboxes label:has(input:disabled) {
+  cursor: not-allowed;
+}
+.checkboxes input:disabled + span {
+  opacity: var(--off);
+}
+/* `select` paints its own background and border, which hides the look the
+   browser gives a disabled one entirely: it came out looking enabled. */
+select:disabled {
+  color: var(--ink-faint);
+  background: var(--surface);
+  border-color: var(--line);
+  cursor: not-allowed;
+}
+/* Two reasons to be off, and they do not look the same. A picker waiting for its
+   own checkbox is one click away; one the format cannot take is not going to
+   change. Both are dimmed, and only the first is barely. */
+.checkboxes input[data-waiting] + span,
+select[data-waiting] {
+  opacity: var(--waiting);
+}
 /* The sound picker shares its row with the checkbox, so it sizes to its own
    text instead of filling the panel. */
 .sound {
@@ -437,7 +464,9 @@ button:focus-visible {
 
 .swatches {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(32px, 1fr));
+  /* Ten of them have to fit on one row: the nine palettes plus the custom one
+     that opens the picker. At 32px the tenth wrapped onto a line of its own. */
+  grid-template-columns: repeat(auto-fit, minmax(28px, 1fr));
   gap: 6px;
 }
 .swatch {
@@ -462,6 +491,78 @@ button:focus-visible {
   grid-template-columns: 1fr 1fr auto;
   gap: 8px;
   align-items: end;
+}
+
+/* ── Fondo: mosaicos con un ejemplo ───────────────────────────────── */
+
+/* The backgrounds are shown, not described, and they are the same size as the
+   palette swatches above: the row of six reads as one row of swatches, and the
+   name is in the tooltip instead of under every tile. */
+.backgrounds {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(28px, 1fr));
+  gap: 6px;
+}
+.backgrounds label {
+  position: relative;
+}
+.backgrounds input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.backgrounds .tile {
+  position: relative;
+  display: block;
+  aspect-ratio: 1;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--surface-2);
+}
+.backgrounds .tile:hover {
+  border-color: var(--ink-faint);
+}
+.backgrounds input:checked + .tile {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.backgrounds input:focus-visible + .tile {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.backgrounds input:disabled + .tile {
+  opacity: var(--off);
+  cursor: not-allowed;
+}
+/* A still of the background, in a PNG the app painted itself. */
+.backgrounds img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* The transparent tile carries no image of its own: the checkerboard behind it
+   is the example, the same one the preview uses for the alpha it leaves. */
+.backgrounds img[data-preview="transparent"] {
+  background: conic-gradient(var(--checker-a) 25%, var(--checker-b) 0 50%, var(--checker-a) 0 75%, var(--checker-b) 0)
+    0 0 / 10px 10px;
+}
+/* The palette icon sits in the middle of the custom swatch, and it is the only
+   thing that says there is a color picker behind it. It steps aside once a color
+   of the person's own exists: then the swatch is just that color. The halo keeps
+   it readable over the two halves of the pair underneath it. */
+.swatchicon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  width: 55%;
+  height: 55%;
+  color: var(--ink);
+  pointer-events: none;
+  filter: drop-shadow(0 0 1.5px var(--surface)) drop-shadow(0 0 1px var(--surface));
 }
 
 .contrast {

@@ -11,11 +11,12 @@
 
 ## Capabilities
 
-- Choose custom dimensions from 1 to 4096 pixels per side, or use a preset.
+- Choose custom dimensions from 1 to 4096 pixels per side.
 - Still image formats: PNG, JPEG, WebP, and SVG.
 - Animated and sequence formats: GIF, Motion JPEG AVI, and ZIP files of numbered JPEG frames.
 - Video containers: MP4, WebM, MOV, and MKV. A soundtrack is optional and can be a synthesized tango, beep, tone, or noise. Audio encoder support depends on the browser.
 - Transparent output is available for PNG, WebP, SVG, and GIF. GIF transparency is binary; JPEG, AVI, ZIP, and the video containers do not support transparency.
+- The background can be flat, one of four animated textures (bokeh with grain, the default for video; fog, the default for images; center focus; and rising spheres), or a custom color picked from the mosaic. Textures are painted into the file for every canvas-based format, including all video containers; SVG stays flat. On an output with more than one frame their speed can be set from 1x to 3x, 2x being the default, and turning Texture movement off holds the background still. Textures are not seamless when a video loops.
 - Text displays the dimensions, and its color is calculated from the selected background. When the background is transparent, visible contrast depends on the background behind the exported file.
 - Video and animated exports can include a progress bar and time display.
 
