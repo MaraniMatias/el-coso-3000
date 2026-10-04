@@ -17,6 +17,7 @@
 import { palette } from "../core/color";
 import { TIMELINE_FORMATS, VIDEO_TONES } from "../core/types";
 import {
+  DELIMITER_CHOICES,
   GENERATORS,
   PRESET_KEYS,
   TEXT_FORMATS,
@@ -181,7 +182,18 @@ const SCHEMA = {
       type: "string",
       enum: [...TEXT_FORMATS],
       description:
-        "How the rows are written for kind=text. plain is one value per line with no header, json is a single object from the first row, array is one object per row, csv and md are tables with a header row. Defaults to plain.",
+        "How the rows are written for kind=text. plain is bare text with no header, json is a JSON array with one object per row, csv and md are tables with a header row. Defaults to plain.",
+    },
+    textSeparator: {
+      type: "string",
+      description:
+        "What goes between the fields of one row in the text format, as the literal characters. Only read when textFormat is plain.",
+    },
+    textDelimiter: {
+      type: "string",
+      enum: [...DELIMITER_CHOICES],
+      description:
+        "What goes between the columns in the CSV format, as the character itself. Only read when textFormat is csv. The default is ';', which is what a spreadsheet expects where the decimal separator is a comma, Spanish included.",
     },
     download: {
       type: "boolean",
@@ -194,9 +206,9 @@ const SCHEMA = {
 const DESCRIPTION = [
   "Generates an image or video placeholder, or a file of fake placeholder data.",
   "For kind=image and kind=video: give a background and the text color is derived",
-  "from it to guarantee WCAG contrast; pass foreground as well to choose both",
-  "yourself, and read the reported contrast to know how the pair came out. The",
-  "text of the placeholder is the dimensions.",
+  "from it to guarantee WCAG contrast. Pass foreground as well to choose both",
+  "yourself, and read the reported contrast to know how the pair came out. The text",
+  "of the placeholder is the dimensions.",
   // The list comes from the real palette, so it cannot go stale.
   `Pastel palettes available: ${palette()
     .map((p) => p.label.toLowerCase())
@@ -218,6 +230,9 @@ const DESCRIPTION = [
   `The file extension follows textFormat: ${Object.values(TEXT_FORMAT_INFO)
     .map((info) => `.${info.extension}`)
     .join(", ")}.`,
+  "CSV separates its columns with ';' unless textDelimiter says otherwise, because",
+  "that is the delimiter a spreadsheet expects where the decimal separator is a",
+  "comma, which includes Spanish.",
 ].join(" ");
 
 /**

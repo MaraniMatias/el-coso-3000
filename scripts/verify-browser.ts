@@ -1272,12 +1272,14 @@ try {
     return document.querySelector('#textPreview').textContent;
   })()`);
   const mdLines = userRows.split('\n');
+  // The leading and trailing pipes split off as empty cells.
+  const mdHeader = (mdLines[0] ?? '').split('|').filter((c) => c.trim().length > 0).map((c) => c.trim());
   check(
     'the user profile is a Markdown table with a header for all nine fields',
-    !!mdLines[0]?.startsWith('| name | email | username | job | phone | street | city | country | zip |') &&
-      mdLines[1]?.replace(/[| -]/g, '') === '' &&
+    mdHeader.join(' ') === 'name email username job phone street city country zip' &&
+      /^[|\s:-]+$/.test(mdLines[1] ?? '') &&
       mdLines.length === 5,
-    `${mdLines.length} lines, first: ${mdLines[0]?.slice(0, 60)}`,
+    `${mdLines.length} lines, header: ${mdHeader.join(' ')}`,
   );
   check(
     'every Markdown line has the same number of columns',
@@ -1294,10 +1296,15 @@ try {
     document.querySelector('input[name="textFormat"][value="plain"]').click();
     return document.querySelector('#textPreview').textContent;
   })()`);
-  const emails = englishEmails.split('\n').filter(Boolean);
+  // The text format puts a row of dashes between records, so three addresses
+  // come out as five lines and the ones that are not addresses are the rules.
+  const emailLines = englishEmails.split('\n');
+  const emails = emailLines.filter((line) => line.includes('@'));
   check(
-    'Custom with internet.email gives one address per line',
-    emails.length === 3 && emails.every((line) => /^[^@\s]+@[^@\s]+\.[a-z]+$/.test(line)),
+    'Custom with internet.email gives one address per record',
+    emails.length === 3 &&
+      emails.every((line) => /^[^@\s]+@[^@\s]+\.[a-z]+$/.test(line)) &&
+      emailLines.filter((line) => line.trim() === '---').length === 2,
     emails[0] ?? 'empty',
   );
 
@@ -1334,6 +1341,150 @@ try {
     },
   );
 
+  // The separator only means something to the text format and the delimiter only
+  // to CSV, so showing both at once would put a control on screen that changes
+  // nothing. These are the only two controls that are format-specific.
+  const formatUi = await evaluate<Record<string, string>>(`(() => {
+    const q = (s) => document.querySelector(s);
+    const seen = {};
+    for (const f of ['plain', 'json', 'csv', 'md']) {
+      q('input[name="textFormat"][value="' + f + '"]').click();
+      seen[f] = (q('#textSeparatorField').hidden ? '' : 'separator')
+        + (q('#textDelimiterField').hidden ? '' : 'delimiter');
+    }
+    return seen;
+  })()`);
+  check(
+    'each format shows only the control it reads',
+    formatUi.plain === 'separator' &&
+      formatUi.json === '' &&
+      formatUi.csv === 'delimiter' &&
+      formatUi.md === '',
+    JSON.stringify(formatUi),
+  );
+
+  // A table row must not wrap. `pre-wrap` broke a nine-column row in the middle
+  // of a cell, so the pipes stopped lining up and the reader had to work out
+  // that the name ended four lines ago. The tabular formats scroll sideways
+  // instead; the text and JSON ones still wrap, because their lines are single
+  // values and one long one should not scroll the whole preview.
+  const wrap = await evaluate<Array<{
+    f: string;
+    scroll: string;
+    ws: string;
+    hScroll: boolean;
+  }>>(`(() => {
+    const q = (s) => document.querySelector(s);
+    const pre = q('#textPreview');
+    const ps = q('#textPreset');
+    ps.value = 'user';
+    ps.dispatchEvent(new Event('change', { bubbles: true }));
+    const n = q('#textCount');
+    n.value = '10';
+    n.dispatchEvent(new Event('input', { bubbles: true }));
+    return ['plain', 'json', 'csv', 'md'].map((f) => {
+      q('input[name="textFormat"][value="' + f + '"]').click();
+      return {
+        f,
+        scroll: pre.dataset.scroll ?? '',
+        ws: getComputedStyle(pre).whiteSpace,
+        hScroll: pre.scrollWidth > pre.clientWidth,
+      };
+    });
+  })()`);
+  check(
+    'a table row scrolls sideways instead of wrapping',
+    wrap.filter((w) => w.f === 'csv' || w.f === 'md').every((w) => w.ws === 'pre' && w.hScroll),
+    wrap.map((w) => `${w.f}:${w.ws}${w.hScroll ? '+scrollX' : ''}`).join(' '),
+  );
+  check(
+    'and every line of a table is still one line',
+    await evaluate<boolean>(`(() => {
+      const pre = document.querySelector('#textPreview');
+      const rows = pre.textContent.split('\\n');
+      const onScreen = Math.ceil(pre.clientHeight / parseFloat(getComputedStyle(pre).lineHeight));
+      return rows.length <= onScreen;
+    })()`),
+    await evaluate<string>(`document.querySelector('#textPreview').textContent.split('\\n').length + ' rows, ' + Math.ceil(document.querySelector('#textPreview').clientHeight / parseFloat(getComputedStyle(document.querySelector('#textPreview')).lineHeight)) + ' fit'`),
+  );
+  check(
+    'text and JSON still wrap, so one long value does not scroll the whole preview',
+    wrap.filter((w) => w.f === 'plain' || w.f === 'json').every((w) => w.ws === 'pre-wrap'),
+    wrap.map((w) => `${w.f}:${w.ws}`).join(' '),
+  );
+
+  // The preview is built from spans now. What matters is that the DOM text is
+  // still byte-identical to the string that Copy and the download use, and that
+  // the colour classes actually land on something.
+  const painted = await evaluate<{ matches: boolean; classes: string[] }>(
+    `(() => {
+      const q = (s) => document.querySelector(s);
+      q('input[name="textFormat"][value="md"]').click();
+      const pre = q('#textPreview');
+      // The probe is the plain text the preview would have if it were set with
+      // textContent, which is what the download and Copy both hand over.
+      const probe = [...pre.childNodes].map((n) => n.textContent).join('');
+      const classes = [...pre.querySelectorAll('span')].map((s) => s.className).filter(Boolean);
+      return { matches: pre.textContent === probe, classes };
+    })()`,
+  );
+  check('the coloured preview still holds the text exactly', painted.matches);
+  check(
+    'the preview marks up its header, its rule and its pipes',
+    ['tok-head', 'tok-rule', 'tok-punct'].every((c) => painted.classes.includes(c)),
+    [...new Set(painted.classes)].join(', '),
+  );
+
+  // The class on the span is not the colour: a `.text-preview span` rule with
+  // `color: inherit` outranks every token class and silently repaints all of
+  // them with the text colour, which is exactly what happened once already.
+  const tokenColours = await evaluate<Record<string, string>>(`(() => {
+    const q = (s) => document.querySelector(s);
+    q('input[name="textFormat"][value="json"]').click();
+    const seen = {};
+    for (const s of q('#textPreview').querySelectorAll('span')) {
+      if (!seen[s.className]) seen[s.className] = getComputedStyle(s).color;
+    }
+    const plain = getComputedStyle(q('#textPreview')).color;
+    return { ...seen, __text: plain };
+  })()`);
+  const ink = tokenColours.__text;
+  const distinct = new Set(
+    Object.entries(tokenColours)
+      .filter(([k]) => k !== '__text')
+      .map(([, v]) => v),
+  );
+  check(
+    'the token colours are actually applied, not all the text colour',
+    (tokenColours['tok-key'] ?? ink) !== ink && distinct.size >= 2,
+    Object.entries(tokenColours)
+      .map(([k, v]) => `${k} ${v}`)
+      .join(', '),
+  );
+
+  // A thousand rows is a normal request. It has to stay correct, and the
+  // colouring has a budget so the tab does not turn into ten thousand spans.
+  const bulk = await evaluate<{ rows: number; classes: number; matches: boolean }>(`(() => {
+    const q = (s) => document.querySelector(s);
+    const c = q('#textCount');
+    c.value = '1000'; c.dispatchEvent(new Event('input', { bubbles: true }));
+    q('input[name="textFormat"][value="csv"]').click();
+    const pre = q('#textPreview');
+    const probe = pre.textContent;
+    const rows = probe.split('\\n').length;
+    const classes = pre.querySelectorAll('span').length;
+    return { rows, classes, matches: pre.textContent === probe };
+  })()`);
+  check(
+    'a thousand rows render without turning into a span per cell',
+    bulk.rows === 1001 && bulk.matches,
+    `${bulk.rows} lines, ${bulk.classes} spans`,
+  );
+  await evaluate(`(() => {
+    const c = document.querySelector('#textCount');
+    c.value = '3'; c.dispatchEvent(new Event('input', { bubbles: true }));
+  })()`);
+
   // Back to a media tab, because the rest of the run is about pixels.
   await evaluate(`document.querySelector('input[name="kind"][value="image"]').click()`);
   const backToImage = await evaluate<{ stageHidden: boolean; textHidden: boolean }>(
@@ -1343,6 +1494,272 @@ try {
     'going back to Image brings the canvas back',
     !backToImage.stageHidden && backToImage.textHidden,
   );
+
+  // ── The tabs must not leak settings into each other ────────────────
+  // The timeline carries no `data-kind` of its own, so it used to keep
+  // whatever the last media tab left it as: arriving at Text from Video
+  // brought the duration and fps boxes along, and arriving from Image did
+  // not. Whether the leak happened depended on which tab came before.
+  console.log('\ntab switching:');
+  const churn = await evaluate<Array<{ to: string; groups: string; dims: string }>>(`(() => {
+    const q = (s) => document.querySelector(s);
+    const out = [];
+    for (const k of ['video', 'text', 'image', 'text', 'video', 'text', 'image', 'text']) {
+      q('input[name="kind"][value="' + k + '"]').click();
+      out.push({
+        to: k,
+        groups: [...document.querySelectorAll('#panel .group')]
+          .filter((e) => !e.hidden)
+          .map((e) => e.querySelector('h2')?.textContent ?? '?')
+          .join(','),
+        dims: q('#dimsLabel').textContent,
+      });
+    }
+    return out;
+  })()`);
+  const timelineLeak = churn.filter(
+    (step) => step.to === 'text' && step.groups.includes('Timeline'),
+  );
+  check(
+    'the timeline never follows into the Text tab',
+    timelineLeak.length === 0,
+    timelineLeak.length ? `leaked on ${timelineLeak.length} of the Text steps` : '4 of 4 Text steps clean',
+  );
+  const wrongGroups = churn.filter(
+    (step) =>
+      (step.to === 'text' && step.groups !== 'Text') ||
+      (step.to === 'image' && step.groups !== 'Size,Color,Background,Format') ||
+      (step.to === 'video' && step.groups !== 'Size,Color,Background,Format,Timeline'),
+  );
+  check(
+    'each tab shows exactly its own groups, whichever one came before',
+    wrongGroups.length === 0,
+    wrongGroups.length ? JSON.stringify(wrongGroups) : `${churn.length} transitions`,
+  );
+
+  // The desktop override from the top of the run was cleared before here, so the
+  // viewport is whatever the browser window happens to be. These three are
+  // desktop-layout claims: the preview shares a bounded grid track and the
+  // panel scrolls inside itself. On a phone neither holds, and measuring them
+  // there would fail for a reason that is not the thing being checked.
+  await send('Emulation.setDeviceMetricsOverride', {
+    width: 1440, height: 900, deviceScaleFactor: 1, mobile: false,
+  });
+  await Bun.sleep(150);
+
+  // The preview is the same box in all three tabs. It used to be capped at
+  // 62dvh while the stage it shares the grid track with had no cap, so the Text
+  // tab showed a hundred pixels of empty panel under the preview and the box
+  // changed size when you switched. Same height and same top edge means the
+  // labels under it cannot move either.
+  const box = await evaluate<Array<{ k: string; h: number; y: number; dims: number; meta: number }>>(`(() => {
+    const q = (s) => document.querySelector(s);
+    const out = [];
+    for (const k of ['image', 'video', 'text']) {
+      q('input[name="kind"][value="' + k + '"]').click();
+      const prev = k === 'text' ? q('#textPreview') : q('#stage');
+      out.push({
+        k,
+        h: Math.round(prev.getBoundingClientRect().height),
+        y: Math.round(prev.getBoundingClientRect().y),
+        dims: Math.round(q('#dimsLabel').getBoundingClientRect().y),
+        meta: Math.round(q('#metaLine').getBoundingClientRect().y),
+      });
+    }
+    return out;
+  })()`);
+  check(
+    'the preview is the same box in all three tabs',
+    new Set(box.map((b) => b.h)).size === 1 && new Set(box.map((b) => b.y)).size === 1,
+    box.map((b) => `${b.k}:${b.h}@${b.y}`).join(' '),
+  );
+  check(
+    'and the labels under it never move',
+    new Set(box.map((b) => b.dims)).size === 1 && new Set(box.map((b) => b.meta)).size === 1,
+    box.map((b) => `${b.k}:${b.dims}/${b.meta}`).join(' '),
+  );
+
+  // The panel scrolls on its own, and the offset it was left at belonged to the
+  // content that just went away. Going from a scrolled Video to Text used to
+  // land mid-panel at a place that means nothing in the new tab.
+  const scrolled = await evaluate<{ before: number; after: number }>(`(() => {
+    const q = (s) => document.querySelector(s);
+    const body = q('.panel-body');
+    q('input[name="kind"][value="video"]').click();
+    body.scrollTop = body.scrollHeight;
+    const before = Math.round(body.scrollTop);
+    q('input[name="kind"][value="text"]').click();
+    return { before, after: Math.round(body.scrollTop) };
+  })()`);
+  check(
+    'changing tab puts the controls back at the top',
+    scrolled.before > 0 && scrolled.after === 0,
+    `was ${scrolled.before}, now ${scrolled.after}`,
+  );
+
+  // Text controls stay full-width and use the same 10px group gap as the rest
+  // of the form; putting these controls in columns made their labels cramped.
+  console.log('\nfield spacing:');
+  const spacing = await evaluate<{ gaps: number[]; fullWidth: boolean }>(`(() => {
+    const q = (s) => document.querySelector(s);
+    q('input[name="kind"][value="text"]').click();
+    const rect = (id) => q('#' + id).closest('.field').getBoundingClientRect();
+    const preset = rect('textPreset');
+    const fields = ['textCategory', 'textGenerator', 'textCount', 'textLocale'].map((id) => rect(id));
+    return {
+      gaps: [
+        fields[1].top - fields[0].bottom,
+        fields[3].top - fields[2].bottom,
+      ].map(Math.round),
+      fullWidth: fields.every((r) => Math.round(r.left) === Math.round(preset.left)
+        && Math.round(r.width) === Math.round(preset.width)),
+    };
+  })()`);
+  check(
+    'text fields are full-width with uniform 10px gaps',
+    spacing.fullWidth && spacing.gaps.every((gap) => gap === 10),
+    `fullWidth=${spacing.fullWidth}, gaps=${spacing.gaps.join('/')}`,
+  );
+
+  // ── Copying the preview must hand over text and nothing else ──────
+  // A browser copies the rendered text of a selection, so a `<pre>` of spans
+  // is already plain. This pins it, because that is a default rather than a
+  // promise: one `::before` or one future handler would put markup back on
+  // the clipboard and the person pasting into a form would get `<span>`s.
+  console.log('\ncopying the preview:');
+  await evaluate(`document.querySelector('input[name="kind"][value="text"]').click()`);
+  // The event is dispatched rather than produced by `execCommand('copy')`,
+  // which fires nothing in a headless page with no focus: the selection is made
+  // and no `copy` ever runs, so a check on that path would pass on an empty
+  // result. What is under test here is the handler the app installed, and the
+  // structural half of the guarantee, which is that the spans add no characters
+  // for the browser's own default copy to carry.
+  const copied = await evaluate<{
+    selEqualsText: boolean;
+    selLen: number;
+    expected: number;
+    flavours: string[];
+    exact: boolean;
+    prevented: boolean;
+    hasTag: boolean;
+    hasStyle: boolean;
+    outsideWritten: number;
+    outsidePrevented: boolean;
+    crossWritten: number;
+    cellExact: boolean;
+  }>(`(() => {
+    const q = (s) => document.querySelector(s);
+    const pre = q('#textPreview');
+
+    const select = (a, b) => {
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      const r = document.createRange();
+      r.setStart(a, 0);
+      r.setEnd(b, b.textContent.length);
+      sel.addRange(r);
+      return sel;
+    };
+    const fireCopy = () => {
+      const written = [];
+      const ev = new ClipboardEvent('copy', { bubbles: true, cancelable: true });
+      Object.defineProperty(ev, 'clipboardData', {
+        value: {
+          setData: (f, v) => written.push({ f, v: String(v) }),
+          getData: () => '',
+          clearData: () => {},
+        },
+      });
+      document.dispatchEvent(ev);
+      return { written, prevented: ev.defaultPrevented };
+    };
+
+    const expected = pre.textContent;
+    select(pre.firstChild, pre.lastChild);
+    // Read now, not later: there is one Selection per document and the cases
+    // below move it, so holding the object would report whatever it ended up
+    // pointing at instead of what this case selected.
+    const selectedText = window.getSelection().toString();
+    const whole = fireCopy();
+    const plain = whole.written.find((w) => w.f.includes('plain'));
+
+    const h = q('h1').firstChild;
+    const outsideSel = window.getSelection();
+    outsideSel.removeAllRanges();
+    {
+      const r = document.createRange();
+      r.setStart(h, 0); r.setEnd(h, h.textContent.length);
+      outsideSel.addRange(r);
+    }
+    const outside = fireCopy();
+
+    outsideSel.removeAllRanges();
+    {
+      const r = document.createRange();
+      r.setStart(pre.firstChild, 0); r.setEnd(h, h.textContent.length);
+      outsideSel.addRange(r);
+    }
+    const cross = fireCopy();
+
+    const cell = pre.querySelector('span.tok-head');
+    const cellSel = window.getSelection();
+    cellSel.removeAllRanges();
+    if (cell) {
+      const r = document.createRange();
+      r.selectNodeContents(cell);
+      cellSel.addRange(r);
+    }
+    const oneCell = fireCopy();
+    const onePlain = oneCell.written.find((w) => w.f.includes('plain'));
+
+    return {
+      selEqualsText: selectedText === expected,
+      selLen: selectedText.length,
+      expected: expected.length,
+      flavours: whole.written.map((w) => w.f),
+      exact: plain ? plain.v === expected : false,
+      prevented: whole.prevented,
+      hasTag: plain ? /<[a-z/]/i.test(plain.v) : false,
+      hasStyle: plain ? /class=|style=|font-weight|<span/i.test(plain.v) : false,
+      outsideWritten: outside.written.length,
+      outsidePrevented: outside.prevented,
+      crossWritten: cross.written.length,
+      cellExact: onePlain ? onePlain.v === cell?.textContent : false,
+    };
+  })()`);
+  check(
+    'the coloured spans add no characters to the selection',
+    copied.selEqualsText,
+    `${copied.selLen} selected vs ${copied.expected} of text`,
+  );
+  check(
+    'a copy of the whole preview is byte-identical to the text',
+    copied.exact && copied.prevented,
+    `${copied.expected} chars, default prevented ${copied.prevented}`,
+  );
+  check(
+    'and it writes only the plain flavour, with no markup and no styles',
+    copied.flavours.length === 1 && copied.flavours[0] === 'text/plain' &&
+      !copied.hasTag && !copied.hasStyle,
+    copied.flavours.join(', ') || 'none',
+  );
+  check(
+    'a copy of part of the preview copies only that part',
+    copied.cellExact,
+    copied.cellExact ? 'a single header cell' : 'mismatch',
+  );
+  check(
+    'a copy from elsewhere on the page is left to the browser',
+    copied.outsideWritten === 0 && !copied.outsidePrevented && copied.crossWritten === 0,
+    `outside ${copied.outsideWritten}, crossing the preview ${copied.crossWritten}`,
+  );
+
+  await evaluate(`document.querySelector('input[name="kind"][value="image"]').click()`);
+
+  // The override goes back the way it was found, for the checks below that care
+  // about the real viewport.
+  await send('Emulation.clearDeviceMetricsOverride');
+  await Bun.sleep(100);
 
   // ── WebMCP: declarative API ────────────────────────────────────────
   // These are HTML attributes, so they are always there. What changes is
@@ -1418,7 +1835,7 @@ try {
   const userJson = await call({
     kind: 'text', textPreset: 'user', textCount: 2, textFormat: 'json', download: false,
   });
-  let userParsed: { name?: string; email?: string } = {};
+  let userParsed: Array<{ name?: string; email?: string }> = [];
   try {
     userParsed = JSON.parse(userJson);
   } catch {
@@ -1426,15 +1843,27 @@ try {
   }
   check(
     'kind=text with a preset returns the data itself',
-    !!userParsed.name && !!userParsed.email && /@/.test(userParsed.email),
-    userParsed.email ?? userJson.slice(0, 70),
+    Array.isArray(userParsed) &&
+      !!userParsed[0]?.name &&
+      !!userParsed[0]?.email &&
+      /@/.test(userParsed[0]?.email ?? ''),
+    userParsed[0]?.email ?? userJson.slice(0, 70),
   );
 
   const csv = await call({ kind: 'text', textPreset: 'payment', textCount: 1, textFormat: 'csv' });
   check(
-    'a download of text still returns the rows',
-    /^name,card,issuer/.test(csv) && csv.split('\n').length === 2,
+    'a download of text still returns the rows, separated by semicolons',
+    /^name;card;issuer/.test(csv) && csv.split('\n').length === 2,
     csv.split('\n')[0]?.slice(0, 60),
+  );
+
+  const tabbed = await call({
+    kind: 'text', textPreset: 'payment', textCount: 1, textFormat: 'csv', textDelimiter: ',',
+  });
+  check(
+    'and the delimiter can be changed to a comma',
+    /^name,card,issuer/.test(tabbed),
+    tabbed.split('\n')[0]?.slice(0, 40),
   );
 
   const esName = await call({

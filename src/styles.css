@@ -38,6 +38,18 @@
   --radius: 10px;
   --gap: 16px;
   color-scheme: light dark;
+
+  /* Syntax colours for the text preview. Deliberately not tinted with --tint-h:
+     a generated value is not part of the palette, so its colours are fixed and
+     the same in every theme, which is what lets a person read the JSON and
+     recognise the shapes without re-learning them per colour scheme. */
+  --tok-key: #7b3f9e;
+  --tok-string: #1f6b3a;
+  --tok-number: #a8560f;
+  --tok-literal: #0f6b7a;
+  --tok-head: #1c1a19;
+  --tok-punct: #a49b98;
+  --tok-rule: #b3aaa7;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -55,6 +67,13 @@
     --warn: #e0b872;
     --bad: #f09a9a;
     --checker-a: hsl(var(--tint-h) calc(var(--tint-s) * 0.3) 20%);
+    --tok-key: #d0a2f0;
+    --tok-string: #93d9ac;
+    --tok-number: #f0bb7c;
+    --tok-literal: #7fd0e0;
+    --tok-head: #f2eeec;
+    --tok-punct: #7d7572;
+    --tok-rule: #6b6360;
     --checker-b: hsl(var(--tint-h) calc(var(--tint-s) * 0.25) 15%);
   }
 }
@@ -220,6 +239,10 @@ body {
   }
   .panel-body {
     overflow: visible;
+  }
+  /* The page scrolls on phones, so cap the preview rather than the page. */
+  .text-preview {
+    max-height: 62dvh;
   }
   /* The panel no longer clips its dock, so the dock rounds its own corners. */
   .dock {
@@ -770,18 +793,17 @@ button.ghost:hover {
 }
 
 /* The text preview is the one thing on the page that has to be read and copied,
-   so it stays selectable and wraps instead of scrolling sideways. It sits in the
-   same grid track the stage uses, and `min-height: 0` is what lets a scroll
-   container actually scroll inside a stretched grid item rather than growing
-   the track. Tabbable because selecting generated data by hand is a real use:
-   copy a few rows out of a hundred. */
+   so it stays selectable. It sits in the same grid track the stage uses, and
+   `min-height: 0` is what lets a scroll container actually scroll inside a
+   stretched grid item rather than growing the track. Tabbable because selecting
+   generated data by hand is a real use: copy a few rows out of a hundred. */
 .text-preview {
   width: 100%;
   min-height: 0;
   margin: 0;
   padding: 20px;
   overflow: auto;
-  max-height: 62dvh;
+  overscroll-behavior: contain;
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -791,6 +813,49 @@ button.ghost:hover {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   tab-size: 2;
+}
+
+/* A row of a table must not wrap.
+   `pre-wrap` breaks a nine-column Markdown row in the middle of a cell, and the
+   result is not a table any more: the reader has to work out that the name they
+   are looking at ended four lines ago, and the pipes that were padded to line
+   up no longer do. Scrolling sideways is the honest answer for a row that is
+   wider than the panel, because the row keeps the shape it has on disk.
+   The plain and JSON formats keep wrapping: their lines are values rather than
+   aligned columns, and a single very long one should not turn the whole preview
+   into a sideways scroll for two lines of text. */
+.text-preview[data-scroll="x"] {
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+/* The preview is filled with spans by `text-highlight.ts`. There is no
+   `.text-preview span` rule here on purpose: an inline span already inherits
+   font and color, and a `color: inherit` on that selector has more weight than
+   any of the token classes below, which would silently repaint every token
+   with the text colour. */
+.tok-key {
+  color: var(--tok-key);
+}
+.tok-string {
+  color: var(--tok-string);
+}
+.tok-number {
+  color: var(--tok-number);
+}
+.tok-literal {
+  color: var(--tok-literal);
+}
+.tok-head {
+  color: var(--tok-head);
+  font-weight: 600;
+}
+.tok-punct {
+  color: var(--tok-punct);
+}
+/* The row rule, in the text format and under a Markdown header. */
+.tok-rule {
+  color: var(--tok-rule);
 }
 
 .dims-label {

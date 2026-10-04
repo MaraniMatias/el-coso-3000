@@ -1,16 +1,15 @@
 # El Coso 3000
 
-Image, video, and fake data placeholder generator that runs **entirely in the browser**.  
-No server, no connection, nothing uploaded. The result is **a single HTML file** you can open with a double-click.
+Placeholder generator for images, video and fake data. Runs entirely in the browser: no server, no connection, nothing uploaded. The build produces a single HTML file you open with a double-click.
 
 
-**Demo:** [https://el-coso-3000.maranimatias.workers.dev/](https://el-coso-3000.maranimatias.workers.dev/)
+**Demo:** [el-coso-3000.maranimatias.workers.dev](https://el-coso-3000.maranimatias.workers.dev/)
 
 ---
 
 ## What it does
 
-Generates ready-to-use placeholders for wireframes, mockups, prototypes, and temporary assets.
+Generates placeholders for wireframes, mockups, prototypes and temporary assets.
 
 | Kind | Formats | Notes |
 |------|---------|-------|
@@ -20,29 +19,32 @@ Generates ready-to-use placeholders for wireframes, mockups, prototypes, and tem
 | Video | MP4 · WebM · MOV · MKV | Encoded with the browser engine; optional synthesized tango, beep, tone, or noise soundtrack. |
 | Fake data | plain text · JSON · JSON array · CSV · Markdown | No pixels. The Text tab, powered by `@faker-js/faker` in English and Spanish. |
 
-Placeholder text is **only the dimensions**: always on a single line, scaled as large as fits within 70% of the width and 60% of the height of the image. Animated and video outputs also include a progress bar and clock (`0:03 / 0:10`).
+The placeholder draws only its own dimensions, on one line, scaled as large as fits within 70% of the width and 60% of the height. Animated and video outputs can add a progress bar and a clock (`0:03 / 0:10`).
 
 ### Fake data
 
-The **Text** tab generates placeholder data instead of an image, so the size, palette, and background controls do not apply to it. It draws on **24 groups** (person, internet, location, company, commerce, phone, date, finance, string, color, number, word, git, system, database, vehicle, airline, book, music, food, animal, science and lorem) and about **210 generators**, in **English or Spanish**.
+The Text tab writes placeholder data instead of an image, so size, palette and background do not apply to it. It draws on 24 groups (person, internet, location, company, commerce, phone, date, finance, string, color, number, word, git, system, database, vehicle, airline, book, music, food, animal, science and lorem) and about 210 generators, in English or Spanish.
 
-Eight presets bundle the common ones — a lorem sentence, a lorem paragraph, a user profile, a company, a product, an address, a payment card, and an API response — or any single generator can be picked on its own.
+Eight presets bundle the common ones (a lorem sentence, a lorem paragraph, a user profile, a company, a product, an address, a payment card, an API response). You can also pick any single generator on its own.
 
 | Output | What you get |
 |--------|--------------|
-| `plain` | One value per line, no header. A preset puts its fields side by side with the chosen separator. |
-| `json` | A single object built from the first row, for a request body. |
-| `array` | One object per row. |
-| `csv` | Comma separated with a header row; cells with a comma or a quote are quoted. |
-| `md` | A Markdown table, with pipes escaped, ready to paste into a README. |
+| `plain` | Bare values, no header, with each record followed by a line of three dashes so records can be told apart. A preset puts its fields side by side with the chosen separator. |
+| `json` | A JSON array with one object per record, indented two spaces. |
+| `csv` | A header row, semicolon between the columns by default (comma, tab or pipe available). A cell holding its delimiter, a quote or a line break is quoted. |
+| `md` | A Markdown table: pipes escaped, every column padded to its widest cell so they line up in the pasted source, and a column whose values are all numbers right-aligned. |
 
-Also in the tab: **Regenerate** rerolls the data without touching a control, and **Copy text** puts the rows on the clipboard. Up to 1000 rows per generation.
+Only the control the chosen format actually reads is shown: the separator for `plain`, the delimiter for `csv`.
+
+The preview is coloured by format, and past 200 rows it stops colouring and shows the text as it is, so a thousand-row paste does not turn into ten thousand spans. What gets copied and downloaded is always the text itself, never the marked-up DOM.
+
+Also in the tab: Regenerate rerolls the data without touching a control, and Copy text puts the rows on the clipboard. Up to 1000 rows per generation.
 
 > A few generators come out the same in both languages: lorem filler is Latin by definition, and there is no Spanish IBAN dataset, so `finance.iban` returns a Belgian IBAN either way.
 
 ### Colors with guaranteed contrast
 
-Not random. Nine pre-measured pairs with **WCAG AA** contrast (≥ 4.5:1):
+Not random. Nine pre-measured pairs, all at WCAG AA (≥ 4.5:1):
 
 | Name | Background | Text | Contrast |
 |------|------------|------|----------|
@@ -56,7 +58,7 @@ Not random. Nine pre-measured pairs with **WCAG AA** contrast (≥ 4.5:1):
 | violet | `#EDE9FE` | `#5B21B6` | 7.57:1 |
 | rose | `#FCE7F3` | `#9D174D` | 6.71:1 |
 
-Pick one of the nine swatches, or the last one to bring up the color picker for a color of your own: the text color is then computed from it to keep the contrast.
+Pick one of the nine swatches, or the last one to bring up the color picker for a color of your own. The text color is then computed from it, so the pair keeps its contrast.
 
 ### Textured backgrounds
 
@@ -69,24 +71,24 @@ The background can also be one of four animated textures, drawn with the two col
 | Center focus | A clean light center with a vignette in the text color. |
 | Rise | Blurred spheres that come up from the bottom and fade out. |
 
-They are painted on the canvas, so they are baked into the file: PNG, JPEG, WebP, GIF, the JPEG sequences and every video container all carry the animation. **SVG stays flat**: it is written as text, and it says so instead of pretending.
+They are painted on the canvas, so they are baked into the file. PNG, JPEG, WebP, GIF, the JPEG sequences and every video container all carry the animation. SVG stays flat: it is written as text, and it says so instead of pretending.
 
-The last swatch of the color row opens the color picker and then shows whatever color came out of it, so a color of your own is one click from the palette. Until you pick one it offers a measured pair with the palette icon on it.
+The last swatch of the color row opens the color picker and then shows whatever color came out of it, so a color of your own is one click from the palette. Until you pick one, it offers a measured pair with the palette icon on it.
 
 ### Both colors, by hand
 
 The last swatch of the color row is painted with the pair split in two, and each half opens the picker of its own color: the large triangle is the background, the small one is the text. So both are chosen from the mosaic, with no second control anywhere.
 
-- Pick **one** of them and the other is computed from it to guarantee WCAG AA. That is what the contrast guarantee rests on.
-- Pick the **other** one too and nothing is recomputed any more: both are yours, and the indicator under the row is the only thing measuring the pair.
+- Pick one of them and the other is computed from it to guarantee WCAG AA. That is what the contrast guarantee rests on.
+- Pick the other one too and nothing is recomputed any more. Both are yours, and the indicator under the row is the only thing measuring the pair.
 - The indicator is one short line: the measured ratio, the level it reaches, and where the pair comes from: `Gray palette`, `text follows background`, `background follows text`, `both colors yours`. A level short of AA says so in the same line (`large text only`, `unreadable`).
-- When the pair cannot be read, a `fix` button appears in that same row and hands the text back to the computed color. It is the only state that shows it: a computed color clears AA by construction and a palette pair is measured above it.
+- When the pair cannot be read, a `fix` button appears in that same row and hands the text back to the computed color. It is the only state that shows it: a computed color clears AA by construction, and a palette pair is measured above it.
 
 A pair picked by hand can land below AA, and it is exported as it is. The indicator says so, and `fix` is one click away.
 
-On a video you can pick how fast they move: **1× to 3×**, 2× by default, as a multiple of the timing in the [`docs/`](docs/) demo they come from. Unchecking **Texture movement** holds the first frame for the whole clip: a texture that is painted and never moves, which is a speed of 0. The control only appears when there is something to move: an animated texture, on a format with more than one frame. A still image is the same picture at any speed.
+On a video you can pick how fast they move, from 1× to 3× with 2× as the default, as a multiple of the timing in the [`docs/`](docs/) demo they come from. Unchecking Texture movement holds the first frame for the whole clip: a texture that is painted and never moves, which is a speed of 0. The control only appears when there is something to move, which means an animated texture on a format with more than one frame. A still image is the same picture at any speed.
 
-Three things to know before you export. The loop of a video is not seamless, and the grain is expensive for a still compressor, so a textured PNG is much larger than a flat one. And the movement runs on real time, so it does not depend on the length of the clip: a second of a 120s video moves the background exactly as far as a second of the 5s one it is tuned on. A short clip therefore shows less of the animation, not a faster one: 120ms at 15 fps is two frames, and they are almost the same picture.
+Three things to know before you export. The loop of a video is not seamless. The grain is expensive for a still compressor, so a textured PNG is much larger than a flat one. And the movement runs on real time, so it does not depend on the length of the clip: a second of a 120s video moves the background exactly as far as a second of the 5s one it is tuned on. A short clip therefore shows less of the animation, not a faster one. 120ms at 15 fps is two frames, and they are almost the same picture.
 
 ### File names
 
@@ -117,14 +119,11 @@ The app's own keywords are prefixed so tools group them instead of listing them 
 
 ## Who it's for
 
-**Designers**  
-Readable placeholders with solid contrast and an embedded font. Good for mockups, wireframes, and temporary assets that shouldn't look broken.
+Designers get readable placeholders with solid contrast and an embedded font. Good for mockups, wireframes and temporary assets that shouldn't look broken.
 
-**Developers**  
-Test images, videos, and fake data (users, addresses, emails, payments) ready for prototypes, visual tests, seeding a database, or demos. Everything runs in the browser, no server required.
+Developers get test images, videos and fake data (users, addresses, emails, payments) for prototypes, visual tests, seeding a database or demos. No server required.
 
-**Anyone**  
-Open the HTML, pick size and format, download.
+Anyone can open the HTML, pick a size and format, and download.
 
 ---
 
@@ -132,7 +131,7 @@ Open the HTML, pick size and format, download.
 
 1. Download `dist/placeholder.html` (or open the [online demo](https://maranimatias.github.io/el-coso-3000/)).
 2. Open it in a browser (double-click is enough).
-3. Choose size, format, and color — or switch to the **Text** tab for fake data.
+3. Choose size, format and color, or switch to the Text tab for fake data.
 4. Download the generated file.
 
 > [!NOTE]

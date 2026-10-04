@@ -47,12 +47,17 @@ import {
   COUNT_MIN,
   CUSTOM_PRESET,
   DEFAULT_COUNT,
+  DELIMITERS,
+  DELIMITER_CHOICES,
+  delimiterKey,
   formatRows,
   generateRows,
   generatorLabel,
   GENERATORS,
   PRESETS,
   PRESET_KEYS,
+  ROW_RULE,
+  SEPARATORS,
   TEXT_FORMAT_INFO,
   TEXT_FORMATS,
   textFilename,
@@ -62,6 +67,7 @@ import {
   type TextLocale,
   type TextSpec,
 } from "./text-generators";
+import { highlightInto } from "./text-highlight";
 import { setupWebMcp, webmcpStatusText } from "./webmcp";
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string): T => {
@@ -791,6 +797,25 @@ function refreshDependentUi(): void {
 
   if (text) {
     refreshDownloadLabel();
+    // Everything the media tabs own has to be put away before leaving, not left
+    // for the text branch to inherit. The timeline is the one that showed: it
+    // carries no `data-kind` of its own, so coming from Video left it standing
+    // in the Text tab, and coming from Image left it hidden. Whether the tab
+    // leaked video settings depended on which tab came before it.
+    const quality = form.querySelector<HTMLElement>(".quality");
+    if (quality) quality.hidden = true;
+    $("#timeline").hidden = true;
+    for (const name of ["showProgressBar", "showTime", "sound", "textureMove"] as const) {
+      const el = form.elements.namedItem(name);
+      if (el instanceof HTMLInputElement) el.disabled = false;
+    }
+    $<HTMLSelectElement>("#soundTone").disabled = true;
+    $<HTMLSelectElement>("#textureSpeed").disabled = true;
+    $("#textureSpeedField").hidden = true;
+    $("#fpsEffective").hidden = true;
+    $("#evenWarning").hidden = true;
+    stopPreviewAnimation();
+
     refreshTextUi();
     return;
   }
@@ -933,19 +958,6 @@ function refreshDependentUi(): void {
 
 // ── Text ─────────────────────────────────────────────────────────────────
 
-/**
- * The named separators. The picker offers words rather than the characters
- * themselves because a literal newline in the value of an `<option>` is
- * invisible in the markup and impossible to tell from a space when reading it.
- */
-const SEPARATORS: Record<string, string> = {
-  newline: "\n",
-  comma: ",",
-  semicolon: ";",
-  tab: "\t",
-  space: " ",
-};
-
 /** Resolves the separator picker, including whatever the custom box holds. */
 function selectedSeparator(): string {
   const pick = str("textSeparator", "newline");
@@ -953,6 +965,11 @@ function selectedSeparator(): string {
   // An empty custom box is a separator of nothing, which would glue every row
   // together. A newline is the least surprising thing a blank box can mean.
   return $<HTMLInputElement>("#textSeparatorCustom").value || "\n";
+}
+
+/** What goes between the columns of a CSV, from its own picker. */
+function selectedDelimiter(): string {
+  return DELIMITERS[str("textDelimiter", "semicolon")] ?? ";";
 }
 
 /** What the text tab is currently set to generate. */
@@ -968,6 +985,7 @@ function readTextSpec(): TextSpec {
     count: Math.min(COUNT_MAX, Math.max(COUNT_MIN, Number.isFinite(raw) ? raw : DEFAULT_COUNT)),
     format: str("textFormat", "plain") as TextFormat,
     separator: selectedSeparator(),
+    delimiter: selectedDelimiter(),
   };
 }
 
@@ -1057,6 +1075,11 @@ function refreshTextUi(): void {
   $<HTMLSelectElement>("#textCategory").disabled = !custom;
   $<HTMLSelectElement>("#textGenerator").disabled = !custom;
 
+  // Each format has one thing to configure, so only that control is shown. A
+  // separator under JSON, or a delimiter under Markdown, would be a control
+  // that changes nothing, and those read as broken rather than as redundant.
+  $("#textSeparatorField").hidden = spec.format !== "plain";
+  $("#textDelimiterField").hidden = spec.format !== "csv";
   const customBox = $<HTMLInputElement>("#textSeparatorCustom");
   customBox.hidden = str("textSeparator", "newline") !== "custom";
 
@@ -1067,12 +1090,26 @@ function refreshTextUi(): void {
   renderText();
 }
 
+/**
+ * Whether a format's lines may be broken to fit the panel.
+ *
+ * The tabular formats answer no. Their lines are aligned columns, so wrapping
+ * one does not shorten it, it destroys it: a nine-column Markdown row wraps in
+ * the middle of a cell and the pipes stop lining up, which is the opposite of
+ * what the padding was for. A sideways scroll is the honest answer there. The
+ * text and JSON formats say yes, because their lines are single values and one
+ * long value should not turn the preview into a sideways scroll.
+ */
+function wrapsLines(format: TextFormat): boolean {
+  return format !== "csv" && format !== "md";
+}
+
 /** Generates the current spec and shows it. */
 function renderText(): void {
   const spec = readTextSpec();
   let text: string;
   try {
-    text = formatRows(generateRows(spec), spec.format, spec.separator);
+    text = formatRows(generateRows(spec), spec.format, spec.separator, spec.delimiter);
   } catch (err) {
     // A generator the catalog lists but the installed faker does not have would
     // throw here. It is said in the note rather than left as a dead preview,
@@ -1082,7 +1119,12 @@ function renderText(): void {
     updateTextMetaLine(0);
     return;
   }
-  $("#textPreview").textContent = text;
+  // The preview is filled with spans rather than set as text, so Copy and the
+  // download both read `textOutput` and never the DOM: what is on screen and
+  // what leaves the page cannot drift apart.
+  const preview = $("#textPreview");
+  preview.dataset.scroll = wrapsLines(spec.format) ? "y" : "x";
+  highlightInto(preview, text, spec.format, spec.delimiter);
   $("#textNote").textContent = "";
   updateTextMetaLine(spec.count);
   textOutput = text;
@@ -1098,6 +1140,34 @@ function updateTextMetaLine(count: number): void {
 
 /** The last output rendered, kept so Copy has something to hand the clipboard. */
 let textOutput = "";
+
+/**
+ * Keeps the clipboard to plain text when the copy comes from the preview.
+ *
+ * A browser copies the rendered text of a selection, so a `<pre>` full of spans
+ * is already plain and this handler is not what makes that true today. It is
+ * here because the default is not a promise: one `::before` with content, or
+ * one future handler that adds an `text/html` flavour, would put markup on the
+ * clipboard again and the person pasting into a spreadsheet or a form would
+ * get a row of `<span>`s. Pinning it here makes the guarantee explicit instead
+ * of incidental.
+ *
+ * The `text` of the selection is used rather than the whole preview, so
+ * copying three rows out of a thousand copies those three rows.
+ */
+function pinCopyToPlainText(ev: ClipboardEvent): void {
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed) return;
+  const preview = $("#textPreview");
+  const { anchorNode, focusNode } = selection;
+  // A copy from anywhere else on the page is the browser's business.
+  if (!anchorNode || !preview.contains(anchorNode)) return;
+  if (focusNode && !preview.contains(focusNode)) return;
+  // Preventing the default and setting exactly one flavour is the recipe: not
+  // writing `text/html` is what keeps the markup off the clipboard.
+  ev.preventDefault();
+  ev.clipboardData?.setData("text/plain", selection.toString());
+}
 
 /** Puts the preview on the clipboard, with a fallback for denied permission. */
 async function copyText(): Promise<void> {
@@ -1326,6 +1396,19 @@ function applySettings(
       }
       setRadio("textFormat", input.textFormat);
     }
+    if (typeof input.textDelimiter === "string") {
+      // An agent is handed the character, not the option name, so the value is
+      // translated here rather than at the schema: `;` is what it is and
+      // `semicolon` is an implementation detail of the picker.
+      const key = delimiterKey(input.textDelimiter);
+      if (!key) {
+        return {
+          ok: false,
+          error: `unknown csv delimiter "${input.textDelimiter}", expected one of ${DELIMITER_CHOICES.join(" ")}`,
+        };
+      }
+      setSelect("textDelimiter", key);
+    }
     if (typeof input.textLocale === "string") {
       const key = input.textLocale;
       if (key !== "en" && key !== "es") {
@@ -1464,6 +1547,10 @@ function describe(): Record<string, unknown> {
       ...(spec.preset ? { preset: spec.preset } : {}),
       ...(preset ? { columns: preset.fields.map((field) => field.as) } : {}),
       ...(preset ? {} : { category: spec.category, generator: spec.generator }),
+      // Only the separator the chosen format actually reads. Reporting the
+      // other one would be claiming a setting that has no effect on the output.
+      ...(spec.format === "plain" ? { separator: spec.separator } : {}),
+      ...(spec.format === "csv" ? { delimiter: spec.delimiter } : {}),
       // What the file on disk will be called, which is the part an agent that
       // saves the result has to write down.
       filename: textFilename(spec),
@@ -1556,6 +1643,9 @@ function wireEvents(): void {
             BACKGROUND_BY_KIND.get(mediaKind()) ?? "solid",
           );
         }
+        // Each tab starts at the top instead of inheriting the previous tab's
+        // scroll offset.
+        $(".panel-body").scrollTop = 0;
         refreshDependentUi();
         void syncVideoAvailability();
         return;
@@ -1606,6 +1696,10 @@ function wireEvents(): void {
   $("#textCopy").addEventListener("click", () => {
     void copyText();
   });
+
+  // On the document rather than on the preview: the selection often starts
+  // inside and ends outside, and a handler on the preview would miss those.
+  document.addEventListener("copy", pinCopyToPlainText);
 
   // Pasting a size into either field fills both. A `type="number"` input runs
   // the value sanitization algorithm, so "1629×420" would land there empty:

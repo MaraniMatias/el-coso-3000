@@ -15,6 +15,8 @@ import {
   generatorLabel,
   textFilename,
   type GeneratorKey,
+  type Row,
+  type TextFormat,
   type TextSpec,
 } from '../src/ui/text-generators';
 
@@ -127,6 +129,7 @@ function spec(over: Partial<TextSpec> = {}): TextSpec {
     count: 3,
     format: 'plain',
     separator: ',',
+    delimiter: ';',
     ...over,
   };
 }
@@ -193,47 +196,83 @@ const rows = [
 ];
 
 describe('formatRows', () => {
+  // The signature grew a delimiter for CSV; these tests are about everything
+  // else, so they go through one wrapper rather than threading it everywhere.
+  const fmt = (
+    input: Row[],
+    format: TextFormat,
+    separator = '\n',
+    delimiter = ';',
+  ): string => formatRows(input, format, separator, delimiter);
+
   test('plain is one value per line for a single column', () => {
-    expect(formatRows([{ email: 'a@b.c' }, { email: 'd@e.f' }], 'plain', '\n'))
-      .toBe('a@b.c\nd@e.f');
+    expect(fmt([{ email: 'a@b.c' }, { email: 'd@e.f' }], 'plain'))
+      .toBe('a@b.c\n---\nd@e.f');
   });
 
-  test('plain joins the columns of a preset with the separator, escaping nothing', () => {
-    expect(formatRows(rows, 'plain', ' | ')).toBe(
-      'Ada Lovelace | London | first | second\nGrace Hopper | New York | plain',
+  test('plain separates the records of a preset with a row of dashes', () => {
+    // Without this a three-record preset comes out as nine bare lines and
+    // nothing says which line ends a record and which starts the next.
+    expect(fmt(rows, 'plain', ' | ')).toBe(
+      'Ada Lovelace | London | first | second\n' +
+        '---\n' +
+        'Grace Hopper | New York | plain',
     );
   });
 
-  test('json is a single object, array is every row', () => {
-    expect(JSON.parse(formatRows(rows, 'json', '\n'))).toEqual(rows[0]);
-    expect(JSON.parse(formatRows(rows, 'array', '\n'))).toEqual(rows);
+  test('plain escapes nothing, because it is not a format that can', () => {
+    expect(fmt([{ a: 'has | pipe' }], 'plain')).toBe('has | pipe');
   });
 
-  test('csv has a header and quotes only what a comma would break', () => {
-    const out = formatRows(rows, 'csv', '\n').split('\n');
-    expect(out[0]).toBe('name,city,note');
+  test('json is one object per row', () => {
+    expect(JSON.parse(fmt(rows, 'json'))).toEqual(rows);
+  });
+
+  test('csv has a header and a semicolon between the columns', () => {
+    const out = fmt(rows, 'csv').split('\n');
+    expect(out[0]).toBe('name;city;note');
     // A pipe is an ordinary character in CSV, unlike in a Markdown table.
-    expect(out[1]).toBe('Ada Lovelace,London,first | second');
-    expect(formatRows([{ a: 'x,y', b: 'z' }], 'csv', '\n').split('\n')[1]).toBe('"x,y",z');
+    expect(out[1]).toBe('Ada Lovelace;London;first | second');
+  });
+
+  test('csv takes the delimiter it is given', () => {
+    expect(fmt([{ a: 'x', b: 'y' }], 'csv', '\n', ',').split('\n')[1]).toBe('x,y');
+    expect(fmt([{ a: 'x', b: 'y' }], 'csv', '\n', '\t').split('\n')[1]).toBe('x\ty');
+    expect(fmt([{ a: 'x', b: 'y' }], 'csv', '\n', '|').split('\n')[1]).toBe('x|y');
+  });
+
+  test('csv quotes a value that holds the delimiter it was given', () => {
+    // With the default semicolon a comma is data and needs no quotes, which is
+    // the whole reason for making the delimiter a choice: quoting follows the
+    // delimiter, not a hardcoded character.
+    expect(fmt([{ a: 'x,y', b: 'z' }], 'csv', '\n', ';').split('\n')[1]).toBe('x,y;z');
+    expect(fmt([{ a: 'x,y', b: 'z' }], 'csv', '\n', ',').split('\n')[1]).toBe('"x,y",z');
+    expect(fmt([{ a: 'x;y', b: 'z' }], 'csv', '\n', ';').split('\n')[1]).toBe('"x;y";z');
+    expect(fmt([{ a: 'x|y', b: 'z' }], 'csv', '\n', '|').split('\n')[1]).toBe('"x|y"|z');
   });
 
   test('csv has no Markdown underline row', () => {
     // A row of dashes would import into a spreadsheet as literal data.
-    const out = formatRows(rows, 'csv', '\n').split('\n');
+    const out = fmt(rows, 'csv').split('\n');
     expect(out).toHaveLength(rows.length + 1);
-    expect(out.some((line) => /^-+(,-+)*$/.test(line))).toBe(false);
+    expect(out.some((line) => /^-+(;-+)*$/.test(line))).toBe(false);
   });
 
   test('csv doubles embedded quotes and wraps newlines', () => {
-    const out = formatRows([{ a: 'he said "hi"', b: 'x' }], 'csv', '\n').split('\n');
-    expect(out[1]).toBe('"he said ""hi""",x');
+    const out = fmt([{ a: 'he said "hi"', b: 'x' }], 'csv').split('\n');
+    expect(out[1]).toBe('"he said ""hi""";x');
+  });
+
+  test('csv does not pad: spaces are data', () => {
+    expect(fmt([{ a: 'x', b: 'much longer' }], 'csv').split('\n')[1]).toBe('x;much longer');
   });
 
   test('markdown underlines its header and escapes pipes', () => {
-    const out = formatRows(rows, 'md', '\n').split('\n');
-    expect(out[0]).toBe('| name | city | note |');
-    expect(out[1]).toBe('| --- | --- | --- |');
-    expect(out[2]).toBe('| Ada Lovelace | London | first \\| second |');
+    const out = fmt(rows, 'md').split('\n');
+    expect(out[0]).toBe('| name         | city     | note            |');
+    expect(out[1]).toBe('| :----------- | :------- | :-------------- |');
+    expect(out[2]).toBe('| Ada Lovelace | London   | first \\| second |');
+    expect(out[3]).toBe('| Grace Hopper | New York | plain           |');
     expect(out).toHaveLength(rows.length + 2);
     // Every line has to keep the same column count or the table is broken.
     for (const line of out) {
@@ -241,17 +280,59 @@ describe('formatRows', () => {
     }
   });
 
+  test('markdown pads every column to its widest cell so the pipes line up', () => {
+    // The header and the body carry different widths, and that is the point:
+    // the source is what gets pasted, and a wobbling table is hard to read.
+    // Escaped pipes inside a value are not column separators, so they are
+    // excluded the same way the column-count test excludes them.
+    const lines = fmt(rows, 'md').split('\n');
+    const pipes = lines.map((line) =>
+      [...line.matchAll(/(?<!\\)\|/g)].map((m) => m.index ?? -1),
+    );
+    const first = pipes[0] ?? [];
+    expect(first.length).toBe(4);
+    for (const row of pipes) {
+      expect(row).toEqual(first);
+    }
+  });
+
+  test('markdown right-aligns a column that is all numbers', () => {
+    const out = fmt(
+      [
+        { item: 'Widget', price: '9.99' },
+        { item: 'Gadget', price: '1200.50' },
+      ],
+      'md',
+    ).split('\n');
+    // The colon has to be the last character of the cell or Markdown reads it
+    // as another dash and drops the alignment without complaining.
+    expect(out[1]).toBe('| :----- | ------: |');
+    // The widest value sets the width and the values sit flush right under it.
+    expect(out[2]).toBe('| Widget |    9.99 |');
+    expect(out[3]).toBe('| Gadget | 1200.50 |');
+  });
+
+  test('markdown does not right-align a column that is only partly numbers', () => {
+    // A ZIP code among letters is not a quantity, and right-aligning it would
+    // be a claim that it is one, so the whole column has to qualify.
+    const out = fmt([{ a: '12345' }, { a: '12B' }], 'md').split('\n');
+    expect(out[1]).toBe('| :---- |');
+    expect(out[2]).not.toContain(':');
+  });
+
   test('markdown flattens a newline inside a value', () => {
-    const out = formatRows([{ a: 'one\ntwo' }], 'md', '\n');
+    const out = fmt([{ a: 'one\ntwo' }], 'md');
     expect(out.split('\n')).toHaveLength(3);
   });
 
   test('no format throws on an empty result', () => {
     for (const format of TEXT_FORMATS) {
-      expect(() => formatRows([], format, '\n')).not.toThrow();
+      expect(() => fmt([], format)).not.toThrow();
     }
-    expect(formatRows([], 'array', '\n')).toBe('[]');
-    expect(formatRows([], 'json', '\n')).toBe('{}');
+    expect(fmt([], 'json')).toBe('[]');
+    expect(fmt([], 'csv')).toBe('');
+    expect(fmt([], 'md')).toBe('');
+    expect(fmt([], 'plain')).toBe('');
   });
 });
 

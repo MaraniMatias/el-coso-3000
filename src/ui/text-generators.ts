@@ -229,10 +229,13 @@ export interface TextSpec {
   locale: TextLocale;
   count: number;
   format: TextFormat;
+  /** What goes between the fields of one row in the text format. */
   separator: string;
+  /** What goes between the columns in the CSV format. */
+  delimiter: string;
 }
 
-export const TEXT_FORMATS = ['plain', 'json', 'array', 'csv', 'md'] as const;
+export const TEXT_FORMATS = ['plain', 'json', 'csv', 'md'] as const;
 export type TextFormat = (typeof TEXT_FORMATS)[number];
 
 export interface TextFormatInfo {
@@ -242,12 +245,57 @@ export interface TextFormatInfo {
 }
 
 export const TEXT_FORMAT_INFO: Record<TextFormat, TextFormatInfo> = {
-  plain: { label: 'Plain', extension: 'txt', mime: 'text/plain' },
+  plain: { label: 'Text', extension: 'txt', mime: 'text/plain' },
   json: { label: 'JSON', extension: 'json', mime: 'application/json' },
-  array: { label: 'JSON array', extension: 'json', mime: 'application/json' },
   csv: { label: 'CSV', extension: 'csv', mime: 'text/csv' },
   md: { label: 'Markdown', extension: 'md', mime: 'text/markdown' },
 };
+
+/**
+ * The named separators for the text format. The picker offers words rather than
+ * the characters themselves because a literal newline in the value of an
+ * `<option>` is invisible in the markup and impossible to tell from a space.
+ */
+export const SEPARATORS: Record<string, string> = {
+  newline: '\n',
+  comma: ',',
+  semicolon: ';',
+  tab: '\t',
+  space: ' ',
+};
+
+/** The named delimiters for the CSV format, on the same terms. */
+export const DELIMITERS: Record<string, string> = {
+  semicolon: ';',
+  comma: ',',
+  tab: '\t',
+  pipe: '|',
+};
+
+/**
+ * The delimiter characters, in the order they are offered.
+ *
+ * The form speaks in names because an `<option value="tab">` is readable, but an
+ * agent should be handed the characters: `;` says what it is and `semicolon`
+ * would have to be translated. This is the list the WebMCP schema advertises,
+ * and it is derived rather than written twice so the two cannot drift.
+ */
+export const DELIMITER_CHOICES: string[] = Object.values(DELIMITERS);
+
+/** The option name for a delimiter character, e.g. `;` becomes `semicolon`. */
+export function delimiterKey(char: string): string | undefined {
+  return Object.keys(DELIMITERS).find((key) => DELIMITERS[key] === char);
+}
+
+/**
+ * What separates one row from the next in the text format.
+ *
+ * Without it a preset with several fields is unreadable: three user profiles
+ * come out as twenty-seven consecutive lines and there is nothing to say where
+ * one record stops. Three dashes are what a person reading a terminal already
+ * expects, and they survive a paste into anything.
+ */
+export const ROW_RULE = '---';
 
 export const COUNT_MIN = 1;
 export const COUNT_MAX = 1000;
@@ -312,9 +360,17 @@ function columnsOf(rows: Row[]): string[] {
 
 // ── Formatting ─────────────────────────────────────────────────────────
 
-/** Escapes a value for a CSV cell: quotes survive, and quotes are doubled. */
-function csvCell(value: string): string {
-  return /[",\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+/**
+ * Escapes a value for a CSV cell.
+ *
+ * What forces quotes depends on the delimiter: RFC 4180 asks for quotes around
+ * anything holding the delimiter, a quote or a line break, and a value with a
+ * comma is harmless in a semicolon-separated file. Quoting is always safe, so
+ * the delimiter only decides the threshold, never whether quoting is allowed.
+ */
+function csvCell(value: string, delimiter: string): string {
+  const needs = value.includes(delimiter) || /["\n\r]/.test(value);
+  return needs ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
 /** Escapes a value for a Markdown table cell, where a pipe would open a column. */
@@ -323,57 +379,105 @@ function mdCell(value: string): string {
 }
 
 /**
- * Renders rows as a delimited table with a header. CSV and Markdown share the
- * shape and differ in three details: what a cell needs escaped, what surrounds
- * a cell, and whether the header is underlined. The underline row is Markdown
- * syntax and has no meaning in CSV, where it would land in the sheet as a row
- * of dashes.
+ * True when every value in a column parses as a number, money included.
+ *
+ * A column of prices should sit right-aligned under its header: that is what
+ * makes a Markdown table read as a table, and it is the one hint that survives
+ * in the raw text a person is about to paste.
  */
-function table(
-  rows: Row[],
-  opts: {
-    cell: (value: string) => string;
-    join: string;
-    lead?: string;
-    trail?: string;
-    rule?: boolean;
-  },
-): string {
+function isNumericColumn(values: string[]): boolean {
+  // Strict on purpose. An earlier version allowed up to three trailing letters
+  // for currency codes, and that swallowed `12B`: a column of ZIP codes with
+  // one stray letter would have been right-aligned, which is a claim that they
+  // are quantities. Only a sign, digits with their separators, and a percent.
+  return values.every((v) => /^[-+]?[0-9][0-9.,]*\s*%?$/.test(v));
+}
+
+/**
+ * Renders rows as a Markdown table, padded so the pipes line up.
+ *
+ * Markdown does not care about the padding and GitHub renders both the same.
+ * The person does: this is the source they are about to paste into a README,
+ * and a table whose columns wobble is much harder to read or edit than one
+ * that does not. Numeric columns go right-aligned, with the colon the syntax
+ * asks for in the rule underneath.
+ */
+function mdTable(rows: Row[]): string {
   const cols = columnsOf(rows);
+  if (!cols.length) return '';
+  const body = rows.map((row) => cols.map((c) => mdCell(row[c] ?? '')));
+  const header = cols.map(mdCell);
+  const numeric = cols.map((_, i) => isNumericColumn(body.map((row) => row[i] ?? '')));
+  const widths = cols.map((_, i) =>
+    Math.max(header[i]?.length ?? 0, ...body.map((row) => row[i]?.length ?? 0), 3),
+  );
+
+  const cell = (value: string, width: number, right: boolean) =>
+    right ? value.padStart(width) : value.padEnd(width);
   const line = (values: string[]) =>
-    `${opts.lead ?? ''}${values.map(opts.cell).join(opts.join)}${opts.trail ?? ''}`;
-  const out = [line(cols)];
-  if (opts.rule) out.push(line(cols.map(() => '---')));
-  for (const row of rows) out.push(line(cols.map((c) => row[c] ?? '')));
-  return out.join('\n');
+    `| ${values.map((v, i) => cell(v, widths[i] ?? 0, numeric[i] ?? false)).join(' | ')} |`;
+
+  // The alignment colon has to sit on the outside edge of the cell, so a
+  // right-aligned one is dashes then a colon and a left-aligned one is a colon
+  // then dashes. Padding the token out to the column width with dashes on the
+  // end would bury the colon in the middle, where Markdown reads it as another
+  // dash and the alignment is silently lost.
+  const rule = cols.map((_, i) => {
+    const width = widths[i] ?? 3;
+    const dashes = '-'.repeat(Math.max(1, width - 1));
+    return numeric[i] ? `${dashes}:` : `:${dashes}`;
+  });
+
+  return [
+    line(header),
+    `| ${rule.join(' | ')} |`,
+    ...body.map(line),
+  ].join('\n');
+}
+
+/** Renders rows as CSV, with a header row and no padding: spaces are data. */
+function csvTable(rows: Row[], delimiter: string): string {
+  const cols = columnsOf(rows);
+  if (!cols.length) return '';
+  const escape = (value: string) => csvCell(value, delimiter);
+  const line = (values: string[]) => values.map(escape).join(delimiter);
+  return [
+    line(cols),
+    ...rows.map((row) => line(cols.map((c) => row[c] ?? ''))),
+  ].join('\n');
 }
 
 /**
  * Turns generated rows into the text that gets previewed, copied and saved.
  *
- * The tabular formats (`csv`, `md`) need a header, and a preset has one while
- * a bare generator would have nothing to name its single column after. The
- * header is always emitted and a bare generator is just a one-column table: the
- * first line carries the generator name and the rest are values, the same shape
- * as a preset with one field. Without it the output of `email` would be five
- * lines of email with no clue what they are, and neither could be opened in a
+ * The tabular formats need a header, and a preset has one while a bare
+ * generator would have nothing to name its single column after. The header is
+ * always emitted and a bare generator is just a one-column table: the first
+ * line carries the generator name and the rest are values, the same shape as a
+ * preset with one field. Without it the output of `email` would be five lines
+ * of email with no clue what they are, and neither could be opened in a
  * spreadsheet or pasted into a query.
  *
  * `plain` is the one that stays headerless, because it is the one meant for
- * pasting into a form field where a header row would be a mistake.
+ * pasting into a form field where a header row would be a mistake. It still
+ * needs the row rule: a preset has several fields per record, and nothing in
+ * a run of bare values says where one record ends.
  */
-export function formatRows(rows: Row[], format: TextFormat, separator: string): string {
+export function formatRows(
+  rows: Row[],
+  format: TextFormat,
+  separator: string,
+  delimiter: string,
+): string {
   const cols = columnsOf(rows);
 
   switch (format) {
     case 'json':
-      return JSON.stringify(rows[0] ?? {}, null, 2);
-    case 'array':
       return JSON.stringify(rows, null, 2);
     case 'csv':
-      return table(rows, { cell: csvCell, join: ',' });
+      return csvTable(rows, delimiter);
     case 'md':
-      return table(rows, { cell: mdCell, join: ' | ', lead: '| ', trail: ' |', rule: true });
+      return mdTable(rows);
     case 'plain':
     default:
       return rows
@@ -382,7 +486,7 @@ export function formatRows(rows: Row[], format: TextFormat, separator: string): 
             ? cols.map((c) => row[c] ?? '').join(separator)
             : (row[cols[0] ?? ''] ?? ''),
         )
-        .join('\n');
+        .join(`\n${ROW_RULE}\n`);
   }
 }
 
