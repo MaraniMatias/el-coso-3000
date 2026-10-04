@@ -486,13 +486,6 @@ select[data-waiting] {
   outline-offset: 2px;
 }
 
-.colors {
-  display: grid;
-  grid-template-columns: 1fr 1fr auto;
-  gap: 8px;
-  align-items: end;
-}
-
 /* ── Fondo: mosaicos con un ejemplo ───────────────────────────────── */
 
 /* The backgrounds are shown, not described, and they are the same size as the
@@ -565,9 +558,12 @@ select[data-waiting] {
   filter: drop-shadow(0 0 1.5px var(--surface)) drop-shadow(0 0 1px var(--surface));
 }
 
+/* The indicator, what it says about the pair, and the way back. They are one
+   row because the button only makes sense next to the number it repairs: it
+   reads as the answer to it. */
 .contrast {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 9px;
   padding: 9px 11px;
   background: var(--surface-2);
@@ -604,6 +600,24 @@ select[data-waiting] {
 .levelnote {
   color: var(--ink-soft);
   font-size: 12px;
+}
+/* The way back to the rule. It sits at the end of the row, and it only exists
+   while the pair is not under it, so it never offers to fix what is measured. */
+.fix {
+  flex: none;
+  margin-left: auto;
+  padding: 3px 9px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--ink-soft);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.fix:hover {
+  color: var(--ink);
+  border-color: var(--ink-faint);
 }
 
 /* ── Botones ────────────────────────────────────────────────────── */

@@ -141,12 +141,23 @@ export function checkContrast(fg: string, bg: string): ContrastResult {
 
 // ── Palette ────────────────────────────────────────────────────────────
 
-/** Saturation of the text that `deriveForeground` picks for a custom color. */
-const FG_SATURATION = 0.55;
+/** Saturation of the color that `deriveForeground` picks for a custom one. */
+const DERIVED_SATURATION = 0.55;
 
-/** Lightness range of the text, chosen according to the background's. */
-const FG_DARK_RANGE: [number, number] = [0.05, 0.38];
-const FG_LIGHT_RANGE: [number, number] = [0.62, 0.97];
+/**
+ * Below this, the color is gray: it has no hue of its own to keep, so the
+ * derived one is gray too. A pure gray has a hue of 0, which is red, and a
+ * neutral background would otherwise come out with a pink text.
+ */
+const ACHROMATIC_SATURATION = 0.05;
+
+/**
+ * Lightness range of the derived color, as `[most different, closest]`. Which
+ * one it is depends on the color it is derived from: a light one gets a dark
+ * partner and a dark one gets a light partner.
+ */
+const DARK_RANGE: [number, number] = [0.05, 0.38];
+const LIGHT_RANGE: [number, number] = [0.62, 0.97];
 
 /**
  * The swatches of the interface, as pairs picked by hand: a soft background
@@ -171,10 +182,12 @@ const PALETTE: Array<{ name: string; label: string; bg: string; fg: string }> =
   ];
 
 /**
- * For a given background, looks for the text of the same hue with the highest
- * contrast possible within the allowed pastelness.
+ * The partner of a color of the pair: the text that goes with a background, and
+ * the background that goes with a text.
  *
- * The SOFTEST tone that still reaches the minimum contrast is chosen: the
+ * Both directions are the same rule, which is why one function answers both (see
+ * `deriveBackground`): keep the hue, walk the lightness AWAY from the color that
+ * was given, and stop at the SOFTEST tone that still reaches the minimum. The
  * requested criterion is that a light red carries a darker red, not a hard
  * black.
  *
@@ -183,21 +196,23 @@ const PALETTE: Array<{ name: string; label: string; bg: string; fg: string }> =
  */
 export function deriveForeground(bg: string, minRatio = 4.5): string {
   const { r, g, b } = hexToRgb(bg);
-  const { h } = rgbToHsl(r, g, b);
+  const { h, s } = rgbToHsl(r, g, b);
   const bgIsLight = luminanceOf(bg) > 0.18;
 
-  // `near` is the end CLOSEST to the background (least contrast) and `far` the
-  // FURTHEST one (most contrast). With dark text it moves away by lowering L;
-  // with light text, by raising it.
+  // `near` is the end CLOSEST to the color that was given (least contrast) and
+  // `far` the FURTHEST one (most contrast). With a dark partner it moves away by
+  // lowering L; with a light one, by raising it.
   const [near, far] = bgIsLight
-    ? [FG_DARK_RANGE[1], FG_DARK_RANGE[0]]
-    : FG_LIGHT_RANGE;
+    ? [DARK_RANGE[1], DARK_RANGE[0]]
+    : LIGHT_RANGE;
   const hue = hslToHex;
+  // A gray has nothing to keep, so it stays gray.
+  const sat = s < ACHROMATIC_SATURATION ? 0 : DERIVED_SATURATION;
 
   // If not even the end with the most contrast reaches the minimum, the hue is
   // useless and it falls back to the absolute (black or white), which always
   // complies.
-  if (contrastRatio(hue(h, FG_SATURATION, far), bg) < minRatio) {
+  if (contrastRatio(hue(h, sat, far), bg) < minRatio) {
     return bgIsLight ? "000000" : "FFFFFF";
   }
 
@@ -209,15 +224,22 @@ export function deriveForeground(bg: string, minRatio = 4.5): string {
   let z = near;
   for (let i = 0; i < 24; i++) {
     const mid = (a + z) / 2;
-    if (contrastRatio(hue(h, FG_SATURATION, mid), bg) >= minRatio) {
+    if (contrastRatio(hue(h, sat, mid), bg) >= minRatio) {
       best = mid;
       a = mid;
     } else {
       z = mid;
     }
   }
-  return hue(h, FG_SATURATION, best);
+  return hue(h, sat, best);
 }
+
+/**
+ * The background that goes with a text of the person's own. The same rule, read
+ * from the other side of the pair, so it is the same function under the name
+ * that says what it is being asked for.
+ */
+export const deriveBackground = deriveForeground;
 
 /** The palette, with the contrast of each pair measured. Deterministic. */
 export function buildPalette(): PaletteEntry[] {

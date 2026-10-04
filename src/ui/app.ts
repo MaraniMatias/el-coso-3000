@@ -1,6 +1,7 @@
 import {
   checkContrast,
   cssColor,
+  deriveBackground,
   deriveForeground,
   hexToRgb,
   normalizeHex,
@@ -63,6 +64,20 @@ const ctx2d: CanvasRenderingContext2D = (() => {
 let selectedPalette: PaletteEntry | null = null;
 let abortController: AbortController | null = null;
 let previewAnimation = 0;
+
+/**
+ * Which color of the pair is the one that was picked by hand. The other one is
+ * computed from it every time, which is the whole legibility guarantee of the
+ * app: the pair is only as good as the contrast of the one that was not chosen.
+ *
+ * `"none"` is the pair where neither follows: a measured palette pair, or two
+ * colors of the person's own. A palette counts as neither because its pair is
+ * declared, not computed, so the first color of their own replaces the whole
+ * pair instead of following from it. Then the contrast indicator is the only
+ * thing telling them how the pair came out.
+ */
+type Hand = "none" | "bg" | "fg";
+let hand: Hand = "none";
 
 /**
  * What each tab chose for the background, so switching tabs does not throw the
@@ -248,23 +263,37 @@ function refreshContrast(): void {
   const level = $("#level");
   level.textContent = result.level;
   level.dataset.level = result.level;
-  $("#levelNote").textContent = {
-    AAA: "beats the WCAG maximum",
-    AA: "meets WCAG AA",
-    "AA-large": "only fits large text",
-    fail: "not enough",
-  }[result.level];
+  // The badge already carries the level, so the note only says what the badge
+  // cannot: where the pair comes from, and what a level short of AA means.
+  $("#levelNote").textContent =
+    result.level === "fail"
+      ? `${colorSource()} · unreadable`
+      : result.level === "AA-large"
+        ? `${colorSource()} · large text only`
+        : colorSource();
+  // The way back exists exactly when the pair cannot be read, which is also the
+  // only moment it could be reached: a computed color clears AA by
+  // construction, and a palette pair is measured above it.
+  $("#fix").hidden = result.level !== "fail";
+}
+
+/** Where the pair on screen came from, in words. */
+function colorSource(): string {
+  if (selectedPalette) return `${selectedPalette.label} palette`;
+  if (hand === "bg") return "text follows background";
+  if (hand === "fg") return "background follows text";
+  return "both colors yours";
 }
 
 /**
- * Opens the color picker on the background field.
+ * Opens the color picker on one of the two fields.
  *
  * `showPicker` is the way to open it without a click landing on the input, and
  * it refuses to run without a gesture of the person's own. A click is the older
  * path to the same dialog and works everywhere, so it is the fallback.
  */
-function openBackgroundPicker(): void {
-  const input = $<HTMLInputElement>("#bg");
+function openPicker(which: "bg" | "fg"): void {
+  const input = $<HTMLInputElement>(`#${which}`);
   try {
     input.showPicker();
   } catch {
@@ -272,20 +301,62 @@ function openBackgroundPicker(): void {
   }
 }
 
-function applyColors(bg: string, entry: PaletteEntry | null): void {
-  const clean = normalizeHex(bg);
-  // A palette swatch carries the text that was measured with it, so it is used
-  // as declared. Only a background the user typed has no pair, and there the
-  // text is derived. Deriving it always would silently replace the measured
-  // pairs with different colors and different ratios.
-  const fg = entry ? entry.fg : deriveForeground(clean);
-  $<HTMLInputElement>("#bg").value = `#${clean}`;
-  // The text is never picked by hand: it comes from the background or from the
-  // pair of the swatch. That is the whole legibility guarantee of the app,
-  // which is why the input is never editable.
-  $<HTMLInputElement>("#fg").value = `#${fg}`;
-  applyPageTheme(clean);
+/** The pair as it stands in the form, normalized the way a `Spec` wants it. */
+function currentColors(): { bg: string; fg: string } {
+  return {
+    bg: normalizeHex(str("bg", "E0E0E0")),
+    fg: normalizeHex(str("fg", "2B2B2B")),
+  };
+}
+
+/**
+ * A color of their own came out of the picker.
+ *
+ * The other one follows it while it has NOT been a color of their own yet: either
+ * it was being computed, or the pair was the measured one of a palette and this
+ * is the first color they pick. Once both are theirs, picking one again leaves
+ * the other exactly as it is, because throwing away a color someone chose to
+ * satisfy a rule they already broke would be worse than the low contrast the
+ * indicator is already reporting.
+ */
+function pickColor(which: "bg" | "fg", value: string): void {
+  const clean = normalizeHex(value);
+  const now = currentColors();
+  const next = which === "bg" ? { ...now, bg: clean } : { ...now, fg: clean };
+  const follows = hand === which || selectedPalette !== null;
+  const partner = !follows
+    ? next.fg
+    : which === "bg"
+      ? deriveForeground(next.bg)
+      : deriveBackground(next.fg);
+  applyColors(next.bg, partner, follows ? which : "none");
+}
+
+/**
+ * Hands the pair back to the rule: the text is computed again from the
+ * background, which is the guarantee the app can stand behind.
+ *
+ * This is what the `fix` button does, and it is the only way back from a pair
+ * of two colors of their own, so the background it keeps is whatever was there.
+ */
+function fixPair(): void {
+  const { bg } = currentColors();
+  applyColors(bg, deriveForeground(bg), "bg");
+}
+
+function applyColors(
+  bg: string,
+  fg: string,
+  source: Hand,
+  entry: PaletteEntry | null = null,
+): void {
+  const cleanBg = normalizeHex(bg);
+  const cleanFg = normalizeHex(fg);
+  $<HTMLInputElement>("#bg").value = `#${cleanBg}`;
+  $<HTMLInputElement>("#fg").value = `#${cleanFg}`;
+  applyPageTheme(cleanBg);
   selectedPalette = entry;
+  hand = source;
   // The custom swatch is the one that is not part of the palette, so it is the
   // pressed one exactly when no palette is.
   const pressed = entry === null ? "custom" : entry.name;
@@ -297,9 +368,13 @@ function applyColors(bg: string, entry: PaletteEntry | null): void {
   const custom = document.querySelector<HTMLButtonElement>(".swatch.custom");
   if (custom) {
     const shown =
-      entry === null ? { bg: clean, fg } : { bg: customTileColor.bg, fg: customTileColor.fg };
+      entry === null ? { bg: cleanBg, fg: cleanFg } : { bg: customTileColor.bg, fg: customTileColor.fg };
     custom.style.background = swatchGradient(shown.bg, shown.fg);
     custom.querySelector("svg")?.toggleAttribute("hidden", entry === null);
+    // The tile carries the two hexes the same way the palette ones do, which is
+    // where a color of their own can be read back: the mosaic is the only
+    // control, so there is nowhere else to write it down.
+    custom.title = `Custom: ${cleanBg} background / ${cleanFg} text · click the large triangle for the background, the small one for the text`;
   }
   refreshContrast();
   // The tiles are examples of these two colors, so they follow them.
@@ -457,11 +532,11 @@ function paletteIcon(): SVGSVGElement {
 /**
  * The custom swatch: the way out of the palette.
  *
- * It opens the color picker on the background field and then shows whatever
- * color came out of it. Until a color of the person's own exists, it offers a
- * measured pair nobody asked for, under the palette icon that says there is
- * something to pick. It is the last swatch because it is the one that is not
- * part of the palette.
+ * It is painted with the pair, split in two, and each half opens the picker of
+ * its own color, so both are chosen from the mosaic and nowhere else. Until a
+ * color of the person's own exists, it offers a measured pair nobody asked for,
+ * under the palette icon that says there is something to pick. It is the last
+ * swatch because it is the one that is not part of the palette.
  */
 function renderSwatches(): void {
   const host = $("#swatches");
@@ -478,7 +553,9 @@ function renderSwatches(): void {
     );
     btn.setAttribute("aria-pressed", "false");
     btn.style.background = swatchGradient(entry.bg, entry.fg);
-    btn.addEventListener("click", () => applyColors(entry.bg, entry));
+    // The pair of a palette is measured, so it is used as declared: deriving it
+    // would replace it with different colors and different ratios.
+    btn.addEventListener("click", () => applyColors(entry.bg, entry.fg, "none", entry));
     host.append(btn);
   }
 
@@ -486,17 +563,56 @@ function renderSwatches(): void {
   custom.type = "button";
   custom.className = "swatch custom";
   custom.dataset.name = "custom";
-  custom.title = "Custom color";
-  custom.setAttribute("aria-label", "Custom color, opens the color picker");
+  custom.title =
+    "Custom color: the large triangle opens the picker for the background, the small one for the text";
+  custom.setAttribute(
+    "aria-label",
+    "Custom color. Click the large triangle for the background color and the small one for the text color; with the keyboard, Enter is the background and the arrow keys reach the text.",
+  );
   custom.setAttribute("aria-pressed", "false");
   custom.append(paletteIcon());
-  custom.addEventListener("click", openBackgroundPicker);
+  // The tile is painted with the pair split in two, so the click itself says
+  // which of the two colors is being picked. There is no second control: the
+  // mosaic is the only place a color is chosen.
+  custom.addEventListener("click", (ev) => openPicker(swatchHalf(custom, ev)));
+  // The keyboard lands in the middle of the tile, which is the background half,
+  // so the arrows are how the text one is reached without a mouse.
+  custom.addEventListener("keydown", (ev) => {
+    if (ev.key !== "ArrowRight" && ev.key !== "ArrowDown") return;
+    ev.preventDefault();
+    openPicker("fg");
+  });
   host.append(custom);
+}
+
+/**
+ * Where the diagonal split every swatch is painted with falls, as the share of
+ * the tile the background takes. Half of it: the split goes corner to corner,
+ * which is the one line that reads as "the same size" instead of as a background
+ * with a corner cut off.
+ *
+ * It is the same number the gradient is built with, so the two halves of the
+ * paint and the two halves of a click can never disagree.
+ */
+const SWATCH_SPLIT = 50;
+
+/**
+ * Which color of the pair a click on a swatch landed on.
+ *
+ * The swatches are square, so the 135° split crosses the tile from one corner to
+ * the opposite one and the test is a single sum: past the diagonal is the text,
+ * before it is the background.
+ */
+function swatchHalf(swatch: HTMLElement, ev: MouseEvent): "bg" | "fg" {
+  const box = swatch.getBoundingClientRect();
+  const x = (ev.clientX - box.left) / box.width;
+  const y = (ev.clientY - box.top) / box.height;
+  return x + y > (SWATCH_SPLIT / 100) * 2 ? "fg" : "bg";
 }
 
 /** The diagonal split every swatch is painted with. */
 function swatchGradient(bg: string, fg: string): string {
-  return `linear-gradient(135deg, ${cssColor(bg)} 0 58%, ${cssColor(fg)} 58% 100%)`;
+  return `linear-gradient(135deg, ${cssColor(bg)} 0 ${SWATCH_SPLIT}%, ${cssColor(fg)} ${SWATCH_SPLIT}% 100%)`;
 }
 
 // ── Background tiles ───────────────────────────────────────────────────
@@ -911,10 +1027,16 @@ function applySettings(
           ok: false,
           error: `unknown palette "${String(input.palette)}"`,
         };
-      applyColors(found.bg, found);
+      applyColors(found.bg, found.fg, "none", found);
     }
+    // One color at a time, in the same order the interface applies them: a
+    // `background` alone brings the text with it, and a `foreground` alone
+    // keeps the background that is on screen.
     if (typeof input.background === "string") {
-      applyColors(input.background, null);
+      pickColor("bg", input.background);
+    }
+    if (typeof input.foreground === "string") {
+      pickColor("fg", input.foreground);
     }
 
     refreshDependentUi();
@@ -961,6 +1083,11 @@ function describe(): Record<string, unknown> {
     background: spec.bg,
     foreground: spec.fg,
     palette: spec.paletteName,
+    // Which of the two is the one that was picked: the other is computed from
+    // it, and that is what keeps the pair at AA. With neither, both are of
+    // their own and only `contrast` says how the pair came out.
+    textIsDerived: hand === "bg",
+    backgroundIsDerived: hand === "fg",
     contrast: checkContrast(spec.fg, spec.bg).label,
     ...(spec.duration > 0 ? { duration: spec.duration, fps: spec.fps } : {}),
     ...(spec.tone ? { sound: spec.tone } : {}),
@@ -1015,10 +1142,9 @@ function wireEvents(): void {
     if (!(target instanceof HTMLInputElement)) return;
     if (!abortController) clearMessage();
 
-    if (target.id === "bg") {
-      // Changing the background by hand drops the palette: the user is
-      // intervening.
-      applyColors(target.value, null);
+    if (target.id === "bg" || target.id === "fg") {
+      // A color of their own drops the palette: the person is intervening.
+      pickColor(target.id, target.value);
       return;
     }
     switch (target.name) {
@@ -1094,6 +1220,8 @@ function wireEvents(): void {
     refreshDependentUi();
   });
 
+  // The way back to the rule, next to the number it repairs.
+  $("#fix").addEventListener("click", fixPair);
 }
 
 async function main(): Promise<void> {
@@ -1102,7 +1230,7 @@ async function main(): Promise<void> {
 
   const start = palette().at(0);
   if (!start) throw new Error("No palette found");
-  applyColors(start.bg, start);
+  applyColors(start.bg, start.fg, "none", start);
 
   wireEvents();
   refreshDependentUi();

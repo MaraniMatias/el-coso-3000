@@ -151,10 +151,10 @@
           <section class="group">
             <h2>Color</h2>
             <div class="swatches" id="swatches" role="group" aria-label="Pastel palette"></div>
-            <!-- The color fields stay in the form but not on screen: the native
-                 color picker belongs to the background one, and the whole app
-                 reads them from there. The last swatch is the control, and being
-                 a button it is something the keyboard can land on. -->
+            <!-- The color fields stay in the form but not on screen: the mosaic is the
+                 control, and the whole app reads the fields from there. Each
+                 swatch is painted with the pair, split in two, and the custom
+                 one opens the picker of whichever half was clicked. -->
             <input
               type="color"
               id="bg"
@@ -164,7 +164,7 @@
               aria-hidden="true"
               value="#F0EDEB"
               toolparamtitle="Background color"
-              toolparamdescription="Background color, in hex. The text is computed from it to guarantee contrast."
+              toolparamdescription="Background color, in hex. The text color is computed from it to guarantee contrast, unless the text color is picked too."
             />
             <input
               type="color"
@@ -173,17 +173,19 @@
               class="visually-hidden"
               tabindex="-1"
               aria-hidden="true"
-              disabled
               value="#5B544D"
-              title="Derived from the background to guarantee the contrast"
+              title="Computed from the background to guarantee the contrast, until it is picked by hand"
               toolparamtitle="Text color"
-              toolparamdescription="Derived automatically from the background color to guarantee WCAG contrast. It is not edited: changing the background recomputes this value. The text of the placeholder is the dimensions."
+              toolparamdescription="Text color, in hex. It is computed from the background color to guarantee WCAG contrast while it stays automatic; picking a color by hand makes the other one of the pair follow it. The text of the placeholder is the dimensions."
             />
 
             <div class="contrast" id="contrast" role="status" aria-live="polite">
               <span class="ratio" id="ratio">6.39:1</span>
               <span class="level" id="level">AA</span>
               <span class="levelnote" id="levelNote">meets WCAG AA</span>
+              <!-- The way back: it hands the pair to the rule again, and it only
+                   exists while the pair is not under it. -->
+              <button type="button" class="fix" id="fix" hidden>fix</button>
             </div>
           </section>
 
@@ -558,14 +560,14 @@
           <li><strong>Still images:</strong> PNG, JPEG, WebP, and SVG. PNG, WebP, and SVG support transparency; GIF supports binary transparency.</li>
           <li><strong>Animated and video outputs:</strong> GIF, Motion JPEG AVI, ZIP files of numbered JPEG frames, MP4, WebM, MOV, and MKV. MP4, WebM, MOV, and MKV can include an optional generated soundtrack.</li>
         </ul>
-        <p>The placeholder displays its dimensions. Choose a palette or custom background; the text color is calculated for contrast against that color. With transparency enabled, visible contrast depends on the background beneath the image. The background can also be one of four animated textures, in which case the contrast is measured against the flat color it is drawn over.</p>
+        <p>The placeholder displays its dimensions. Choose a palette or a custom background; the text color is calculated for contrast against it. Both colors can be picked from the same row: the last swatch is split in two, its large triangle being the background and its small one the text, so whichever of the two you pick the other follows. The indicator under the row reports the measured ratio, says where the pair comes from, and offers a <em>fix</em> button when, and only when, the pair cannot be read. With transparency enabled, visible contrast depends on the background beneath the image. The background can also be one of four animated textures, in which case the contrast is measured against the flat color it is drawn over.</p>
       </section>
 
       <section aria-labelledby="how-heading">
         <h2 id="how-heading">How to make a placeholder</h2>
         <ol>
           <li>Choose Image or Video.</li>
-          <li>Enter the width and height in pixels, then choose a background color.</li>
+          <li>Enter the width and height in pixels, then choose the colors. Pick one and the other one is computed from it to guarantee contrast; pick both and the indicator under the row is the only thing measuring the pair, until you press <em>fix</em>.</li>
           <li>Pick the background: solid, transparent, or one of the four animated textures. Textures are painted into every format except SVG, which stays flat.</li>
           <li>On a video, set how fast an animated background moves: from 1× to 3×.</li>
           <li>Select an output format. For animated and video outputs, set the duration, frame rate, and optional progress bar or clock.</li>
@@ -603,7 +605,7 @@
           <dt>Can the background be animated?</dt>
           <dd>Yes. Besides the flat and transparent backgrounds, four animated textures are available: bokeh with grain, fog, center focus, and rising spheres. They are baked into the file for every canvas-based format, including the video containers. SVG is written as text and stays flat, and the loop of a video is not seamless.</dd>
           <dt>Can I pick a color of my own?</dt>
-          <dd>Yes. The last swatch of the color row, after the nine palettes, opens the color picker. It then shows the color you chose instead of the palette icon, and the text color is calculated from it as always.</dd>
+          <dd>Yes, both of them, and from the same place. The last swatch of the color row, after the nine palettes, opens the color picker, and then shows the pair you have instead of the palette icon. That swatch is painted in two halves: the large triangle opens the picker for the background and the small one for the text. Whichever of the two you pick, the other one is computed from it to guarantee WCAG contrast, and the indicator under the row says which one is following. Pick the other half too and nothing is recomputed any more, so the pair is exported as it is: the indicator then shows the measured ratio with the level it reaches and where the pair comes from, and when the pair cannot be read it adds a <em>fix</em> button that hands the text back to the computed color.</dd>
           <dt>Can I change how fast the background moves?</dt>
           <dd>Yes, on any output with more than one frame. Pick from 1× to 3×, and 2× is the default. Turning Texture movement off holds the background still for the whole clip. A still image is the same picture at any speed, so the control only appears when it would change something.</dd>
           <dt>Can a video placeholder include sound?</dt>

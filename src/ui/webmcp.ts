@@ -90,7 +90,12 @@ const SCHEMA = {
     background: {
       type: "string",
       description:
-        'Background color as 6 hex digits, for example "E0E0E0", without #. The text is derived from it.',
+        'Background color as 6 hex digits, for example "E0E0E0", without #. The text color is derived from it to guarantee contrast, unless foreground is passed too.',
+    },
+    foreground: {
+      type: "string",
+      description:
+        'Text color as 6 hex digits, for example "2B2B2B", without #. Only the dimensions are written on the placeholder, in this color. Passed without background, it keeps the background that is already set; the measured contrast is reported and may be below AA.',
     },
     duration: {
       type: "number",
@@ -137,8 +142,10 @@ const SCHEMA = {
 } as const;
 
 const DESCRIPTION = [
-  "Generates an image or video placeholder with the text color derived automatically",
-  "to guarantee WCAG contrast. The text of the placeholder is the dimensions.",
+  "Generates an image or video placeholder. Give a background and the text color",
+  "is derived from it to guarantee WCAG contrast; pass foreground as well to choose",
+  "both yourself, and read the reported contrast to know how the pair came out.",
+  "The text of the placeholder is the dimensions.",
   // The list comes from the real palette, so it cannot go stale.
   `Pastel palettes available: ${palette()
     .map((p) => p.label.toLowerCase())

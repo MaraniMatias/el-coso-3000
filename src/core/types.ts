@@ -182,9 +182,10 @@ export interface Spec {
   /**
    * Leaves the background unpainted, so the file carries an alpha channel.
    *
-   * The background color still decides the text color: with no background to
-   * contrast against, `fg` is still derived from `bg` so the placeholder keeps
-   * a readable pairing wherever it lands. Only the fill is skipped.
+   * The background color still decides the text color while the text is being
+   * computed from it: with no background to contrast against, `fg` is still the
+   * derived one so the placeholder keeps a readable pairing wherever it lands.
+   * Only the fill is skipped.
    */
   transparent: boolean;
   /**

@@ -746,6 +746,118 @@ try {
   check('the picked color reaches the field the app reads', custom.pickedValue === '#3366AA', custom.pickedValue);
   check('and the contrast is still measured off the screen', /:/.test(custom.contrastStillMeasured), custom.contrastStillMeasured);
 
+  // Both colors are chosen from the mosaic: the custom swatch is painted with
+  // the pair split in two, so which triangle the click lands on is which color
+  // gets the picker. The color that was not picked keeps being computed from
+  // the one that was, and the `fix` button is the way back once both are theirs.
+  const pair = await evaluate<{
+    openedByLarge: string;
+    openedBySmall: string;
+    extraInputs: number;
+    bgPicked: string;
+    fgDerived: string;
+    noteAfterBg: string;
+    fixAfterBg: boolean;
+    bgAfterFg: string;
+    levelReadable: string;
+    noteReadable: string;
+    fixReadable: boolean;
+    noteFail: string;
+    fixFail: boolean;
+    fgAfterFix: string;
+    noteAfterFix: string;
+    fixAfterFix: boolean;
+    tileTitle: string;
+  }>(`(async () => {
+    const bg = document.querySelector('#bg');
+    const fg = document.querySelector('#fg');
+    const custom = document.querySelector('.swatch.custom');
+    const fix = document.querySelector('#fix');
+    const note = () => document.querySelector('#levelNote').textContent;
+    const set = async (el, v) => {
+      el.value = v;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    };
+    // The picker is a native dialog, so what it does instead of opening is what
+    // gets watched: which of the two fields the click reached.
+    let opened = '';
+    bg.showPicker = () => { opened = 'bg'; };
+    fg.showPicker = () => { opened = 'fg'; };
+    const box = custom.getBoundingClientRect();
+    const clickAt = (rx, ry) => custom.dispatchEvent(
+      new MouseEvent('click', { bubbles: true, clientX: box.left + rx * box.width, clientY: box.top + ry * box.height }),
+    );
+
+    // The large triangle is the background and the small one is the text.
+    clickAt(0.1, 0.1);
+    const openedByLarge = opened;
+    opened = '';
+    clickAt(0.9, 0.9);
+    const openedBySmall = opened;
+    opened = '';
+    // And nothing else was added to pick a color with.
+    const extraInputs = document.querySelectorAll('.colortile, #bgAuto, #fgAuto').length;
+
+    // The background by hand: the text is computed from it, the row says so,
+    // and there is nothing to repair yet.
+    await set(bg, '#3366AA');
+    const bgPicked = bg.value.toUpperCase();
+    const fgDerived = fg.value.toUpperCase();
+    const noteAfterBg = note();
+    const fixAfterBg = !fix.hidden;
+
+    // The text by hand as well, in a pair that reads: the row says both colors
+    // are theirs and there is still nothing to repair.
+    await set(fg, '#FFFFFF');
+    const bgAfterFg = bg.value.toUpperCase();
+    const levelReadable = document.querySelector('#level').dataset.level;
+    const noteReadable = note();
+    const fixReadable = !fix.hidden;
+
+    // And the same text in a green that cannot be read on that blue.
+    await set(fg, '#33AA66');
+    const noteFail = note();
+    const fixFail = !fix.hidden;
+
+    // The fix button hands the pair back to the rule.
+    fix.click();
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    return {
+      openedByLarge,
+      openedBySmall,
+      extraInputs,
+      bgPicked,
+      fgDerived,
+      noteAfterBg,
+      fixAfterBg,
+      bgAfterFg,
+      levelReadable,
+      noteReadable,
+      fixReadable,
+      noteFail,
+      fixFail,
+      fgAfterFix: fg.value.toUpperCase(),
+      noteAfterFix: note(),
+      fixAfterFix: !fix.hidden,
+      tileTitle: custom.title,
+    };
+  })()`);
+  check('the large triangle of the custom swatch opens the background picker', pair.openedByLarge === 'bg', pair.openedByLarge);
+  check('and the small one opens the text picker', pair.openedBySmall === 'fg', pair.openedBySmall);
+  check('the mosaic is the only place a color is picked', pair.extraInputs === 0, `${pair.extraInputs} extra controls`);
+  check('a background of their own replaces the measured pair', pair.bgPicked === '#3366AA' && pair.fgDerived !== '#9D174D', `#3366AA / ${pair.fgDerived}`);
+  check('the row says which color is following the other', pair.noteAfterBg === 'text follows background', pair.noteAfterBg);
+  check('and offers nothing to repair while the rule holds', !pair.fixAfterBg);
+  check('a text of their own does not move the background they chose', pair.bgAfterFg === '#3366AA', pair.bgAfterFg);
+  check('a pair of theirs that reads says so in the row', pair.levelReadable === 'AA' && pair.noteReadable === 'both colors yours', `${pair.levelReadable} · ${pair.noteReadable}`);
+  check('and still no fix button, nothing to repair', !pair.fixReadable);
+  check('the same pair unreadable is said as unreadable', /unreadable/.test(pair.noteFail), pair.noteFail);
+  check('and that is the only moment the fix button appears', pair.fixFail);
+  check('fix brings the text back under the rule', pair.fgAfterFix === pair.fgDerived, `${pair.fgDerived} → ${pair.fgAfterFix}`);
+  check('and the row is back to a single short note', pair.noteAfterFix === 'text follows background' && !pair.fixAfterFix, pair.noteAfterFix);
+  check('the swatch carries the two hexes, there being nowhere else', pair.tileTitle.includes(pair.bgPicked.slice(1)) && pair.tileTitle.includes(pair.fgAfterFix.slice(1)), pair.tileTitle);
+
   // The metadata of the file is the last place a texture can be proven to exist:
   // the pixels are the same either way on a still image. The PNG carries it as
   // an `iTXt` keyword, so the keyword is what the file has to contain.

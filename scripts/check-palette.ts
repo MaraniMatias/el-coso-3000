@@ -6,7 +6,7 @@
  * Fails (exit 1) if any pair does not reach AA, if any color falls outside the
  * pastel range, or if the text color ended up too saturated to read well.
  */
-import { buildPalette, contrastRatio, deriveForeground, hslToHex, checkContrast } from '../src/core/color';
+import { buildPalette, contrastRatio, deriveBackground, deriveForeground, hslToHex, checkContrast } from '../src/core/color';
 
 const MIN_RATIO = 4.5;
 let failures = 0;
@@ -38,6 +38,17 @@ for (const bg of probes) {
   const ok = r >= MIN_RATIO;
   if (!ok) failures++;
   console.log(`  bg #${bg} → fg #${fg}  ${r.toFixed(2)}:1  ${ok ? 'ok' : '← FAILS'}`);
+}
+
+// The same rule from the other side: a text of their own brings the background
+// with it, and it has to clear AA just the same.
+console.log('\ntest with arbitrary texts, the background derived from them:');
+for (const fg of probes) {
+  const bg = deriveBackground(fg);
+  const r = contrastRatio(fg, bg);
+  const ok = r >= MIN_RATIO;
+  if (!ok) failures++;
+  console.log(`  fg #${fg} → bg #${bg}  ${r.toFixed(2)}:1  ${ok ? 'ok' : '← FAILS'}`);
 }
 
 console.log('\ndeterminism test:');
