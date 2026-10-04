@@ -481,7 +481,7 @@ const PREVIEW_MIN_SEC = 0.6;
  * It plays the frames of the file at the speed the file plays them: the first
  * `TEXTURE_REFERENCE_SECONDS` of the clip, in real time, looping. Compressing a
  * whole clip into a fixed number of seconds would be a time-lapse instead, and
- * the background would not move at the speed it moves in the file — 24 times
+ * the background would not move at the speed it moves in the file: 24 times
  * faster for a 120s clip, faster than real for a 5s one. As it is, every
  * duration is judged at the velocity of the 5s clip the app is tuned on.
  */
@@ -753,7 +753,7 @@ function refreshDependentUi(): void {
     const tile = input.nextElementSibling as HTMLElement | null;
     const name = BACKGROUND_LABEL[input.value] ?? input.value;
     if (tile) {
-      tile.title = supported ? name : `${name} — this format is written as text and stays flat`;
+      tile.title = supported ? name : `${name}: this format is written as text and stays flat`;
     }
   }
 

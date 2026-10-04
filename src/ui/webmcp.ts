@@ -4,10 +4,10 @@
  * WebMCP is a proposed standard (origin trial in Chrome 149+). The page has
  * two paths and both are pure enhancements:
  *
- *  1. Declarative API — the `toolname` / `tooldescription` /
+ *  1. Declarative API, the `toolname` / `tooldescription` /
  *     `toolparamdescription` attributes already in `src/index.html` on the
  *     form. The browser turns the form into a tool.
- *  2. Imperative API — `document.modelContext.registerTool`, which exposes a
+ *  2. Imperative API, `document.modelContext.registerTool`, which exposes a
  *     tool with a JSON Schema and can return structured data.
  *
  * If the browser supports none of this, `setupWebMcp` does nothing and the app

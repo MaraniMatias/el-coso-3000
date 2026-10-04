@@ -789,8 +789,8 @@ section('SVG: a transparent background is the absence of the background rect');
 
 // ── The texture ───────────────────────────────────────────────────────────
 // The SVG is written as text and stays flat: a texture is painted with a
-// canvas, and this file cannot. What it can do is say so honestly — nowhere in
-// the drawing — and record what was asked for in the metadata.
+// canvas, and this file cannot. What it can do is say so honestly (nowhere in
+// the drawing) and record what was asked for in the metadata.
 section('SVG: a texture is not drawn');
 const textured = spec({ texture: 'focus' });
 const texturedSvg = buildSvg(textured, measure);

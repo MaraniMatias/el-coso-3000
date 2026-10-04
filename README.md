@@ -50,7 +50,7 @@ The background can also be one of four animated textures, drawn with the two col
 | Center focus | A clean light center with a vignette in the text color. |
 | Rise | Blurred spheres that come up from the bottom and fade out. |
 
-They are painted on the canvas, so they are baked into the file: PNG, JPEG, WebP, GIF, the JPEG sequences and every video container all carry the animation. **SVG stays flat** — it is written as text, and it says so instead of pretending.
+They are painted on the canvas, so they are baked into the file: PNG, JPEG, WebP, GIF, the JPEG sequences and every video container all carry the animation. **SVG stays flat**: it is written as text, and it says so instead of pretending.
 
 The last swatch of the color row opens the color picker and then shows whatever color came out of it, so a color of your own is one click from the palette. Until you pick one it offers a measured pair with the palette icon on it.
 
@@ -60,14 +60,14 @@ The last swatch of the color row is painted with the pair split in two, and each
 
 - Pick **one** of them and the other is computed from it to guarantee WCAG AA. That is what the contrast guarantee rests on.
 - Pick the **other** one too and nothing is recomputed any more: both are yours, and the indicator under the row is the only thing measuring the pair.
-- The indicator is one short line: the measured ratio, the level it reaches, and where the pair comes from — `Gray palette`, `text follows background`, `background follows text`, `both colors yours`. A level short of AA says so in the same line (`large text only`, `unreadable`).
+- The indicator is one short line: the measured ratio, the level it reaches, and where the pair comes from: `Gray palette`, `text follows background`, `background follows text`, `both colors yours`. A level short of AA says so in the same line (`large text only`, `unreadable`).
 - When the pair cannot be read, a `fix` button appears in that same row and hands the text back to the computed color. It is the only state that shows it: a computed color clears AA by construction and a palette pair is measured above it.
 
 A pair picked by hand can land below AA, and it is exported as it is. The indicator says so, and `fix` is one click away.
 
-On a video you can pick how fast they move: **1× to 3×**, 2× by default, as a multiple of the timing in the [`docs/`](docs/) demo they come from. Unchecking **Texture movement** holds the first frame for the whole clip — a texture that is painted and never moves, which is a speed of 0. The control only appears when there is something to move: an animated texture, on a format with more than one frame. A still image is the same picture at any speed.
+On a video you can pick how fast they move: **1× to 3×**, 2× by default, as a multiple of the timing in the [`docs/`](docs/) demo they come from. Unchecking **Texture movement** holds the first frame for the whole clip: a texture that is painted and never moves, which is a speed of 0. The control only appears when there is something to move: an animated texture, on a format with more than one frame. A still image is the same picture at any speed.
 
-Two consequences worth knowing: the loop of a video is not seamless, and the grain is expensive for a still compressor, so a textured PNG is much larger than a flat one. And the movement runs on real time, so it does not depend on the length of the clip: a second of a 120s video moves the background exactly as far as a second of the 5s one it is tuned on. A short clip therefore shows less of the animation, not a faster one — 120ms at 15 fps is two frames, and they are almost the same picture.
+Three things to know before you export. The loop of a video is not seamless, and the grain is expensive for a still compressor, so a textured PNG is much larger than a flat one. And the movement runs on real time, so it does not depend on the length of the clip: a second of a 120s video moves the background exactly as far as a second of the 5s one it is tuned on. A short clip therefore shows less of the animation, not a faster one: 120ms at 15 fps is two frames, and they are almost the same picture.
 
 ### File names
 

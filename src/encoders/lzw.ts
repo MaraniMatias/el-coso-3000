@@ -171,9 +171,9 @@ export function lzwCompress(indices: Uint8Array, minCodeSize: number): Bytes {
         // encoder's own table would), the encoder would get one code ahead: it
         // would write a code at the new width before the decoder knows it, so
         // the decoder would read that code at the old width and every code
-        // after it would be offset by one bit. The symptom is silent—the file
-        // opens and looks almost correct—so the rule is written this way, not
-        // "the way it seems it should work."
+        // after it would be offset by one bit. The symptom is silent: the file
+        // opens and looks almost correct. That is why the rule is written this
+        // way, not "the way it seems it should work."
         //
         // Reference: this is exactly what the ffmpeg compressor does
         // (`libavcodec/lzwenc.c`), which is read by every GIF decoder, and what

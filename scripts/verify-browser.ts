@@ -262,7 +262,7 @@ try {
   // This broke once: `form.elements.namedItem()` returns a RadioNodeList for a
   // radio group, and the type check discarded it silently. The format stayed on
   // the default and nothing failed. It is the kind of bug that only shows up
-  // when you look at the downloaded file.
+  // when the downloaded file is opened.
   console.log('\nform controls:');
   for (const format of ['svg', 'webp', 'jpeg', 'png'] as const) {
     const got = await evaluate<string>(`(() => {
