@@ -8,7 +8,7 @@
  * one code of drift makes the entire file unreadable.
  */
 
-import { MAX_ANIMATED_OUTPUT_BYTES } from "../core/types";
+import { MAX_ANIMATED_OUTPUT_BYTES, MAX_ANIMATED_OUTPUT_MIB } from "../core/types";
 
 /**
  * Newly allocated bytes. The generic matters: `Blob` only accepts views over
@@ -52,7 +52,9 @@ export class ByteWriter {
   private reserve(additional: number): void {
     const needed = this.len + additional;
     if (needed > this.maxBytes)
-      throw new RangeError("GIF output exceeds the 64 MiB limit. Reduce dimensions or duration/FPS and try again.");
+      throw new RangeError(
+        `GIF output exceeds the ${MAX_ANIMATED_OUTPUT_MIB} MiB limit. Reduce dimensions or duration/FPS and try again.`,
+      );
     if (needed <= this.buf.length) return;
     const capacity = Math.min(this.maxBytes, Math.max(needed, this.buf.length * 2));
     const grown = new Uint8Array(capacity);

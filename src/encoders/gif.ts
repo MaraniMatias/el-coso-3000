@@ -17,7 +17,13 @@
 import { drawFrame } from "../core/draw-frame";
 import { buildFilename, mimeFor, trimNumber } from "../core/filename";
 import { buildMetadata, metadataAsText } from "../core/metadata";
-import { MAX_ANIMATED_OUTPUT_BYTES, MAX_ANIMATED_PIXELS, MAX_DIMENSION, MAX_TOTAL_FRAMES } from "../core/types";
+import {
+  MAX_ANIMATED_OUTPUT_BYTES,
+  MAX_ANIMATED_OUTPUT_MIB,
+  MAX_ANIMATED_PIXELS,
+  MAX_DIMENSION,
+  MAX_TOTAL_FRAMES,
+} from "../core/types";
 import type { ExportResult, ProgressCallback, Spec } from "../core/types";
 import {
   ByteWriter,
@@ -190,7 +196,9 @@ export function writeGifFrame(
   // Reserve the final trailer while bounding the intermediate LZW buffer to
   // the remaining GIF budget.
   if (out.remaining <= 1)
-    throw new RangeError("GIF output exceeds the 64 MiB limit. Reduce dimensions or duration/FPS and try again.");
+    throw new RangeError(
+      `GIF output exceeds the ${MAX_ANIMATED_OUTPUT_MIB} MiB limit. Reduce dimensions or duration/FPS and try again.`,
+    );
   out.pushBytes(lzwCompress(indices, layout.minCodeSize, out.remaining - 1));
 }
 

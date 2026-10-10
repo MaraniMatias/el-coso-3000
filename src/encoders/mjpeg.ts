@@ -25,7 +25,13 @@ import {
   metadataAsText,
   type FileMetadata,
 } from "../core/metadata";
-import { MAX_ANIMATED_OUTPUT_BYTES, MAX_ANIMATED_PIXELS, MAX_DIMENSION, MAX_TOTAL_FRAMES } from "../core/types";
+import {
+  MAX_ANIMATED_OUTPUT_BYTES,
+  MAX_ANIMATED_OUTPUT_MIB,
+  MAX_ANIMATED_PIXELS,
+  MAX_DIMENSION,
+  MAX_TOTAL_FRAMES,
+} from "../core/types";
 import type { ExportResult, ProgressCallback, Spec } from "../core/types";
 import { crc32 } from "./image";
 
@@ -450,7 +456,9 @@ const MAX_COMMENT_BYTES = 0xffff;
 const MAX_ENTRIES = 0xffff;
 
 function zipSizeError(): RangeError {
-  return new RangeError("JPEG ZIP output exceeds the 64 MiB limit. Reduce dimensions or duration/FPS and try again.");
+  return new RangeError(
+    `JPEG ZIP output exceeds the ${MAX_ANIMATED_OUTPUT_MIB} MiB limit. Reduce dimensions or duration/FPS and try again.`,
+  );
 }
 /**
  * Entry date and time fixed to the MS-DOS epoch (1/1/1980 00:00).

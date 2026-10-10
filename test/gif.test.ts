@@ -11,7 +11,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import { buildMetadata, metadataAsText } from '../src/core/metadata';
-import { DEFAULT_TEXTURE_SPEED, MAX_ANIMATED_OUTPUT_BYTES, type Spec } from '../src/core/types';
+import { DEFAULT_TEXTURE_SPEED, MAX_ANIMATED_OUTPUT_BYTES, MAX_ANIMATED_OUTPUT_MIB, type Spec } from '../src/core/types';
 import { exportGif, gifTiming, writeGifFrame, writeGifHeader, writeGifTrailer, type GifHeader } from '../src/encoders/gif';
 import { ByteWriter, lzwCompress } from '../src/encoders/lzw';
 import { buildPalette, createPaletteMapper } from '../src/encoders/quantize';
@@ -429,7 +429,7 @@ describe('GIF LZW', () => {
     expect(writer.length).toBe(0);
     const fixed = new ByteWriter();
     const oversized = { length: MAX_ANIMATED_OUTPUT_BYTES + 1 } as unknown as Uint8Array;
-    expect(() => fixed.pushBytes(oversized)).toThrow(/64 MiB limit/);
+    expect(() => fixed.pushBytes(oversized)).toThrow(new RegExp(`${MAX_ANIMATED_OUTPUT_MIB} MiB limit`));
     expect(fixed.length).toBe(0);
     const data = Uint8Array.from({ length: 1000 }, (_, i) => (i * 73 + i * i) & 0xff);
     expect(() => lzwCompress(data, 8, 8)).toThrow(RangeError);

@@ -18,7 +18,9 @@ export const MAX_ANIMATED_PIXELS = 8_388_608;
 /** Soft per-export frame ceiling (60 seconds at 60 fps). */
 export const MAX_TOTAL_FRAMES = 3600;
 /** Fixed output ceiling for GIF and JPEG-ZIP exports. */
-export const MAX_ANIMATED_OUTPUT_BYTES = 64 * 1024 * 1024;
+export const MAX_ANIMATED_OUTPUT_BYTES = 120 * 1024 * 1024;
+/** The same ceiling in MiB, so the messages that quote it never drift. */
+export const MAX_ANIMATED_OUTPUT_MIB = MAX_ANIMATED_OUTPUT_BYTES / (1024 * 1024);
 
 /** Author, as it appears in the metadata of the page. */
 export const AUTHOR = 'Matias Ezequiel Marani';

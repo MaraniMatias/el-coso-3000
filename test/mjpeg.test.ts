@@ -12,13 +12,15 @@
 
 import { describe, expect, test } from 'bun:test';
 import { buildMetadata, metadataAsText } from '../src/core/metadata';
-import { AUTHOR, DEFAULT_TEXTURE_SPEED, MAX_ANIMATED_OUTPUT_BYTES, REPO_URL, type Spec } from '../src/core/types';
+import { AUTHOR, DEFAULT_TEXTURE_SPEED, MAX_ANIMATED_OUTPUT_BYTES, MAX_ANIMATED_OUTPUT_MIB, REPO_URL, type Spec } from '../src/core/types';
 import { crc32 } from '../src/encoders/image';
 import { buildJpegZip, buildJpegZipBlob, buildMjpegAvi, exportJpegZip, type JpegZipEntry } from '../src/encoders/mjpeg';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 type Bytes = Uint8Array<ArrayBuffer>;
+
+const OVER_BUDGET = new RegExp(`${MAX_ANIMATED_OUTPUT_MIB} MiB limit`);
 
 const viewOf = (bytes: Bytes): DataView => new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 const u16 = (bytes: Bytes, at: number): number => viewOf(bytes).getUint16(at, true);
@@ -243,10 +245,10 @@ describe('buildJpegZip', () => {
       override async arrayBuffer(): Promise<ArrayBuffer> { throw new Error('payload should not be read'); }
     }
     await expect(buildJpegZipBlob([{ name: 'frame_00001.jpg', data: new OversizedBlob([]) }]))
-      .rejects.toThrow(/64 MiB limit/);
+      .rejects.toThrow(OVER_BUDGET);
     const oversizedBytes = { length: MAX_ANIMATED_OUTPUT_BYTES + 1 } as unknown as Bytes;
     await expect(buildJpegZip([{ name: 'frame_00001.jpg', data: oversizedBytes }]))
-      .rejects.toThrow(/64 MiB limit/);
+      .rejects.toThrow(OVER_BUDGET);
   });
 
   test('streamed ZIP assembly checks cancellation before and after consuming entries', async () => {
@@ -290,7 +292,7 @@ describe('buildJpegZip', () => {
         finalized = true;
       }
     }
-    await expect(buildJpegZipBlob(oversizedSequence())).rejects.toThrow(/64 MiB limit/);
+    await expect(buildJpegZipBlob(oversizedSequence())).rejects.toThrow(OVER_BUDGET);
     expect(reads).toBe(1); // the second payload is rejected from its declared size
     expect(finalized).toBe(true); // early failure closes the async generator
   });
