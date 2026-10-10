@@ -11,8 +11,8 @@
 import { describe, expect, test } from 'bun:test';
 
 import { buildMetadata, metadataAsText } from '../src/core/metadata';
-import { DEFAULT_TEXTURE_SPEED, type Spec } from '../src/core/types';
-import { writeGifFrame, writeGifHeader, writeGifTrailer, type GifHeader } from '../src/encoders/gif';
+import { DEFAULT_TEXTURE_SPEED, MAX_ANIMATED_OUTPUT_BYTES, type Spec } from '../src/core/types';
+import { exportGif, gifTiming, writeGifFrame, writeGifHeader, writeGifTrailer, type GifHeader } from '../src/encoders/gif';
 import { ByteWriter, lzwCompress } from '../src/encoders/lzw';
 import { buildPalette, createPaletteMapper } from '../src/encoders/quantize';
 
@@ -423,6 +423,18 @@ describe('GIF LZW', () => {
     expect(pixels).toEqual(data);
   });
 
+  test('stops ByteWriter and LZW output at their byte budgets', () => {
+    const writer = new ByteWriter(1024, 8);
+    expect(() => writer.pushBytes(new Uint8Array(9))).toThrow(RangeError);
+    expect(writer.length).toBe(0);
+    const fixed = new ByteWriter();
+    const oversized = { length: MAX_ANIMATED_OUTPUT_BYTES + 1 } as unknown as Uint8Array;
+    expect(() => fixed.pushBytes(oversized)).toThrow(/64 MiB limit/);
+    expect(fixed.length).toBe(0);
+    const data = Uint8Array.from({ length: 1000 }, (_, i) => (i * 73 + i * i) & 0xff);
+    expect(() => lzwCompress(data, 8, 8)).toThrow(RangeError);
+  });
+
   test('rejects an invalid minCodeSize', () => {
     expect(() => lzwCompress(Uint8Array.from([0]), 1)).toThrow(RangeError);
     expect(() => lzwCompress(Uint8Array.from([0]), 9)).toThrow(RangeError);
@@ -597,6 +609,10 @@ describe('median-cut quantization', () => {
 // ── GIF structure ─────────────────────────────────────────────────────────
 
 describe('GIF structure', () => {
+  test('duration zero is a valid one-frame timeline', () => {
+    expect(gifTiming(15, 0).totalFrames).toBe(1);
+  });
+
   test('the header and global color table are in the expected locations', () => {
     const gif = parseGif(buildTestGif());
 
@@ -663,6 +679,16 @@ describe('GIF structure', () => {
       // of 8 entries applies to the spec case, which uses only a few colors.
       if (colors <= 5) expect(entries).toBeLessThanOrEqual(8);
     }
+  });
+
+  test('rejects invalid dimensions before allocating an export surface', async () => {
+    await expect(exportGif({ ...SPEC, width: 0 })).rejects.toThrow(/dimensions/);
+    await expect(exportGif({ ...SPEC, width: 4097 })).rejects.toThrow(/dimensions/);
+    await expect(exportGif({ ...SPEC, width: 4096, height: 4096 })).rejects.toThrow(/pixels/);
+  });
+
+  test('rejects an animated frame count above the video policy', async () => {
+    await expect(exportGif({ ...SPEC, duration: 120, fps: 60 })).rejects.toThrow(/limit is 3600/);
   });
 
   test('a frame with the wrong size is rejected before writing', () => {

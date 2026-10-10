@@ -28,6 +28,9 @@ import type {
   VideoTone,
 } from "../core/types";
 import {
+  MAX_ANIMATED_PIXELS,
+  MAX_DIMENSION,
+  MAX_TOTAL_FRAMES,
   DEFAULT_IMAGE_TEXTURE,
   DEFAULT_TEXTURE_SPEED,
   DEFAULT_VIDEO_TEXTURE,
@@ -91,6 +94,7 @@ const ctx2d: CanvasRenderingContext2D = (() => {
 
 let selectedPalette: PaletteEntry | null = null;
 let abortController: AbortController | null = null;
+let mediaExporting = false;
 let previewAnimation = 0;
 
 /**
@@ -145,7 +149,7 @@ const LOSSY: ReadonlySet<ImageFormat | VideoFormat> = new Set<
 // ── Reading the form ───────────────────────────────────────────────────
 
 /** The pixel ceiling, the same one the `max="4096"` of the size inputs has. */
-const DIM_MAX = 4096;
+const DIM_MAX = MAX_DIMENSION;
 
 /**
  * A pair of dimensions as they are copied around: "1629×420", "1629x420",
@@ -166,6 +170,13 @@ function num(name: string, fallback: number): number {
     const v = Number.parseInt(el.value, 10);
     if (Number.isFinite(v)) return v;
   }
+  return fallback;
+}
+
+function exactNum(name: string, fallback: number): number {
+  const el = form.elements.namedItem(name);
+  if (el instanceof HTMLInputElement && Number.isFinite(el.valueAsNumber))
+    return el.valueAsNumber;
   return fallback;
 }
 
@@ -256,21 +267,46 @@ function selectedTextureSpeed(): TextureSpeed {
     : DEFAULT_TEXTURE_SPEED;
 }
 
+function mediaValidationError(kind: Kind): string | null {
+  if (kind === "text") return null;
+  const width = exactNum("width", Number.NaN);
+  const height = exactNum("height", Number.NaN);
+  for (const [label, value] of [["Width", width], ["Height", height]] as const) {
+    if (!Number.isInteger(value) || value < 1 || value > DIM_MAX)
+      return `${label} must be an integer from 1 to ${DIM_MAX} px.`;
+  }
+  if (kind === "video") {
+    const format = str("videoFormat", "mp4");
+    if ((format === "gif" || format === "jpeg-zip") && width * height > MAX_ANIMATED_PIXELS)
+      return `Animated frames are limited to ${MAX_ANIMATED_PIXELS.toLocaleString()} pixels. Reduce the dimensions and try again.`;
+    const duration = exactNum("duration", Number.NaN);
+    if (!Number.isFinite(duration) || duration < 1 || duration > 120)
+      return "Duration must be from 1 to 120 seconds.";
+    const fps = exactNum("fps", Number.NaN);
+    if (!Number.isInteger(fps) || fps < 1 || fps > 60)
+      return "FPS must be a whole number from 1 to 60.";
+    const frames = Math.max(1, Math.round(duration * fps));
+    if (frames > MAX_TOTAL_FRAMES)
+      return `The export would have ${frames} frames, above the ${MAX_TOTAL_FRAMES}-frame limit. Reduce duration or FPS.`;
+  }
+  return null;
+}
+
 function readSpec(): Spec {
   const quality = num("quality", 90) / 100;
   // Only the video tab has a timeline now, so that is the only thing that
   // decides whether the output has more than one frame.
   const timed = currentKind() === "video";
   return {
-    width: Math.max(1, num("width", 300)),
-    height: Math.max(1, num("height", 200)),
+    width: exactNum("width", 300),
+    height: exactNum("height", 200),
     bg: normalizeHex(str("bg", "E0E0E0")),
     fg: normalizeHex(str("fg", "2B2B2B")),
     paletteName: selectedPalette?.name ?? "custom",
     // The dimensions are the only text a frame carries, and both tabs have one.
     showText: checked("showText"),
-    duration: timed ? num("duration", 5) : 0,
-    fps: num("fps", 15),
+    duration: timed ? exactNum("duration", 5) : 0,
+    fps: exactNum("fps", 15),
     // The bar and the clock only make sense with a real timeline.
     showProgressBar: timed && checked("showProgressBar"),
     showTime: timed && checked("showTime"),
@@ -487,10 +523,22 @@ function stopPreviewAnimation(): void {
   previewAnimation = 0;
 }
 
+function releasePreviewCanvas(): void {
+  if (canvas.width !== 1) canvas.width = 1;
+  if (canvas.height !== 1) canvas.height = 1;
+}
+
 function renderPreview(progress?: number): void {
+  if (mediaExporting || currentKind() === "text") return;
+  const sizeError = mediaValidationError(currentKind());
+  if (sizeError) {
+    releasePreviewCanvas();
+    showMessage(sizeError);
+    return;
+  }
   const spec = readSpec();
-  canvas.width = spec.width;
-  canvas.height = spec.height;
+  if (canvas.width !== spec.width) canvas.width = spec.width;
+  if (canvas.height !== spec.height) canvas.height = spec.height;
   drawFrame(ctx2d, spec, progress);
   // The checkerboard lives in the CSS background of the canvas, so it only
   // shows through the transparent pixels.
@@ -536,6 +584,13 @@ const PREVIEW_MIN_SEC = 0.6;
  */
 function animatePreview(): void {
   stopPreviewAnimation();
+  if (mediaExporting) return;
+  const sizeError = mediaValidationError(currentKind());
+  if (sizeError) {
+    releasePreviewCanvas();
+    showMessage(sizeError);
+    return;
+  }
   const spec = readSpec();
   if (spec.duration <= 0) {
     renderPreview(0);
@@ -792,6 +847,7 @@ function refreshDependentUi(): void {
   // one shows is decided here, once, for every tab: leaving it to the text
   // branch alone would hide the canvas on the way in and never bring it back.
   const text = kind === "text";
+  if (mediaExporting) $<HTMLButtonElement>("#generate").disabled = !text;
   $("#stage").hidden = text;
   $<HTMLElement>("#textPreview").hidden = !text;
   $("#textRegenerate").hidden = !text;
@@ -950,9 +1006,11 @@ function refreshDependentUi(): void {
   if (sound instanceof HTMLInputElement) sound.disabled = !canSound;
   soundTone.disabled = !canSound || !(sound instanceof HTMLInputElement) || !sound.checked;
 
-  // The preview is animated for any format with a timeline, so the GIF shows
-  // its bar moving.
-  if (timed && !singleFrame) {
+  // The preview is paused during media export. Control refreshes must not
+  // restart its animation or allocate a new preview surface mid-export.
+  if (mediaExporting) {
+    stopPreviewAnimation();
+  } else if (timed && !singleFrame) {
     animatePreview();
   } else {
     stopPreviewAnimation();
@@ -1257,12 +1315,23 @@ async function generate(): Promise<void> {
     downloadText();
     return;
   }
+  if (mediaExporting) {
+    showMessage("A media export is already in progress.");
+    return;
+  }
+  const validationError = mediaValidationError(kind);
+  if (validationError) {
+    showMessage(validationError);
+    return;
+  }
   const spec = readSpec();
+  mediaExporting = true;
+  stopPreviewAnimation();
   abortController = new AbortController();
-  setBusy(true);
-  onProgress({ progress: 0, message: "Preparing…" });
 
   try {
+    setBusy(true);
+    onProgress({ progress: 0, message: "Preparing…" });
     const signal = abortController.signal;
     const result =
       kind === "video"
@@ -1292,8 +1361,14 @@ async function generate(): Promise<void> {
       showMessage(err instanceof Error ? err.message : String(err));
     }
   } finally {
-    setBusy(false);
     abortController = null;
+    mediaExporting = false;
+    try {
+      setBusy(false);
+    } finally {
+      if (currentKind() === "text") stopPreviewAnimation();
+      else refreshDependentUi();
+    }
   }
 }
 
@@ -1350,6 +1425,17 @@ function applySettings(
       }
     }
 
+    for (const [name, label, min, max] of [
+      ["width", "Width", 1, DIM_MAX],
+      ["height", "Height", 1, DIM_MAX],
+      ["duration", "Duration", 1, 120],
+      ["fps", "FPS", 1, 60],
+    ] as const) {
+      if (input[name] === undefined) continue;
+      const value = Number(input[name]);
+      if (!Number.isInteger(value) || value < min || value > max)
+        return { ok: false, error: `${label} must be an integer from ${min} to ${max}.` };
+    }
     if (input.width !== undefined) setNum("width", Number(input.width));
     if (input.height !== undefined) setNum("height", Number(input.height));
     if (input.duration !== undefined)

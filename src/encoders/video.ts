@@ -47,7 +47,9 @@ import { audioChunks, renderSound, soundShape } from '../core/audio';
 import { drawFrame } from '../core/draw-frame';
 import { evenDimensions, filenameForSpec, mimeFor } from '../core/filename';
 import { buildMetadata, metadataAsText } from '../core/metadata';
+import { MAX_DIMENSION, MAX_TOTAL_FRAMES } from '../core/types';
 import type { ExportResult, ProgressCallback, ProgressInfo, Spec, VideoFormat, VideoTone } from '../core/types';
+export { MAX_TOTAL_FRAMES };
 
 // ── Limits ────────────────────────────────────────────────────────────────
 
@@ -56,13 +58,7 @@ import type { ExportResult, ProgressCallback, ProgressInfo, Spec, VideoFormat, V
  * video encoding is very slow or may fail. Do not silently crop: declare the
  * placeholder at its actual size.
  */
-export const MAX_VIDEO_DIMENSION = 4096;
-
-/**
- * Soft frame limit per export. 3600 frames are 60s at 60fps. This is a
- * placeholder; a ten-minute loop is unnecessary.
- */
-export const MAX_TOTAL_FRAMES = 3600;
+export const MAX_VIDEO_DIMENSION = MAX_DIMENSION;
 
 /**
  * Seconds between keyframes. This is mediabunny's default and allows scrubbing

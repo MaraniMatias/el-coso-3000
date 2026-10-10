@@ -8,6 +8,8 @@
  * one code of drift makes the entire file unreadable.
  */
 
+import { MAX_ANIMATED_OUTPUT_BYTES } from "../core/types";
+
 /**
  * Newly allocated bytes. The generic matters: `Blob` only accepts views over
  * a real `ArrayBuffer`, while a bare `Uint8Array` is typed as potentially
@@ -33,30 +35,53 @@ export class ByteWriter {
   private buf: Uint8Array<ArrayBuffer>;
   private len = 0;
 
-  constructor(initial = 1024) {
-    this.buf = new Uint8Array(initial);
+  constructor(initial = 1024, private readonly maxBytes = MAX_ANIMATED_OUTPUT_BYTES) {
+    if (!Number.isInteger(maxBytes) || maxBytes < 1)
+      throw new RangeError("ByteWriter limit must be a positive integer.");
+    this.buf = new Uint8Array(Math.min(initial, maxBytes));
   }
 
   get length(): number {
     return this.len;
   }
 
+  get remaining(): number {
+    return this.maxBytes - this.len;
+  }
+
+  private reserve(additional: number): void {
+    const needed = this.len + additional;
+    if (needed > this.maxBytes)
+      throw new RangeError("GIF output exceeds the 64 MiB limit. Reduce dimensions or duration/FPS and try again.");
+    if (needed <= this.buf.length) return;
+    const capacity = Math.min(this.maxBytes, Math.max(needed, this.buf.length * 2));
+    const grown = new Uint8Array(capacity);
+    grown.set(this.buf.subarray(0, this.len));
+    this.buf = grown;
+  }
+
   push(byte: number): void {
-    if (this.len === this.buf.length) {
-      const grown = new Uint8Array(this.buf.length * 2);
-      grown.set(this.buf);
-      this.buf = grown;
-    }
+    this.reserve(1);
     this.buf[this.len++] = byte;
   }
 
   pushBytes(bytes: Uint8Array): void {
-    for (let i = 0; i < bytes.length; i++) this.push(bytes[i]!);
+    this.reserve(bytes.length);
+    this.buf.set(bytes, this.len);
+    this.len += bytes.length;
   }
 
   /** Trims to the actual length. `slice` returns its own `ArrayBuffer`. */
   finish(): Bytes {
     return this.buf.slice(0, this.len);
+  }
+
+  /** Transfers the used view and releases the grown backing buffer. */
+  finishAndRelease(): Bytes {
+    const result = this.buf.subarray(0, this.len);
+    this.buf = new Uint8Array(0);
+    this.len = 0;
+    return result;
   }
 }
 
@@ -87,14 +112,18 @@ export function writeSubBlocks(out: ByteWriter, data: Uint8Array): void {
  * @returns The sub-block chain ready to write: the 255-byte limit per block
  *   is part of the encoding, not the file assembler.
  */
-export function lzwCompress(indices: Uint8Array, minCodeSize: number): Bytes {
+export function lzwCompress(
+  indices: Uint8Array,
+  minCodeSize: number,
+  maxBytes = MAX_ANIMATED_OUTPUT_BYTES,
+): Bytes {
   if (!Number.isInteger(minCodeSize) || minCodeSize < 2 || minCodeSize > 8) {
     throw new RangeError(
       `minCodeSize out of range: ${minCodeSize} (expected 2..8)`,
     );
   }
 
-  const out = new ByteWriter(Math.max(1024, indices.length >> 1));
+  const out = new ByteWriter(1024, maxBytes);
   const block = new Uint8Array(MAX_SUB_BLOCK);
   let blockLen = 0;
 
@@ -200,5 +229,5 @@ export function lzwCompress(indices: Uint8Array, minCodeSize: number): Bytes {
   flushBlock();
   out.push(0x00); // end of the sub-block chain
 
-  return out.finish();
+  return out.finishAndRelease();
 }

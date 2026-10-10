@@ -25,6 +25,7 @@ import {
   metadataAsText,
   type FileMetadata,
 } from "../core/metadata";
+import { MAX_ANIMATED_OUTPUT_BYTES, MAX_ANIMATED_PIXELS, MAX_DIMENSION, MAX_TOTAL_FRAMES } from "../core/types";
 import type { ExportResult, ProgressCallback, Spec } from "../core/types";
 import { crc32 } from "./image";
 
@@ -447,6 +448,10 @@ const MAX_NAME_BYTES = 255;
 const MAX_COMMENT_BYTES = 0xffff;
 /** The entry count is also a u16: 65535 frames are ~36 min at 30 fps. */
 const MAX_ENTRIES = 0xffff;
+
+function zipSizeError(): RangeError {
+  return new RangeError("JPEG ZIP output exceeds the 64 MiB limit. Reduce dimensions or duration/FPS and try again.");
+}
 /**
  * Entry date and time fixed to the MS-DOS epoch (1/1/1980 00:00).
  * Preferable to the current time: two exports of the same `Spec` produce the
@@ -472,15 +477,32 @@ interface ZipFields {
 }
 
 /** `deflate-raw`: bare deflate, without zlib's 2-byte header. */
-async function deflateRaw(data: Bytes): Promise<Bytes> {
+async function deflateRaw(data: Bytes, maxBytes: number): Promise<Bytes | null> {
+  if (maxBytes < 0) return null;
   const source = new ReadableStream<BufferSource>({
     start(controller) {
       controller.enqueue(data);
       controller.close();
     },
   });
-  const deflated = source.pipeThrough(new CompressionStream("deflate-raw"));
-  return new Uint8Array(await new Response(deflated).arrayBuffer());
+  const reader = source.pipeThrough(new CompressionStream("deflate-raw")).getReader();
+  const chunks: Bytes[] = [];
+  let length = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      length += value.byteLength;
+      if (length > maxBytes) {
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(new Uint8Array(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return concatBytes(chunks);
 }
 
 /** Trims to a complete UTF-8 byte sequence, without splitting one in half. */
@@ -579,24 +601,34 @@ export async function buildJpegZip(
     );
   }
 
+  const commentBytes = fitComment(comment);
   const locals: Bytes[] = [];
   const central: Bytes[] = [];
   let offset = 0;
+  let directorySize = 0;
 
   for (const entry of entries) {
     checkAbort(signal);
+    if (entry.data.length > MAX_ANIMATED_OUTPUT_BYTES) throw zipSizeError();
     const name = UTF8.encode(entry.name);
     if (name.length > MAX_NAME_BYTES) {
       throw new Error(
         `Filename too long for a ZIP (${name.length} bytes, maximum ${MAX_NAME_BYTES}).`,
       );
     }
-    const deflated = await deflateRaw(entry.data);
+    const centralSize = 46 + name.length;
+    const fixedSize = offset + 30 + name.length + directorySize + centralSize + 22 + commentBytes.length;
+    const maxPayload = MAX_ANIMATED_OUTPUT_BYTES - fixedSize;
+    const deflated = await deflateRaw(
+      entry.data,
+      Math.min(maxPayload, entry.data.length - 1),
+    );
     // JPEG (and PNG) are already compressed: if deflate does not save a byte,
     // store the entry. This is valid and avoids decompressing twice on every
     // extraction.
-    const compressed = deflated.length < entry.data.length;
+    const compressed = deflated !== null;
     const payload = compressed ? deflated : entry.data;
+    if (payload.length > maxPayload) throw zipSizeError();
     const fields: ZipFields = {
       name,
       flags: hasNonAscii(name) ? FLAG_UTF8 : 0,
@@ -606,26 +638,86 @@ export async function buildJpegZip(
       size: entry.data.length,
       offset,
     };
-    const block = concatBytes([localHeader(fields), name, payload]);
-    locals.push(block);
+    locals.push(localHeader(fields), name, payload);
     central.push(concatBytes([centralHeader(fields), name]));
-    offset += block.length;
+    offset += 30 + name.length + payload.length;
+    directorySize += centralSize;
   }
 
   const directory = concatBytes(central);
-  // The central directory starts just where the local headers end, which is
-  // what the EOCD declares: if `offset` does not match `directory`, the file
-  // cannot be opened even if the headers look perfect.
+  // Keep the public bytes API, but join local parts only once into the final
+  // output instead of copying each frame into an intermediate block.
   return concatBytes([
     ...locals,
     directory,
-    endOfCentralDirectory(
-      entries.length,
-      directory.length,
-      offset,
-      fitComment(comment),
-    ),
+    endOfCentralDirectory(entries.length, directory.length, offset, commentBytes),
   ]);
+}
+
+export interface JpegZipBlobEntry {
+  name: string;
+  data: Blob | Bytes;
+}
+
+/** Assembles stored entries as Blob parts without joining the JPEG payloads. */
+export async function buildJpegZipBlob(
+  entries: AsyncIterable<JpegZipBlobEntry> | Iterable<JpegZipBlobEntry>,
+  comment = "",
+  signal?: AbortSignal,
+): Promise<Blob> {
+  checkAbort(signal);
+  const commentBytes = fitComment(comment);
+  const parts: Blob[] = [];
+  const central: Bytes[] = [];
+  let offset = 0;
+  let directorySize = 0;
+  let count = 0;
+
+  for await (const entry of entries) {
+    checkAbort(signal);
+    if (count >= MAX_ENTRIES)
+      throw new Error(`A ZIP supports ${MAX_ENTRIES} entries, but more were requested.`);
+    const name = UTF8.encode(entry.name);
+    if (name.length > MAX_NAME_BYTES) {
+      throw new Error(
+        `Filename too long for a ZIP (${name.length} bytes, maximum ${MAX_NAME_BYTES}).`,
+      );
+    }
+    const size = entry.data instanceof Blob ? entry.data.size : entry.data.length;
+    const centralSize = 46 + name.length;
+    const localSize = 30 + name.length + size;
+    const projectedSize = offset + localSize + directorySize + centralSize + 22 + commentBytes.length;
+    if (size > MAX_ANIMATED_OUTPUT_BYTES || projectedSize > MAX_ANIMATED_OUTPUT_BYTES)
+      throw zipSizeError();
+
+    const bytes = entry.data instanceof Blob
+      ? new Uint8Array(await entry.data.arrayBuffer())
+      : entry.data;
+    checkAbort(signal);
+    const fields: ZipFields = {
+      name,
+      flags: hasNonAscii(name) ? FLAG_UTF8 : 0,
+      method: METHOD_STORE,
+      crc: crc32(bytes),
+      compressedSize: size,
+      size,
+      offset,
+    };
+    // Keep the JPEG Blob as a part; only one frame's CRC bytes are transient.
+    parts.push(new Blob([localHeader(fields), name, entry.data]));
+    central.push(concatBytes([centralHeader(fields), name]));
+    offset += localSize;
+    directorySize += centralSize;
+    count++;
+  }
+
+  checkAbort(signal);
+  const directory = concatBytes(central);
+  parts.push(new Blob([directory, endOfCentralDirectory(count, directory.length, offset, commentBytes)]));
+  const zip = new Blob(parts, { type: "application/zip" });
+  checkAbort(signal);
+  if (zip.size > MAX_ANIMATED_OUTPUT_BYTES) throw zipSizeError();
+  return zip;
 }
 
 // ── Exporters ─────────────────────────────────────────────────────────────
@@ -671,6 +763,56 @@ export async function exportMjpegAvi(
   };
 }
 
+function validateJpegZipSpec(spec: Spec): number {
+  if (
+    !Number.isInteger(spec.width) || !Number.isInteger(spec.height) ||
+    spec.width < 1 || spec.height < 1 ||
+    spec.width > MAX_DIMENSION || spec.height > MAX_DIMENSION
+  ) {
+    throw new RangeError(`JPEG ZIP dimensions must be integers from 1 to ${MAX_DIMENSION} px per side (got ${spec.width}x${spec.height}).`);
+  }
+  if (spec.width * spec.height > MAX_ANIMATED_PIXELS)
+    throw new RangeError(`JPEG ZIP frames are limited to ${MAX_ANIMATED_PIXELS.toLocaleString()} pixels. Reduce the dimensions and try again.`);
+  if (!Number.isFinite(spec.duration) || spec.duration < 0 || spec.duration > 120)
+    throw new RangeError("JPEG ZIP duration must be from 0 to 120 seconds.");
+  if (!Number.isInteger(spec.fps) || spec.fps < 1 || spec.fps > 60)
+    throw new RangeError("JPEG ZIP FPS must be a whole number from 1 to 60.");
+  const totalFrames = frameCount(spec);
+  if (totalFrames > MAX_TOTAL_FRAMES)
+    throw new RangeError(`JPEG ZIP would have ${totalFrames} frames; the limit is ${MAX_TOTAL_FRAMES}. Reduce duration or FPS.`);
+  return totalFrames;
+}
+
+async function* jpegZipEntries(
+  spec: Spec,
+  totalFrames: number,
+  meta: FileMetadata,
+  onProgress: ProgressCallback | undefined,
+  signal: AbortSignal | undefined,
+): AsyncGenerator<JpegZipBlobEntry> {
+  yield { name: "metadata.json", data: UTF8.encode(JSON.stringify(meta, null, 2)) };
+  const surface = createSurface(spec.width, spec.height);
+  try {
+    const ctx = context2d(surface);
+    for (let i = 0; i < totalFrames; i++) {
+      checkAbort(signal);
+      drawFrame(ctx, spec, i / totalFrames);
+      const jpeg = await encodeJpegBlob(surface, spec.quality);
+      checkAbort(signal);
+      onProgress?.({
+        progress: 0.8 * ((i + 1) / totalFrames),
+        frame: i + 1,
+        totalFrames,
+        message: `Encoding JPEG ${i + 1}/${totalFrames}`,
+      });
+      yield { name: `frame_${String(i + 1).padStart(5, "0")}.jpg`, data: jpeg };
+    }
+  } finally {
+    releaseSurface(surface);
+  }
+  onProgress?.({ progress: 0.85, message: "Packing ZIP…" });
+}
+
 /** JPEG sequence in a ZIP, with metadata inside and in the comment. */
 export async function exportJpegZip(
   spec: Spec,
@@ -678,28 +820,15 @@ export async function exportJpegZip(
   signal?: AbortSignal,
 ): Promise<ExportResult> {
   checkAbort(signal);
-  const totalFrames = frameCount(spec);
-  const frames = await renderJpegFrames(
-    spec,
-    totalFrames,
-    onProgress,
-    signal,
-    [0, 0.8],
-  );
-  checkAbort(signal);
-
-  onProgress?.({ progress: 0.85, message: "Packing ZIP…" });
+  const totalFrames = validateJpegZipSpec(spec);
   // `quality` is the JPEG quality the frames are encoded with, so the ZIP
   // reports the setting that actually produced them.
   const meta = buildMetadata(spec, { quality: spec.quality });
-  const entries: JpegZipEntry[] = [
-    { name: "metadata.json", data: UTF8.encode(JSON.stringify(meta, null, 2)) },
-    ...frames.map((data, i) => ({
-      name: `frame_${String(i + 1).padStart(5, "0")}.jpg`,
-      data,
-    })),
-  ];
-  const zip = await buildJpegZip(entries, metadataAsText(meta), signal);
+  const zip = await buildJpegZipBlob(
+    jpegZipEntries(spec, totalFrames, meta, onProgress, signal),
+    metadataAsText(meta),
+    signal,
+  );
 
   const mimeType = mimeFor("jpeg-zip");
   const blob = new Blob([zip], { type: mimeType });

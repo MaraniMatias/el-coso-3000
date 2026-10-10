@@ -12,9 +12,9 @@
 
 import { describe, expect, test } from 'bun:test';
 import { buildMetadata, metadataAsText } from '../src/core/metadata';
-import { AUTHOR, DEFAULT_TEXTURE_SPEED, REPO_URL, type Spec } from '../src/core/types';
+import { AUTHOR, DEFAULT_TEXTURE_SPEED, MAX_ANIMATED_OUTPUT_BYTES, REPO_URL, type Spec } from '../src/core/types';
 import { crc32 } from '../src/encoders/image';
-import { buildJpegZip, buildMjpegAvi, type JpegZipEntry } from '../src/encoders/mjpeg';
+import { buildJpegZip, buildJpegZipBlob, buildMjpegAvi, exportJpegZip, type JpegZipEntry } from '../src/encoders/mjpeg';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -217,6 +217,88 @@ describe('buildJpegZip', () => {
     const last = view.entries[view.entries.length - 1]!;
     expect(view.cdOffset).toBe(last.dataAt + last.compressedSize);
     expect(zip.length).toBe(view.cdOffset + view.cdSize + 22 + 'comentario de prueba'.length);
+  });
+
+  test('builds a valid ZIP from a streamed sequence of Blob parts', async () => {
+    const comment = 'streamed zip comment';
+    async function* stream() {
+      for (const entry of entries) yield { name: entry.name, data: new Blob([entry.data]) };
+    }
+    const zipBlob = await buildJpegZipBlob(stream(), comment);
+    const zip = new Uint8Array(await zipBlob.arrayBuffer());
+    const view = await parseZip(zip);
+    expect(view.comment).toBe(comment);
+    expect(view.entries.map((entry) => entry.name)).toEqual(entries.map((entry) => entry.name));
+    for (const [i, entry] of entries.entries()) {
+      expect(view.entries[i]!.method).toBe(0);
+      expect(view.entries[i]!.crc).toBe(crc32(entry.data));
+      expect(view.entries[i]!.content).toEqual(entry.data);
+    }
+    expect(zip.length).toBe(view.cdOffset + view.cdSize + 22 + comment.length);
+  });
+
+  test('rejects output that would exceed the fixed ZIP budget before reading its payload', async () => {
+    class OversizedBlob extends Blob {
+      override get size(): number { return MAX_ANIMATED_OUTPUT_BYTES; }
+      override async arrayBuffer(): Promise<ArrayBuffer> { throw new Error('payload should not be read'); }
+    }
+    await expect(buildJpegZipBlob([{ name: 'frame_00001.jpg', data: new OversizedBlob([]) }]))
+      .rejects.toThrow(/64 MiB limit/);
+    const oversizedBytes = { length: MAX_ANIMATED_OUTPUT_BYTES + 1 } as unknown as Bytes;
+    await expect(buildJpegZip([{ name: 'frame_00001.jpg', data: oversizedBytes }]))
+      .rejects.toThrow(/64 MiB limit/);
+  });
+
+  test('streamed ZIP assembly checks cancellation before and after consuming entries', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(buildJpegZipBlob([], '', controller.signal))
+      .rejects.toHaveProperty('name', 'AbortError');
+
+    const afterLastEntry = new AbortController();
+    let finalized = false;
+    async function* abortOnClose() {
+      try {
+        yield { name: entries[0]!.name, data: new Blob([entries[0]!.data]) };
+      } finally {
+        finalized = true;
+        afterLastEntry.abort();
+      }
+    }
+    await expect(buildJpegZipBlob(abortOnClose(), '', afterLastEntry.signal))
+      .rejects.toHaveProperty('name', 'AbortError');
+    expect(finalized).toBe(true);
+
+    // A canceled build must not poison a subsequent valid attempt.
+    const retry = new Uint8Array(await (await buildJpegZipBlob(entries)).arrayBuffer());
+    expect((await parseZip(retry)).count).toBe(entries.length);
+  });
+
+  test('enforces the cumulative ZIP budget and closes the entry generator on failure', async () => {
+    let reads = 0;
+    let finalized = false;
+    class SizedBlob extends Blob {
+      constructor(private readonly reportedSize: number) { super([Uint8Array.of(1)]); }
+      override get size(): number { return this.reportedSize; }
+      override async arrayBuffer(): Promise<ArrayBuffer> { reads++; return super.arrayBuffer(); }
+    }
+    async function* oversizedSequence() {
+      try {
+        yield { name: 'a', data: new SizedBlob(MAX_ANIMATED_OUTPUT_BYTES - 101) };
+        yield { name: 'b', data: new SizedBlob(1000) };
+      } finally {
+        finalized = true;
+      }
+    }
+    await expect(buildJpegZipBlob(oversizedSequence())).rejects.toThrow(/64 MiB limit/);
+    expect(reads).toBe(1); // the second payload is rejected from its declared size
+    expect(finalized).toBe(true); // early failure closes the async generator
+  });
+
+  test('rejects invalid dimensions and excessive frame counts before rendering', async () => {
+    await expect(exportJpegZip({ ...SAMPLE, width: 0 })).rejects.toThrow(/dimensions/);
+    await expect(exportJpegZip({ ...SAMPLE, width: 4096, height: 4096 })).rejects.toThrow(/pixels/);
+    await expect(exportJpegZip({ ...SAMPLE, duration: 120, fps: 60 })).rejects.toThrow(/limit is 3600/);
   });
 
   test('deflate only when it saves space; otherwise stored', async () => {

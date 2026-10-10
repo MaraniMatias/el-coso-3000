@@ -17,6 +17,7 @@
 import { drawFrame } from "../core/draw-frame";
 import { buildFilename, mimeFor, trimNumber } from "../core/filename";
 import { buildMetadata, metadataAsText } from "../core/metadata";
+import { MAX_ANIMATED_OUTPUT_BYTES, MAX_ANIMATED_PIXELS, MAX_DIMENSION, MAX_TOTAL_FRAMES } from "../core/types";
 import type { ExportResult, ProgressCallback, Spec } from "../core/types";
 import {
   ByteWriter,
@@ -71,6 +72,15 @@ interface Layout {
   minCodeSize: number;
 }
 
+function validateDimensions(width: number, height: number): void {
+  if (
+    !Number.isInteger(width) || !Number.isInteger(height) ||
+    width < 1 || height < 1 || width > MAX_DIMENSION || height > MAX_DIMENSION
+  ) {
+    throw new RangeError(`GIF dimensions must be integers from 1 to ${MAX_DIMENSION} px per side (got ${width}x${height}).`);
+  }
+}
+
 function layoutOf(header: GifHeader): Layout {
   const colors = header.palette.length / 3;
   if (!Number.isInteger(colors) || colors < 1) {
@@ -94,9 +104,7 @@ function layoutOf(header: GifHeader): Layout {
 /** Header + GCT + loop + comment. Leaves the file ready for frames. */
 export function writeGifHeader(out: ByteWriter, header: GifHeader): void {
   const { width, height, palette, comment, loop } = header;
-  if (width > 0xffff || height > 0xffff) {
-    throw new Error(`GIF dimensions out of range: ${width}x${height}.`);
-  }
+  validateDimensions(width, height);
   const layout = layoutOf(header);
   const colors = palette.length / 3;
 
@@ -148,6 +156,7 @@ export function writeGifFrame(
   delayCs: number,
 ): void {
   const { width, height } = header;
+  validateDimensions(width, height);
   const layout = layoutOf(header);
   if (indices.length !== width * height) {
     throw new Error(
@@ -178,9 +187,11 @@ export function writeGifFrame(
   out.push(0x00);
 
   out.push(layout.minCodeSize);
-  // LZW already returns the sub-block chain with its terminator, so do not wrap
-  // it again here: that would add an extra terminator.
-  out.pushBytes(lzwCompress(indices, layout.minCodeSize));
+  // Reserve the final trailer while bounding the intermediate LZW buffer to
+  // the remaining GIF budget.
+  if (out.remaining <= 1)
+    throw new RangeError("GIF output exceeds the 64 MiB limit. Reduce dimensions or duration/FPS and try again.");
+  out.pushBytes(lzwCompress(indices, layout.minCodeSize, out.remaining - 1));
 }
 
 /** Closes the file. */
@@ -321,17 +332,28 @@ function samplePalette(
  * @param onProgress Receives per-frame progress.
  * @param signal Cancellation. Throws a `DOMException` `AbortError`.
  */
+function validateGifSpec(spec: Spec): number {
+  validateDimensions(spec.width, spec.height);
+  if (spec.width * spec.height > MAX_ANIMATED_PIXELS)
+    throw new RangeError(`GIF frames are limited to ${MAX_ANIMATED_PIXELS.toLocaleString()} pixels. Reduce the dimensions and try again.`);
+  if (!Number.isFinite(spec.duration) || spec.duration < 0 || spec.duration > 120)
+    throw new RangeError("GIF duration must be from 0 to 120 seconds.");
+  if (!Number.isInteger(spec.fps) || spec.fps < 1 || spec.fps > 60)
+    throw new RangeError("GIF FPS must be a whole number from 1 to 60.");
+  const frames = Math.max(1, Math.round(spec.duration * spec.fps));
+  if (frames > MAX_TOTAL_FRAMES)
+    throw new RangeError(`GIF would have ${frames} frames; the limit is ${MAX_TOTAL_FRAMES}. Reduce duration or FPS.`);
+  return frames;
+}
+
 export async function exportGif(
   spec: Spec,
   onProgress?: ProgressCallback,
   signal?: AbortSignal,
 ): Promise<ExportResult> {
   checkAbort(signal);
-
-  const { totalFrames, delayCs, effectiveFps } = gifTiming(
-    spec.fps,
-    spec.duration,
-  );
+  const totalFrames = validateGifSpec(spec);
+  const { delayCs, effectiveFps } = gifTiming(spec.fps, spec.duration);
   const mimeType = mimeFor("gif");
   const filename = buildFilename({
     width: spec.width,
@@ -346,7 +368,7 @@ export async function exportGif(
     effectiveFps: spec.duration > 0 ? effectiveFps : undefined,
   });
   const pixels = spec.width * spec.height;
-  const out = new ByteWriter(pixels);
+  const out = new ByteWriter(1024, MAX_ANIMATED_OUTPUT_BYTES);
   const surface = createSurface(spec.width, spec.height);
   let bytes: Bytes;
 
@@ -401,7 +423,7 @@ export async function exportGif(
 
     writeGifTrailer(out);
     checkAbort(signal);
-    bytes = out.finish();
+    bytes = out.finishAndRelease();
   } finally {
     releaseSurface(surface);
   }

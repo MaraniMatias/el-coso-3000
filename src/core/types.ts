@@ -11,6 +11,15 @@ export const APP_NAME = 'El Coso 3000';
 /** Released version, written to the metadata of every generated file. */
 export const APP_VERSION = '1.0.0';
 
+/** Maximum output dimension per side, in pixels. */
+export const MAX_DIMENSION = 4096;
+/** Maximum pixels per animated frame, including UHD 3840×2160. */
+export const MAX_ANIMATED_PIXELS = 8_388_608;
+/** Soft per-export frame ceiling (60 seconds at 60 fps). */
+export const MAX_TOTAL_FRAMES = 3600;
+/** Fixed output ceiling for GIF and JPEG-ZIP exports. */
+export const MAX_ANIMATED_OUTPUT_BYTES = 64 * 1024 * 1024;
+
 /** Author, as it appears in the metadata of the page. */
 export const AUTHOR = 'Matias Ezequiel Marani';
 
