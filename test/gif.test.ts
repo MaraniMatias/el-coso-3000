@@ -317,6 +317,7 @@ const SPEC: Spec = {
   paletteName: 'rose',
   duration: 1,
   fps: 30,
+  showText: true,
   showProgressBar: true,
   showTime: true,
   transparent: false,

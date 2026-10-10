@@ -1528,13 +1528,37 @@ try {
   const wrongGroups = churn.filter(
     (step) =>
       (step.to === 'text' && step.groups !== 'Text') ||
-      (step.to === 'image' && step.groups !== 'Size,Color,Background,Format') ||
-      (step.to === 'video' && step.groups !== 'Size,Color,Background,Format,Timeline'),
+      (step.to === 'image' && step.groups !== 'Size,Color,Background,Format,Settings') ||
+      (step.to === 'video' && step.groups !== 'Size,Color,Background,Format,Timeline,Settings'),
   );
   check(
     'each tab shows exactly its own groups, whichever one came before',
     wrongGroups.length === 0,
     wrongGroups.length ? JSON.stringify(wrongGroups) : `${churn.length} transitions`,
+  );
+
+  // The settings block is shared, so the rows a still image cannot use are the
+  // ones that could leak into it. They must go away, not come out disabled.
+  const settings = await evaluate<{ image: string; video: string }>(`(() => {
+    const q = (k) => document.querySelector('input[name="kind"][value="' + k + '"]').click();
+    const rows = () => [...document.querySelectorAll('#settings .checkboxes > *')]
+      .filter((e) => !e.hidden)
+      .map((e) => e.querySelector('input,select').name)
+      .join(',');
+    q('image');
+    const image = rows();
+    q('video');
+    return { image, video: rows() };
+  })()`);
+  check(
+    'the image tab keeps only the settings a still image can use',
+    settings.image === 'showText',
+    settings.image,
+  );
+  check(
+    'the video tab keeps every row',
+    settings.video === 'showText,showProgressBar,showTime,sound,textureMove',
+    settings.video,
   );
 
   // The desktop override from the top of the run was cleared before here, so the

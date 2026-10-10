@@ -57,6 +57,7 @@ function spec(w: number, h: number): Spec {
     paletteName: 'rose',
     duration: 5,
     fps: 15,
+    showText: true,
     showProgressBar: true,
     showTime: true,
     transparent: false,

@@ -60,6 +60,7 @@ const SAMPLE: Spec = {
   paletteName: 'rose',
   duration: 2,
   fps: 24,
+  showText: true,
   showProgressBar: true,
   showTime: true,
   transparent: false,

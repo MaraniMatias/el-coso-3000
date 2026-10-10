@@ -134,6 +134,11 @@ const SCHEMA = {
       type: "boolean",
       description: "Draw the 0:03 / 0:10 clock. Video only.",
     },
+    showText: {
+      type: "boolean",
+      description:
+        "Writes the dimensions in the middle of the placeholder. Defaults to true; set it to false for a frame with nothing written on it. It does not touch the clock or the progress bar, which have their own parameters.",
+    },
     transparent: {
       type: "boolean",
       description:

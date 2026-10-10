@@ -58,6 +58,7 @@ const spec = (over: Partial<Spec> = {}): Spec => ({
   paletteName: 'rose',
   duration: 0,
   fps: 30,
+  showText: true,
   showProgressBar: false,
   showTime: false,
   transparent: false,
@@ -740,6 +741,36 @@ check(xmlProblem(nasty) === null, 'SVG with a dangerous label remains valid XML'
 
 const ampersand = svgs.get('palette with &')!;
 check(ampersand.includes('palette a&amp;b'), 'palette & is escaped inside metadata');
+
+// ── The text switch ───────────────────────────────────────────────────────────
+
+section('SVG: the dimensions can be turned off');
+{
+  const base = spec({ width: 800, height: 600 });
+  const on = buildSvg(base, measure);
+  const off = buildSvg({ ...base, showText: false }, measure);
+  check(emittedLines(on).length === 1, 'with the text on, the dimensions are the only <text>');
+  check(emittedLines(off).length === 0, 'with the text off, no <text> is emitted at all');
+  check(
+    off.includes('<rect width="800" height="600"'),
+    'and the background is still painted, because the frame is not the switch',
+  );
+  check(xmlProblem(off) === null, 'the frame without text is still valid XML');
+
+  // The clock and the bar have boxes of their own, so hiding the dimensions
+  // cannot take them along.
+  const clocked = buildSvg(
+    { ...base, showText: false, showProgressBar: true, showTime: true },
+    measure,
+  );
+  const lines = emittedLines(clocked);
+  check(
+    lines.length === 1 && lines[0]!.text === timecode(0, 0),
+    'only the clock is left, which is its own switch',
+    JSON.stringify(lines.map((l) => l.text)),
+  );
+  check(clocked.includes('<rect y='), 'and the bar track is still drawn');
+}
 
 // ── Transparency ────────────────────────────────────────────────────────────
 

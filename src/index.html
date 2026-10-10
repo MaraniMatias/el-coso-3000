@@ -615,9 +615,26 @@
               </div>
 
               <p class="note" id="fpsEffective" hidden></p>
+            </section>
 
+            <section class="group" id="settings" data-kind="image video">
+              <h2>Settings</h2>
+              <!-- Every switch of the frame lives here, and both media tabs come
+                 here: the dimensions are written on a still image too. The rows
+                 that need a timeline are marked, because a still image has none
+                 and a dead switch is worse than no switch. -->
               <div class="checkboxes">
                 <label
+                  ><input
+                    type="checkbox"
+                    name="showText"
+                    checked
+                    toolparamtitle="Show the dimensions"
+                    toolparamdescription="Writes the dimensions in the middle of the placeholder. Turn it off for a frame with nothing on it: the background is still painted and the size is still the one in the file name."
+                  />
+                  <span>Show the dimensions</span></label
+                >
+                <label data-video-only
                   ><input
                     type="checkbox"
                     name="showProgressBar"
@@ -627,7 +644,7 @@
                   />
                   <span>Progress bar</span></label
                 >
-                <label
+                <label data-video-only
                   ><input
                     type="checkbox"
                     name="showTime"
@@ -637,7 +654,7 @@
                   />
                   <span>Show the time</span></label
                 >
-                <div class="sound">
+                <div class="sound" data-video-only>
                   <label
                     ><input
                       type="checkbox"

@@ -458,13 +458,15 @@ export function buildSvg(
     ? []
     : [`<rect width="${num(width)}" height="${num(height)}" fill="#${esc(spec.bg)}"/>`];
 
-  const dims = layoutDimensions(
-    measure,
-    spec,
-    Math.max(1, width - pad * 2),
-    Math.max(1, contentHeight - pad * 2),
-    { fontWeight: FONT_WEIGHT },
-  );
+  const dims = spec.showText
+    ? layoutDimensions(
+        measure,
+        spec,
+        Math.max(1, width - pad * 2),
+        Math.max(1, contentHeight - pad * 2),
+        { fontWeight: FONT_WEIGHT },
+      )
+    : null;
   if (dims && dims.fontSize >= 6) {
     body.push(...svgTextLines(dims, width / 2, 0, contentHeight, spec.fg));
   }

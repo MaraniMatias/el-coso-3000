@@ -267,6 +267,8 @@ function readSpec(): Spec {
     bg: normalizeHex(str("bg", "E0E0E0")),
     fg: normalizeHex(str("fg", "2B2B2B")),
     paletteName: selectedPalette?.name ?? "custom",
+    // The dimensions are the only text a frame carries, and both tabs have one.
+    showText: checked("showText"),
     duration: timed ? num("duration", 5) : 0,
     fps: num("fps", 15),
     // The bar and the clock only make sense with a real timeline.
@@ -888,6 +890,12 @@ function refreshDependentUi(): void {
   const timed = kind === "video";
   timeline.hidden = !timed;
 
+  // The settings block is shared by both media tabs, but a still image has no
+  // timeline: the rows that need one are put away instead of shown dead.
+  for (const row of document.querySelectorAll<HTMLElement>("#settings [data-video-only]")) {
+    row.hidden = !timed;
+  }
+
   const spec = readSpec();
   const even = evenDimensions(spec.width, spec.height);
   const evenWarning = $("#evenWarning");
@@ -1320,6 +1328,7 @@ const PIXEL_PARAMS = [
   "palette",
   "background",
   "foreground",
+  "showText",
 ] as const;
 
 function applySettings(
@@ -1432,6 +1441,9 @@ function applySettings(
     }
     if (typeof input.showTime === "boolean") {
       setCheckbox("showTime", input.showTime);
+    }
+    if (typeof input.showText === "boolean") {
+      setCheckbox("showText", input.showText);
     }
     // `background` is already the flat color in the MCP contract, so the
     // treatment on top of it travels as `texture`. Its `none` is the flat

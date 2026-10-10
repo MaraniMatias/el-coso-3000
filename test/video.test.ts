@@ -45,6 +45,7 @@ const spec = (over: Partial<Spec> = {}): Spec => ({
   paletteName: 'rose',
   duration: 5,
   fps: 30,
+  showText: true,
   showProgressBar: true,
   showTime: true,
   transparent: false,

@@ -29,6 +29,7 @@ function spec(over: Partial<Spec> = {}): Spec {
     paletteName: 'rose',
     duration: 0,
     fps: 15,
+    showText: true,
     showProgressBar: false,
     showTime: false,
     transparent: false,

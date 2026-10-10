@@ -142,14 +142,17 @@ export function drawFrame(ctx: CanvasRenderingContext2D, spec: Spec, progress?: 
   const contentHeight = height - geo.stripHeight;
   const pad = paddingFor(width, height);
 
-  // Dimensions, centered in the area left above the strip.
-  const dims = layoutDimensions(
-    ctx,
-    spec,
-    Math.max(1, width - pad * 2),
-    Math.max(1, contentHeight - pad * 2),
-    { fontWeight: FONT_WEIGHT },
-  );
+  // Dimensions, centered in the area left above the strip. With the text off
+  // there is nothing to measure, so nothing is measured.
+  const dims = spec.showText
+    ? layoutDimensions(
+        ctx,
+        spec,
+        Math.max(1, width - pad * 2),
+        Math.max(1, contentHeight - pad * 2),
+        { fontWeight: FONT_WEIGHT },
+      )
+    : null;
   if (dims && dims.fontSize >= 6) {
     applyFont(ctx, dims.fontSize, FONT_WEIGHT);
     paintText(ctx, dims, width / 2, 0, contentHeight, spec.fg);

@@ -169,6 +169,13 @@ export interface Spec {
    */
   label?: string;
 
+  /**
+   * Draws the frame text. Off leaves the background alone: a placeholder with
+   * nothing written on it. It only hides the dimensions; the clock and the
+   * progress bar have their own switches.
+   */
+  showText: boolean;
+
   // --- Video ---
   /** Duration in seconds. */
   duration: number;

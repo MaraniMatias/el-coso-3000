@@ -32,6 +32,7 @@ const spec = (over: Partial<Spec> = {}): Spec => ({
   paletteName: 'red',
   duration: 0,
   fps: 30,
+  showText: true,
   showProgressBar: false,
   showTime: false,
   transparent: false,
